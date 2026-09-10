@@ -3,6 +3,7 @@ import argparse
 import os
 from pathlib import Path
 import plistlib
+import platform
 import shlex
 import subprocess
 import sys
@@ -47,7 +48,10 @@ def create_launcher(python, install_dir, applications_dir):
                 "CFBundleExecutable": executable.name, "CFBundlePackageType": "APPL",
                 "CFBundleShortVersionString": __version__, "CFBundleVersion": __version__,
                 "CFBundleIconFile": "smith-agents.icns", "LSUIElement": True,
-                "NSHighResolutionCapable": True, MARKER: True}
+                "NSHighResolutionCapable": True,
+                # Finder otherwise starts shell launchers under Rosetta, which
+                # cannot load the native extensions pip installed on Apple Silicon.
+                "LSArchitecturePriority": [platform.machine()], MARKER: True}
         (contents / "Info.plist").write_bytes(plistlib.dumps(info))
         command = shlex.join([str(python), "-m", "smith_agents"])
         log = shlex.quote(str(install_dir / "launch.log"))
