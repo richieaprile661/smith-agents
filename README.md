@@ -14,9 +14,6 @@ Tuck it against a screen edge when you want your workspace back.
 
 [Get started](#get-started) · [How it works](#how-it-works) · [Codex setup](docs/codex.md) · [Privacy](#privacy) · [Development](docs/development.md)
 
-> **Preview:** try the source install below, or use the Windows package in `release/`.
-> The public one-line installers become available when this repository is made public.
-
 ## A little less window hunting
 
 - **Claude and Codex together.** See local terminal and VS Code sessions in one agent list, with a provider logo on each figure.
@@ -48,9 +45,6 @@ idle; tucked figures replay a short entrance once a minute.
 ## Get started
 
 ### One-line install
-
-**Public launch preview:** these commands become available after this update is
-pushed and the repository is made public. Until then, use the source steps below.
 
 Install **Python 3.10+** first ([python.org](https://www.python.org/downloads/)).
 On Windows, include the Python launcher (`py`). You also need Claude Code or Codex
