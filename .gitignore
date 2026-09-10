@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.spec
+.DS_Store
+
+# Claude Code local state
+.claude/
+.playwright-mcp/
+
+# Editors
+.vscode/
+.idea/
+
+# Figure work: the scripts and traced paths are kept, what they render is not.
+# A comparison sheet is worth a look and then worth losing - and the raw
+# generation runs behind the figures are hundreds of megabytes.
+design/figure_v2/_*/
+design/figure_v2/reinked/
+design/figure_v2/*.png
+design/figure_v2/tray/
+design/figure_v2/audit/
+design/figure_v2/appicon/
+!design/figure_v2/one_line.png
+design/*-loop/
+design/Icon/gen/
+design/Icon/_*.png
+design/Icon/cut_*.png
+design/Icon/icon_*.png
+
+# Build output. The wheel that ships lives in release/.
+build/
+dist/
+*.egg-info/
+
+# Local credentials, account state, and runtime logs
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+auth.json
+*.log
+.codex/

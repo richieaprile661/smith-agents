@@ -1,0 +1,17 @@
+Smith Agents
+============
+
+Windows package
+---------------
+
+Install Python 3.10 or newer with the Python launcher, then run this command
+from the release folder:
+
+    powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+Keep the smith_agents wheel and install.ps1 together. The installer creates a
+Smith Agents Start Menu shortcut, enables startup, and launches the application.
+Use -NoStartup or -NoLaunch to skip those actions.
+
+Your existing provider selection, theme, position, and usage caches are preserved.
+For the one-line installers and macOS setup, see the repository README.

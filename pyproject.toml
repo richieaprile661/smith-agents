@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "smith-agents"
+version = "1.1.0"
+description = "Smith Agents: a floating Windows and macOS console for Claude Code and Codex"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "richieaprile661" }]
+keywords = ["smith", "agents", "claude", "codex", "usage", "widget", "windows", "macos"]
+classifiers = [
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pystray>=0.19; sys_platform == 'win32'",
+    "pillow>=10.0",
+    "distlib>=0.3.9; sys_platform == 'win32'",
+    "pyobjc-framework-Cocoa>=11; sys_platform == 'darwin'",
+    "psutil>=6",
+]
+
+[project.optional-dependencies]
+mac-build = ["pyinstaller>=6.16; sys_platform == 'darwin'"]
+
+# A GUI script, not a console one: pip writes a shim that runs under pythonw,
+# so launching it never flashes a console window.
+[project.gui-scripts]
+smith-agents = "smith_agents:main"
+
+# Local design drafts are not application resources.
+[tool.hatch.build]
+exclude = ["smith_agents/previews/**", "smith_agents/ANIMATION_CHECKPOINT.md"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["smith_agents"]
+
+# The fonts and the figure strips sit inside the package directory, so they
+# are picked up with it - no force-include, which would add them twice.
+
+[tool.hatch.build.targets.sdist]
+include = ["smith_agents", "README.md", "LICENSE", "run.cmd", "run.command", "install.sh", "install.ps1", "tools", "tests", "docs/macos.md", "docs/windows.md", "docs/codex.md", "docs/development.md", "docs/images"]

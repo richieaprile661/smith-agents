@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "state_figures": {
+    "working": [
+      17,
+      23,
+      35
+    ],
+    "needs": [
+      3,
+      7,
+      8,
+      12,
+      34
+    ],
+    "done": [
+      30,
+      14,
+      20,
+      28,
+      29
+    ],
+    "closed": [
+      14,
+      20,
+      28,
+      29
+    ]
+  },
+  "figures": {
+    "3": {
+      "source": "set-1.png",
+      "rect": [
+        650,
+        0,
+        971,
+        244
+      ],
+      "character_height": 165
+    },
+    "7": {
+      "source": "set-1.png",
+      "rect": [
+        0,
+        461,
+        324,
+        674
+      ],
+      "character_height": 155
+    },
+    "8": {
+      "source": "set-1.png",
+      "rect": [
+        324,
+        461,
+        650,
+        674
+      ],
+      "character_height": 166
+    },
+    "14": {
+      "source": "set-1.png",
+      "rect": [
+        324,
+        890,
+        650,
+        1113
+      ],
+      "character_height": 174
+    },
+    "12": {
+      "source": "set-1.png",
+      "rect": [
+        650,
+        674,
+        971,
+        890
+      ],
+      "character_height": 162
+    },
+    "20": {
+      "source": "set-1.png",
+      "rect": [
+        324,
+        1382,
+        650,
+        1620
+      ],
+      "character_height": 153
+    },
+    "17": {
+      "source": "set-1.png",
+      "rect": [
+        324,
+        1113,
+        650,
+        1382
+      ],
+      "character_height": 163
+    },
+    "23": {
+      "source": "set-2.png",
+      "rect": [
+        320,
+        0,
+        654,
+        228
+      ],
+      "character_height": 154
+    },
+    "30": {
+      "source": "set-2.png",
+      "rect": [
+        661,
+        467,
+        971,
+        696
+      ],
+      "character_height": 144
+    },
+    "28": {
+      "source": "set-2.png",
+      "rect": [
+        0,
+        467,
+        312,
+        696
+      ],
+      "character_height": 171
+    },
+    "29": {
+      "source": "set-2.png",
+      "rect": [
+        320,
+        467,
+        654,
+        696
+      ],
+      "character_height": 160
+    },
+    "34": {
+      "source": "set-2.png",
+      "rect": [
+        0,
+        938,
+        312,
+        1213
+      ],
+      "character_height": 158
+    },
+    "35": {
+      "source": "set-2.png",
+      "rect": [
+        320,
+        938,
+        654,
+        1213
+      ],
+      "character_height": 213
+    },
+    "group_selfie": {
+      "source": "group-selfie.png",
+      "rect": [
+        0,
+        0,
+        970,
+        1622
+      ]
+    },
+    "little_helper": {
+      "source": "little-helper.png",
+      "rect": [
+        0,
+        0,
+        1536,
+        1024
+      ],
+      "render_width": 400,
+      "character_height": 227,
+      "display_scale": 1.18,
+      "coverage_boost": 0.6
+    }
+  },
+  "sources": {
+    "set-1.png": "36cbf166772dbd864779ff88f21ba8c72d8c7405f58a68183e268ab91f3659ba",
+    "set-2.png": "66a999f47b48388c30c87fb255fe041848da086783e3f3f266d5e119cc86c01f",
+    "group-selfie.png": "61d01931dcabf4f842f9d6cba1cf123bcde15bb932134e79e08ad0cc87bfd0dc",
+    "tray.png": "efeb4a76c5e08777bd1ad15110275804e8626e4025efeaddff8da57b41fe5c89",
+    "little-helper.png": "425529462a8970a149a5010a87783c79cb129d1ba94df98d8ff8bdb25230c51b"
+  },
+  "tray": "tray.png"
+}

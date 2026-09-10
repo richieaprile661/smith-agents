@@ -1,0 +1,48 @@
+name: Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+
+jobs:
+  shared:
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        python: ['3.11', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -v
+      - name: Launch native widget with sample data
+        run: python -m smith_agents --demo --smoke-test
+        timeout-minutes: 2
+      - name: Test macOS one-line installer and installed app
+        if: runner.os == 'macOS'
+        env:
+          SMITH_AGENTS_PACKAGE: ${{ github.workspace }}
+          SMITH_AGENTS_INSTALL_DIR: ${{ runner.temp }}/Smith Agents installer test
+          SMITH_AGENTS_NO_LAUNCH: '1'
+        run: |
+          sh ./install.sh
+          "$SMITH_AGENTS_INSTALL_DIR/venv/bin/python" tools/smoke_macos_launcher.py --install-dir "$SMITH_AGENTS_INSTALL_DIR"
+        timeout-minutes: 5
+      - name: Test Windows one-line installer and installed app
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          SMITH_AGENTS_PACKAGE: ${{ github.workspace }}
+          SMITH_AGENTS_INSTALL_DIR: ${{ runner.temp }}/Smith Agents installer test
+          SMITH_AGENTS_NO_LAUNCH: '1'
+        run: |
+          & .\install.ps1
+          & "$env:SMITH_AGENTS_INSTALL_DIR\venv\Scripts\python.exe" -m smith_agents --demo --smoke-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        timeout-minutes: 5

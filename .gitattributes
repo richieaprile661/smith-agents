@@ -1,0 +1,9 @@
+* text=auto
+
+# Batch files are parsed by cmd.exe, which is line-ending sensitive around
+# labels and goto. Pin them to CRLF so a clone does not depend on whatever
+# core.autocrlf the user happens to have set.
+*.cmd text eol=crlf
+
+*.ttf binary
+*.png binary
