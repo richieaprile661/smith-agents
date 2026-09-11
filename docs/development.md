@@ -8,6 +8,7 @@ The widget is split into shared code and one backend for each platform:
 | --- | --- |
 | `smith_agents/core.py` | Shared Claude data, themes, Pillow drawing, and layout |
 | `smith_agents/app.py` | Shared controller, polling, interactions, and configuration |
+| `smith_agents/runtime.py` | Selects the backend for the current operating system |
 | `smith_agents/platform_win32.py` | Windows surface, tray, startup, and process APIs |
 | `smith_agents/platform_darwin.py` | AppKit panel and menu, Keychain, LaunchAgent, and Unix processes |
 
@@ -75,8 +76,8 @@ packaging, see [Mac setup](macos.md).
 ## Regenerate the README images
 
 The images in `docs/images/` come from the widget's own renderer, using one set of
-sample sessions for every image. To rebuild them after an interface change, run
-the following command on Windows:
+sample sessions for every image. After an interface change, rebuild them on
+Windows:
 
 ```powershell
 py tools/render_readme_images.py
