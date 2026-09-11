@@ -1,15 +1,19 @@
-# GitHub page images
+# README images
 
-Rendered from the current widget with sample sessions and isolated configuration
-on 2026-09-10. No credentials, account readings, or conversation files were read.
-The screenshots use the packaged approved figures, provider badges, and the
-Smith wordmark beneath the group selfie and above the existing Agents tab.
-The hero uses the approved thin, glowing Smith wordmark with agents underneath;
-the Matrix quote sits directly below the hero in the README.
+`tools/render_readme_images.py` renders these images with the widget's own
+renderer. All of them use the same three sample sessions: `api-service` waiting for
+approval, `storefront` running tests in Codex, and `design-system` ready. No
+credentials, account readings, or conversation files are read.
 
-- `github-hero.png`: main console and top tuck, framed by introduction text.
-- `github-tuck.png`: top and right tuck, with a selected agent panel open.
-- `github-themes.png`: the same sample sessions in Claude, Matrix, and E-ink.
+| Image | What it shows |
+| --- | --- |
+| `github-hero.png` | The wordmark, the tagline, and the full widget. |
+| `github-work.png` | One session's details, with callouts for the approval, the running command, the last request, the latest message, and the window link. |
+| `github-tuck.png` | The strip tucked against the top edge of a screen, over a code editor, with one agent's panel open. |
+| `github-themes.png` | The same sessions in the Claude, Matrix, and E-ink themes. |
 
-These are illustrations of the interface using sample data, not release artifacts.
-When the interface changes, regenerate them from the shared renderer.
+The canvases are 1760 pixels wide, and the widget renders at zoom 2.5, so the
+images stay sharp and readable at GitHub's README width. These images illustrate the interface with
+sample data. They aren't release artifacts. When the interface changes, regenerate
+them. For the command, see
+[Regenerate the README images](../development.md#regenerate-the-readme-images).
