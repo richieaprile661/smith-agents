@@ -23,6 +23,21 @@ def reply(session="one", model="claude-opus-5", capacity=1000000):
 
 
 class VscodeContextTests(unittest.TestCase):
+    def test_legacy_launcher_import_preserves_protocol_and_exit_code(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [sys.executable, "-c",
+                 "import sys; from claude_widget.vscode_context import main; "
+                 "sys.exit(main(sys.argv[1:]))",
+                 sys.executable, "-c",
+                 "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read()); "
+                 "sys.stderr.write('legacy launcher'); sys.exit(7)"],
+                input=b"unchanged input\n", capture_output=True, timeout=10,
+                env=dict(os.environ, CLAUDE_CONFIG_DIR=directory))
+            self.assertEqual(result.stdout, b"unchanged input\n")
+            self.assertEqual(result.stderr, b"legacy launcher")
+            self.assertEqual(result.returncode, 7)
+
     def test_permission_observer_failure_does_not_break_capacity(self):
         with tempfile.TemporaryDirectory() as directory:
             def unavailable(_data):
