@@ -66,6 +66,12 @@ Each command installs Smith Agents into its own environment and launches it.
 Windows gets a Start Menu shortcut; Mac gets an app in your user Applications
 folder. Your agent logins and widget settings stay in their existing locations. No Git installation or manual cloning is needed.
 
+**To update:** quit Smith Agents from its tray/menu-bar menu, then run the same
+one-line command again. It reinstalls the latest code and launches the updated
+widget, preserving your settings and agent logins. Claude and Codex sessions
+can keep running. Updates are manual; there is no automatic update checker.
+If you used a custom installation directory, use the same override when updating.
+
 [Windows installer](install.ps1) · [Mac installer](install.sh) ·
 [Windows setup](docs/windows.md) · [Mac setup](docs/macos.md)
 

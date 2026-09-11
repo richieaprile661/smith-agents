@@ -16,7 +16,8 @@ smith_package=${SMITH_AGENTS_PACKAGE:-https://github.com/richieaprile661/smith-a
 mkdir -p "$smith_install_dir"
 python3 -m venv "$smith_install_dir/venv"
 smith_python="$smith_install_dir/venv/bin/python"
-"$smith_python" -m pip install --upgrade "$smith_package"
+# master can contain newer code with the same package version.
+"$smith_python" -m pip install --upgrade --force-reinstall "$smith_package"
 "$smith_python" -c 'import smith_agents'
 
 smith_app=$("$smith_python" -m smith_agents.macos_launcher "$smith_install_dir")

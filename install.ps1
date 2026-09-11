@@ -18,7 +18,8 @@
     & py -3 -m venv $smithVenv
     if ($LASTEXITCODE -ne 0) { throw "Could not create the Smith Agents environment." }
     $smithPython = Join-Path $smithVenv "Scripts\python.exe"
-    & $smithPython -m pip install --upgrade $smithPackage
+    # master can contain newer code with the same package version.
+    & $smithPython -m pip install --upgrade --force-reinstall $smithPackage
     if ($LASTEXITCODE -ne 0) { throw "Installation failed. Check the error above and try again." }
     & $smithPython -c "import smith_agents"
     if ($LASTEXITCODE -ne 0) { throw "The installed package does not contain Smith Agents." }
