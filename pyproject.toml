@@ -40,10 +40,10 @@ smith-agents = "smith_agents:main"
 exclude = ["smith_agents/previews/**", "smith_agents/ANIMATION_CHECKPOINT.md"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["smith_agents"]
+packages = ["smith_agents", "claude_widget"]
 
 # The fonts and the figure strips sit inside the package directory, so they
 # are picked up with it - no force-include, which would add them twice.
 
 [tool.hatch.build.targets.sdist]
-include = ["smith_agents", "README.md", "LICENSE", "run.cmd", "run.command", "install.sh", "install.ps1", "tools", "tests", "docs/macos.md", "docs/windows.md", "docs/codex.md", "docs/development.md", "docs/images"]
+include = ["smith_agents", "claude_widget", "README.md", "LICENSE", "run.cmd", "run.command", "install.sh", "install.ps1", "tools", "tests", "docs/macos.md", "docs/windows.md", "docs/codex.md", "docs/development.md", "docs/images"]

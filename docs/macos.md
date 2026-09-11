@@ -38,6 +38,14 @@ and latest message. The wheel/trackpad and footer **Up / Down** controls scroll
 long lists while keeping the header and footer visible. Session age and idle time
 are separate; idle measures time since the transcript was updated.
 
+Rows also distinguish **Main agent** from **Subagent**, with the host window
+shown as **in front**, **in background**, **hidden**, or **unknown**. Subagents
+show their **parent window** state, and Open/Hide targets that parent window.
+Background describes window focus, independently of whether the agent is
+working. This tracks the host window, not the selected chat or terminal tab.
+Without Accessibility access or an unambiguous match, the state stays unknown;
+reading the indicator never requests permission or changes focus.
+
 Each agent and subagent shows a full-width context reading beneath its identity,
 such as `313.6k / 1M`, with the percentage and a fill indicator when capacity is known.
 This uses the most recent request's input tokens plus cache creation and cache

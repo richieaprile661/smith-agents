@@ -266,6 +266,37 @@ def agent_window_is_visible(agent):
                 and target[1].get('AXMinimized') is False)
 
 
+def agent_window_state(agent):
+    """Observe the host window without raising it or requesting permissions."""
+    import psutil
+    if agent.get('sub') or agent.get('state') == 'closed' or not pid_alive(agent.get('pid'), agent.get('started_at')):
+        return 'unknown'
+    target = _opened_agent_window(agent)
+    if target is None:
+        try:
+            process = psutil.Process(agent['pid'])
+            if agent.get('provider') == 'codex' and process.create_time() != agent.get('process_created'):
+                return 'unknown'
+            host = _agent_host_application(process)
+            window = _match_agent_window(agent, host)
+        except psutil.Error:
+            return 'unknown'
+        if window is None:
+            return 'unknown'
+        target = (host, window)
+        _AGENT_WINDOWS.remember(agent, target)
+    host, window = target
+    minimized = window.get('AXMinimized')
+    if minimized is None:
+        return 'unknown'
+    if host.isHidden() or minimized:
+        return 'hidden'
+    if not host.isActive():
+        return 'background'
+    focused = macos_windows.is_focused(host.processIdentifier(), window)
+    return 'unknown' if focused is None else 'front' if focused else 'background'
+
+
 def hide_agent_window(agent):
     """Minimize only the recorded window, leaving Claude running."""
     target = _opened_agent_window(agent)

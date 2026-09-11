@@ -2505,7 +2505,7 @@ def agent_row_layout(agent):
                         CONSOLE_W - PAD_X - px(17) - text_x, 2)
     identity_h = max(ROW_FIGURE_H, len(titles) * panel_line_height(title_font)
                      + px(3) + panel_line_height(FONT("semi", 10)))
-    context_y = px(8) + identity_h + px(6)
+    context_y = px(8) + identity_h + px(6) + panel_line_height(small) + px(4)
     track_y = context_y + panel_line_height(small) + px(2)
     state_y = track_y + px(3) + px(6)
     activity_y = state_y + panel_line_height(small) + px(2)
@@ -2563,7 +2563,20 @@ def agent_window_action(agent):
     kind = 'hide' if agent.get('_window_open') else 'open'
     target = ('window' if agent.get('provider') == 'codex' else
               'chat' if agent.get('entrypoint') == 'claude-vscode' else 'terminal')
+    if agent.get('sub'):
+        target = 'parent window'
     return kind, ('Hide ' if kind == 'hide' else 'Open ') + target
+
+
+def agent_window_label(agent):
+    sub = agent.get('sub')
+    role = 'Subagent' if sub else 'Main agent'
+    if agent.get('state') == 'closed':
+        return role + ' · Session closed'
+    window = 'Parent window' if sub else 'Window'
+    state = {'front': 'in front', 'background': 'in background',
+             'hidden': 'hidden'}.get(agent.get('_window_state'), 'unknown')
+    return role + ' · ' + window + ' ' + state
 
 
 def _window_action_icon(pen, x, y, kind, colour):
@@ -2609,6 +2622,10 @@ def render_row(pen, chip, agent, y, now, open_, confirm, figure_elapsed=None, dr
     pen.text((text_x, ty + px(3)), elide(agent_model_source(agent, include_provider=not has_badge), model_font, right - px(17) - text_x),
              font=model_font, fill=_ink(88))
     _chevron(pen, right - px(5), y + px(25), _ink(62), open_)
+
+    window_y = y + context_y - panel_line_height(small) - px(4)
+    pen.text((PAD_X, window_y), elide(agent_window_label(agent), small, right - PAD_X),
+             font=small, fill=_ink(78))
 
     tokens, capacity = agent.get("context_tokens"), agent.get("context_capacity")
     pct = tokens / capacity * 100 if capacity and tokens is not None else None

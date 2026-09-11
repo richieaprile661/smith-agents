@@ -1,6 +1,20 @@
-"""Bounded window targets for sessions opened through the widget."""
+"""Resolve session owners and retain bounded, verified host window targets."""
 from collections import OrderedDict
 import re
+
+
+def window_agent(agent, agents):
+    """A spawned subagent uses its ancestor's window, not a separate chat."""
+    seen = set()
+    while agent and agent.get('sub'):
+        key = (agent.get('provider'), agent.get('id'))
+        if key in seen:
+            return None
+        seen.add(key)
+        agent = next((parent for parent in agents
+                      if parent.get('id') == agent.get('parent')
+                      and parent.get('provider') == agent.get('provider')), None)
+    return agent
 
 
 def title_matches_project(title, leaf):

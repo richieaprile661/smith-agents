@@ -15,6 +15,7 @@ def _api():
     signatures = (
         (ax, 'AXIsProcessTrusted', [], C.c_bool),
         (ax, 'AXUIElementCreateApplication', [C.c_int], ptr),
+        (ax, 'AXUIElementGetTypeID', [], C.c_ulong),
         (ax, 'AXUIElementCopyAttributeValue', [ptr, ptr, C.POINTER(ptr)], C.c_int),
         (ax, 'AXUIElementSetAttributeValue', [ptr, ptr, ptr], C.c_int),
         (ax, 'AXUIElementPerformAction', [ptr, ptr], C.c_int),
@@ -22,6 +23,7 @@ def _api():
         (cf, 'CFRetain', [ptr], ptr),
         (cf, 'CFRelease', [ptr], None),
         (cf, 'CFGetTypeID', [ptr], C.c_ulong),
+        (cf, 'CFEqual', [ptr, ptr], C.c_bool),
         (cf, 'CFStringGetTypeID', [], C.c_ulong),
         (cf, 'CFArrayGetTypeID', [], C.c_ulong),
         (cf, 'CFBooleanGetTypeID', [], C.c_ulong),
@@ -84,6 +86,8 @@ class Element:
             return None
         try:
             kind = self.cf.CFGetTypeID(value)
+            if kind == self.ax.AXUIElementGetTypeID():
+                return Element(self.cf.CFRetain(value))
             if kind == self.cf.CFBooleanGetTypeID():
                 return bool(self.cf.CFBooleanGetValue(value))
             if kind == self.cf.CFStringGetTypeID():
@@ -124,3 +128,16 @@ def windows(pid):
     app = Element(ax.AXUIElementCreateApplication(pid))
     ax.AXUIElementSetMessagingTimeout(app.value, 0.3)
     return app.get('AXWindows') or []
+
+
+def is_focused(pid, window):
+    """Compare the exact focused window; sibling windows share the same PID."""
+    if not trusted():
+        return None
+    ax, cf = _api()
+    app = Element(ax.AXUIElementCreateApplication(pid))
+    ax.AXUIElementSetMessagingTimeout(app.value, 0.3)
+    focused = app.get('AXFocusedWindow')
+    if focused is None:
+        return None
+    return bool(cf.CFEqual(focused.value, window.value))

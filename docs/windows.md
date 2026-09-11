@@ -21,6 +21,23 @@ Reopen the Claude chat or reload its VS Code window when idle, then finish a
 response. Already-running Claude processes cannot acquire the bridge in place.
 New wrapped chats may start in Manual permission mode, as on Mac.
 
+If VS Code reports `ModuleNotFoundError: No module named
+'claude_widget.vscode_context'`, its generated launcher still uses the package
+name from before Smith Agents. The compatibility module in current releases
+forwards that import to the current bridge. From your updated Smith Agents
+checkout, rerun these commands to install it and regenerate the launcher with
+the current package path and Python interpreter:
+
+```powershell
+python -m pip install -e .
+python tools/configure_vscode_context.py
+```
+
+Use the same `--settings` and `--directory` options as the original setup if you
+customized them. Reconfiguration preserves the original wrapper and unrelated
+settings. Reload the VS Code window when idle afterward. Regeneration is also
+needed if you moved the checkout or removed the launcher's Python interpreter.
+
 The bridge forwards the protocol, arguments, working directory, and environment.
 It saves only the main session's reported context capacity and model metadata;
 capacity is not guessed from a model name. Subagent capacities still require
@@ -43,6 +60,15 @@ handle used to terminate it. VS Code, terminal hosts, shared wrappers, and
 processes shared with other sessions or listed subagents are not terminated.
 Stop shared agents individually inside Claude. Other independent sessions in
 the project remain running.
+
+Each agent row distinguishes **Main agent** from **Subagent** and reports its
+host window as **in front**, **in background**, **hidden**, or **unknown**.
+Background means another window has focus; it does not mean the agent stopped
+working. Hidden means minimized or hidden by the operating system. Unknown
+means the widget cannot reliably identify or inspect the window.
+Subagents report their **parent window**, and their Open/Hide actions use that
+window. The indicator describes the host window, not the selected chat or
+terminal tab; sessions sharing one window share its window state.
 
 To restore the previous wrapper while preserving other current settings:
 

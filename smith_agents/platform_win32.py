@@ -270,36 +270,28 @@ def _window_owner(hwnd):
     return pid.value
 
 
-def raise_agent_window(agent):
-    """Bring the window hosting this agent to the front.
-
-    Matching is by title, not PID: every VS Code window shares one process, so
-    a PID alone cannot pick between them. Returns True if a window was raised."""
-    if not _pid_alive(agent.get('pid'), agent.get('started_at')):
-        return False
+def _find_agent_window(agent):
+    """Resolve a host window without changing focus or visibility."""
+    if agent.get('sub') or agent.get('state') == 'closed' or not _pid_alive(agent.get('pid'), agent.get('started_at')):
+        return None
     user32 = ctypes.windll.user32
     hwnd = _opened_agent_window(agent)
     if hwnd is not None:
-        native = ctypes.c_void_p(hwnd)
-        if user32.IsIconic(native):
-            user32.ShowWindow(native, 9)
-        return bool(user32.SetForegroundWindow(native))
+        return hwnd
     leaf = os.path.basename(agent.get("cwd", "").rstrip("\\/"))
     if not leaf:
-        return False
+        return None
 
     user32 = ctypes.windll.user32
     found = []
-    allowed_owners = None
-    if agent.get('provider') == 'codex':
-        import psutil
-        try:
-            process = psutil.Process(agent['pid'])
-            if process.create_time() != agent.get('process_created'):
-                return False
-            allowed_owners = {p.pid for p in [process, *process.parents()]}
-        except psutil.Error:
-            return False
+    import psutil
+    try:
+        process = psutil.Process(agent['pid'])
+        if agent.get('provider') == 'codex' and process.create_time() != agent.get('process_created'):
+            return None
+        allowed_owners = {p.pid for p in [process, *process.parents()]}
+    except psutil.Error:
+        return None
 
     proto = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
@@ -319,20 +311,29 @@ def raise_agent_window(agent):
 
     user32.EnumWindows(proto(visit), None)
     if len(found) != 1:
-        return False
+        return None
 
     hwnd = found[0]
-    SW_RESTORE = 9
-    if user32.IsIconic(ctypes.c_void_p(hwnd)):
-        user32.ShowWindow(ctypes.c_void_p(hwnd), SW_RESTORE)
-    opened = bool(user32.SetForegroundWindow(ctypes.c_void_p(hwnd)))
     owner = _window_owner(hwnd)
     started = _proc_started(owner) if owner else None
-    if opened and started is not None:
-        # Remember the exact window we opened. Never rerun a title search when
+    if started is not None:
+        # Remember the exact window we identified. Never rerun a title search when
         # hiding, which could minimize a different window with a similar name.
         _AGENT_WINDOWS.remember(agent, (hwnd, owner, started))
-    return opened
+        return hwnd
+    return None
+
+
+def raise_agent_window(agent):
+    """Bring only the identified host window to the front."""
+    hwnd = _find_agent_window(agent)
+    if hwnd is None:
+        return False
+    user32 = ctypes.windll.user32
+    native = ctypes.c_void_p(hwnd)
+    if user32.IsIconic(native):
+        user32.ShowWindow(native, 9)
+    return bool(user32.SetForegroundWindow(native))
 
 
 def _opened_agent_window(agent):
@@ -356,6 +357,21 @@ def agent_window_is_visible(agent):
     user32 = ctypes.windll.user32
     return bool(user32.IsWindowVisible(ctypes.c_void_p(hwnd))
                 and not user32.IsIconic(ctypes.c_void_p(hwnd)))
+
+
+def agent_window_state(agent):
+    hwnd = _find_agent_window(agent)
+    if hwnd is None:
+        return 'unknown'
+    user32 = ctypes.windll.user32
+    if not user32.IsWindowVisible(ctypes.c_void_p(hwnd)) or user32.IsIconic(ctypes.c_void_p(hwnd)):
+        return 'hidden'
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    foreground = user32.GetForegroundWindow()
+    if not foreground:
+        return 'unknown'
+    return 'front' if foreground == hwnd else 'background'
 
 
 def hide_agent_window(agent):

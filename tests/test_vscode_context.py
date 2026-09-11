@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipapp
 from unittest.mock import patch
 
 from smith_agents.context_bridge import read_capacity
@@ -161,6 +162,54 @@ class VscodeContextTests(unittest.TestCase):
                                      sys.executable, str(script)], stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     env=dict(os.environ, CLAUDE_CONFIG_DIR=directory))
+            try:
+                proc.stdin.write(b"finish\n")
+                proc.stdin.flush()
+                code = proc.wait(timeout=10)
+                out, err = proc.stdout.read(), proc.stderr.read()
+                self.assertEqual(code, 7, err.decode(errors="replace"))
+                self.assertEqual(out.rstrip(b"\r\n"), b"finished")
+                self.assertEqual(err, b"")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait()
+                for stream in (proc.stdin, proc.stdout, proc.stderr):
+                    stream.close()
+
+    def test_legacy_launcher_import_and_exit_with_client_stdin_open(self):
+        # Installed distlib launchers retain this import after the package rename.
+        # Run outside the checkout, with only the launcher's saved source path.
+        with tempfile.TemporaryDirectory(prefix="legacy bridge ") as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            script = ("#!python\nimport sys\n"
+                      f"sys.path.insert(0, {str(Path(__file__).resolve().parent.parent)!r})\n"
+                      "from claude_widget.vscode_context import main\n"
+                      "sys.exit(main(sys.argv[1:]))\n")
+            if sys.platform == "win32":
+                from distlib.scripts import ScriptMaker
+                (source / "vscode-launcher.py").write_text(script, encoding="utf-8")
+                maker = ScriptMaker(str(source), str(root))
+                maker.executable = sys.executable
+                maker.make("vscode-launcher.py")
+                command = [str(root / "vscode-launcher.exe")]
+            else:
+                (source / "__main__.py").write_text(script, encoding="utf-8")
+                archive = root / "vscode-launcher.pyz"
+                zipapp.create_archive(source, archive)
+                command = [sys.executable, str(archive)]
+            child = root / "child.py"
+            child.write_text("import sys\n"
+                             "assert sys.stdin.buffer.readline() == b'finish\\n'\n"
+                             "print('finished', flush=True)\n"
+                             "sys.exit(7)\n")
+            env = dict(os.environ, CLAUDE_CONFIG_DIR=directory)
+            env.pop("PYTHONPATH", None)
+            proc = subprocess.Popen([*command, sys.executable, str(child)], cwd=root,
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, env=env)
             try:
                 proc.stdin.write(b"finish\n")
                 proc.stdin.flush()

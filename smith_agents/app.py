@@ -774,8 +774,16 @@ class SmithAgentsWidget:
         self._agents_scan = now
 
     def _sync_agent_windows(self):
+        from .session_windows import window_agent
         for agent in self.agents:
-            agent['_window_open'] = platform.agent_window_is_visible(agent)
+            if not agent.get('sub'):
+                agent['_window_state'] = platform.agent_window_state(agent)
+                agent['_window_open'] = platform.agent_window_is_visible(agent)
+        for agent in self.agents:
+            if agent.get('sub'):
+                parent = window_agent(agent, self.agents)
+                agent['_window_state'] = parent.get('_window_state', 'unknown') if parent else 'unknown'
+                agent['_window_open'] = bool(parent and parent.get('_window_open'))
 
     def _finish_window_hide(self, agent, remaining=5):
         """Observe the target after its event loop handles the hide request."""
@@ -929,17 +937,21 @@ class SmithAgentsWidget:
                 self._dismiss([a.get("id") for a in self.agents
                                if a.get("state") == "closed" and not a.get("sub")])
             elif kind == "open":
+                from .session_windows import window_agent
+                target = window_agent(agent, getattr(self, 'agents', ()))
                 try:
-                    if not raise_agent_window(agent):
+                    if target is None or not raise_agent_window(target):
                         platform.show_error("Could not identify this session's window. Open it manually; other windows were left alone.")
                 except PermissionError as error:
                     platform.show_error(str(error))
                 self._sync_agent_windows()
             elif kind == "hide":
-                if not hide_agent_window(agent):
+                from .session_windows import window_agent
+                target = window_agent(agent, getattr(self, 'agents', ()))
+                if target is None or not hide_agent_window(target):
                     platform.show_error("Could not hide this window. It may have closed or changed. The agent was not stopped.")
                 else:
-                    self.root.after(150, lambda: self._finish_window_hide(agent))
+                    self.root.after(150, lambda: self._finish_window_hide(target))
                 self._sync_agent_windows()
             elif kind in ("permission", "permission-deny"):
                 pending = agent.get("permissions") or []
