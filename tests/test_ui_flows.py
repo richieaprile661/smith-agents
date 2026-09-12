@@ -10,6 +10,23 @@ from smith_agents.sample_data import demo_payload
 
 
 class UserFlowTests(unittest.TestCase):
+    def test_window_setup_is_skipped_in_demo_and_during_shutdown(self):
+        w = SmithAgentsWidget.__new__(SmithAgentsWidget)
+        w.config, w._save_config, w.stopping = {}, Mock(), Mock()
+        setup = Mock()
+        with patch("smith_agents.app.platform", SimpleNamespace(offer_accessibility_setup=setup)):
+            w.demo = True
+            w.stopping.is_set.return_value = False
+            w.setup_window_controls()
+            setup.assert_not_called()
+            w.demo = False
+            w.stopping.is_set.return_value = True
+            w.setup_window_controls()
+            setup.assert_not_called()
+            w.stopping.is_set.return_value = False
+            w.setup_window_controls(force=True)
+            setup.assert_called_once_with(w.config, w._save_config, force=True)
+
     def widget(self, side, count=20, height=420):
         w = SmithAgentsWidget.__new__(SmithAgentsWidget)
         w.config = dict(c.DEFAULTS, tucked=True, tuck_side=side)

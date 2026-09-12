@@ -147,6 +147,15 @@ class SmithAgentsWidget:
             threading.Thread(target=self._codex_poll_loop, daemon=True).start()
         platform.start_tray(self.tray)
         self.root.after(120, self._tick)
+        if not demo and hasattr(platform, "offer_accessibility_setup"):
+            self.root.after(700, self.setup_window_controls)
+
+    def setup_window_controls(self, force=False):
+        if self.demo or self.stopping.is_set():
+            return
+        setup = getattr(platform, "offer_accessibility_setup", None)
+        if setup:
+            setup(self.config, self._save_config, force=force)
 
     # -- config ------------------------------------------------------------
     def _load_config(self):

@@ -954,6 +954,7 @@ def _list_claude_agents(idle_after=AGENT_IDLE_S):
 
 def list_agents(idle_after=AGENT_IDLE_S):
     from . import codex_sessions
+    from .activity import visible_helpers
     agents = _list_claude_agents(idle_after)
     for agent in agents:
         agent["provider"] = "claude"
@@ -969,68 +970,60 @@ def list_agents(idle_after=AGENT_IDLE_S):
     except Exception as error:
         # One provider must not hide the other provider's sessions.
         log_line("Codex session scan: %s" % type(error).__name__)
-    return agents
-
-
-SUBAGENT_LIVE_S = 120
-
-
-def _subagent_task(path):
-    """A subagent's first user message is the task it was handed, which makes
-    a better label than its agent id."""
-    try:
-        with open(path, encoding="utf-8", errors="replace") as handle:
-            first = handle.readline()
-        record = json.loads(first)
-    except (OSError, ValueError):
-        return ""
-    message = record.get("message") or {}
-    content = message.get("content")
-    if isinstance(content, list):
-        content = " ".join(b.get("text", "") for b in content
-                           if isinstance(b, dict))
-    return " ".join(str(content or "").split())[:60]
+    return visible_helpers(agents, time.time())
 
 
 def list_subagents(parent, idle_after=AGENT_IDLE_S):
-    """Subagents of one session. They have no PID of their own - they run
-    inside the parent - so liveness is "written to recently"."""
+    """Keep helpers with their live parent; explicit events supersede history."""
+    from pathlib import Path
+    from .activity import claude_transcript, apply_activity, merge_activity
+    from .claude_activity import read as read_activity
     folder = os.path.join(PROJECTS_DIR, _encode_path(parent.get("cwd", "")),
                           parent.get("id", ""), "subagents")
-    found = []
     if parent["state"] == "closed":
-        return found
-    try:
-        entries = list(os.scandir(folder))
-    except OSError:
-        return found
-
+        return []
     now = time.time()
-    for entry in entries:
-        if not entry.name.endswith(".jsonl"):
-            continue
+    reported = read_activity(os.path.join(CLAUDE_DIR, "widget-context"), parent, now)
+    paths = {}
+    try:
+        for entry in os.scandir(folder):
+            if entry.name.startswith("agent-") and entry.name.endswith(".jsonl"):
+                paths[entry.name[6:-6]] = entry.path
+    except OSError:
+        pass
+    found = []
+    for key in list(dict.fromkeys([*reported, *paths]))[:256]:
+        path = paths.get(key)
+        data, modified = {}, now
         try:
-            idle = now - entry.stat().st_mtime
+            if path:
+                data, modified = claude_transcript(Path(path))
         except OSError:
-            continue
-        if idle > SUBAGENT_LIVE_S:
-            continue                    # finished long ago; not running now
-        reason = _last_stop_reason(entry.path)
-        state = "done" if reason == "end_turn" else \
-            ("needs" if idle > idle_after else "working")
-        found.append({
+            data["status"] = "unknown"
+        live = reported.get(key)
+        if live:
+            data = merge_activity(data, live)
+        elif data.get("status") == "running" and now - modified > idle_after:
+            # A file alone cannot distinguish a long tool from a disconnected
+            # observer. Retain the row, but label its current activity unknown.
+            data.update(status="unknown")
+        data.setdefault("status", "unknown")
+        row = {
             "pid": parent["pid"],       # it lives inside the parent process
-            "id": entry.name[:-6],
-            "name": _subagent_task(entry.path) or entry.name[6:14],
+            "started_at": parent.get("started_at"),
+            "id": "agent-" + key,
+            "name": data.get("name") or (data.get("assignment") or "")[:120] or key[:12],
             "cwd": parent.get("cwd", ""),
-            "state": state,
-            "since": None,             # parent start is not this subagent's start
-            "idle": idle,
+            "state": "working",
+            "since": data.get("started_at"),
+            "idle": max(0, now - max(modified, data.get("state_at", 0))),
             "sub": True,
-            "parent": parent["id"],
+            "parent": "agent-" + data["parent_task"].removeprefix("agent-") if data.get("parent_task") else parent["id"],
+            "root_parent": parent["id"],
             "entrypoint": parent.get("entrypoint"),
-            "transcript": entry.path,
-        })
+            "transcript": path,
+        }
+        found.append(apply_activity(row, data, now))
     found.sort(key=lambda a: a["idle"])
     return found
 
@@ -1178,11 +1171,26 @@ def agent_status(agent):
         return "Approval needed" if permissions[0].get("actionable") else "Answer in " + provider_name(agent)
     if agent.get("status_detail") and agent.get("state") != "closed":
         return agent["status_detail"]
+    if agent.get("sub") and agent.get("activity"):
+        from .activity import current_tools
+        data = agent["activity"]
+        if data.get("status") == "completed":
+            return "Completed"
+        tools = current_tools(data)
+        if tools:
+            return "Running tool" if len(tools) == 1 else "Running %d tools" % len(tools)
     return {"working": "Working", "needs": "Quiet · check chat",
             "done": "Ready", "closed": "Session closed"}.get(agent.get("state"), "Unknown")
 
 
 def agent_activity_stamp(agent):
+    from .activity import current_tools
+    data = agent.get("activity") or {}
+    tools = current_tools(data)
+    if tools and tools[-1].get("started_at"):
+        return agent_elapsed({"idle": time.time() - tools[-1]["started_at"]}) + " in tool"
+    if data.get("ended_at") and data.get("started_at"):
+        return agent_elapsed({"idle": data["ended_at"] - data["started_at"]}) + " total"
     elapsed = agent_elapsed(agent)
     if not elapsed:
         return "Activity unknown"
@@ -1198,6 +1206,21 @@ def agent_activity(agent):
         inputs = request.get("input") or {}
         detail = inputs.get("command") or inputs.get("file_path") or request.get("description") or "Review request"
         return request["tool_name"] + " · " + str(detail)
+    data = agent.get("activity")
+    if data:
+        from .activity import current_tools
+        if data.get("status") in ("completed", "failed", "stopped"):
+            result = data.get("result") or agent.get("latest_message")
+            if result:
+                return "Result · " + result
+        tools = current_tools(data)
+        if tools:
+            return "Now · " + tools[-1]["label"]
+        if data.get("status") == "running" and data.get("summary"):
+            return "Progress · " + data["summary"]
+        last = data.get("last_tool") or data.get("reported_tool")
+        if last:
+            return ("Last observed · " if data.get("status") == "unknown" else "Last tool · ") + last
     if agent.get("state") in ("done", "closed") and agent.get("latest_message"):
         return "Last reply · " + agent["latest_message"]
     command = agent.get("last_tool") or next((text for kind, text in reversed(agent.get("tail") or [])
@@ -1208,6 +1231,16 @@ def agent_activity(agent):
     if agent.get("latest_message"):
         return "Last reply · " + agent["latest_message"]
     return "No recent activity recorded"
+
+
+def agent_work_counts(agent):
+    data = agent.get("activity") or {}
+    count = data.get("reported_tool_count", data.get("tool_count"))
+    parts = ["%d tool calls" % count] if count is not None else []
+    total = data.get("total_tokens")
+    if total is not None:
+        parts.append(compact_tokens(total) + " total tokens")
+    return " · ".join(parts) or "Usage unavailable"
 
 
 def agent_tail(agent, limit=7, records=None):
@@ -1689,7 +1722,7 @@ def agent_style(agent):
     """Keep the approved pose stable; retain the tempo for legacy strips."""
     seed = zlib.crc32((agent.get("id") or agent.get("name") or "").encode("utf-8"))
     if agent.get('sub'):
-        return artwork.SUBAGENT, 4.8
+        return artwork.helper_pose(agent), 4.8
     variants = STATE_STRIPS.get(agent.get("state"), STATE_STRIPS["working"])
     strip = agent.get('_figure_pose') if agent.get('_figure_state') == agent.get('state') else None
     if strip not in variants:
@@ -1861,6 +1894,10 @@ def decorate_agents(agents):
         agent["permissions"] = pending_permissions(os.path.join(CLAUDE_DIR, "widget-context"), agent)
         if agent["permissions"]:
             agent["state"] = "needs"
+        if agent.get("activity"):
+            from .activity import apply_activity
+            agent["model"] = agent.get("model") or agent["activity"].get("model")
+            apply_activity(agent, agent["activity"], time.time())
         agent["branch"] = git_branch(agent.get("cwd", ""))
     return agents
 
@@ -1877,9 +1914,17 @@ def sort_agents(agents):
     tops.sort(key=lambda a: (STATE_RANK.get(a["state"], 9),
                              a.get("idle") if a.get("idle") is not None else 1e9))
     out = []
-    for agent in tops:
+    seen = set()
+    def append(agent):
+        key = agent.get("id")
+        if key in seen:
+            return
+        seen.add(key)
         out.append(agent)
-        out.extend(subs.get(agent.get("id"), []))
+        for child in subs.get(key, []):
+            append(child)
+    for agent in tops:
+        append(agent)
     return out
 
 
@@ -2510,6 +2555,9 @@ def agent_row_layout(agent):
     state_y = track_y + px(3) + px(6)
     activity_y = state_y + panel_line_height(small) + px(2)
     height = max(ROW_H, activity_y + panel_line_height(FONT("book", 11)) + px(7))
+    if agent.get("sub") and agent.get("activity"):
+        lines = panel_wrap(agent_activity(agent), FONT("book", 11), CONSOLE_W - PAD_X * 2, 2)
+        height += (len(lines)-1) * panel_line_height(FONT("book", 11)) + panel_line_height(small) + px(7)
     if (agent.get("permissions") or [{}])[0].get("actionable"):
         height += panel_line_height(FONT("semi", 10)) + px(8)
     return titles, text_x, context_y, track_y, state_y, activity_y, height
@@ -2652,16 +2700,24 @@ def render_row(pen, chip, agent, y, now, open_, confirm, figure_elapsed=None, dr
     body = FONT("book", 11)
     link_font = FONT("semi", 10)
     action_kind, open_label = agent_window_action(agent)
+    rich = agent.get("sub") and agent.get("activity")
+    activity_lines = panel_wrap(agent_activity(agent), body, right - PAD_X, 2) if rich else []
+    counts_y = y + activity_y + len(activity_lines) * panel_line_height(body) + px(4)
     open_x = right - px(12) - text_w(open_label, link_font)
-    open_y = y + activity_y + ascent(body) - ascent(link_font)
+    open_y = (counts_y if rich else y + activity_y) + ascent(body) - ascent(link_font)
     box = _link(pen, open_x, open_y, open_label, link_font, _tok("fg"), True)
     _window_action_icon(pen, right - px(7), open_y + px(1), action_kind, _tok("fg"))
     # Actions must be tested before the enclosing row's expand/collapse box.
     boxes.append((action_kind, box[0], box[1], right + px(4), box[3], agent))
-    pen.text((PAD_X, y + activity_y),
-             elide(agent_activity(agent), body, open_x - PAD_X - px(12)), font=body, fill=_ink(78))
+    if rich:
+        for index, line in enumerate(activity_lines):
+            pen.text((PAD_X, y + activity_y + index * panel_line_height(body)), line, font=body, fill=_ink(88))
+        pen.text((PAD_X, counts_y), elide(agent_work_counts(agent), small, open_x - PAD_X - px(8)), font=small, fill=_ink(62))
+    else:
+        pen.text((PAD_X, y + activity_y),
+                 elide(agent_activity(agent), body, open_x - PAD_X - px(12)), font=body, fill=_ink(78))
     if (agent.get("permissions") or [{}])[0].get("actionable"):
-        permission_y = y + activity_y + panel_line_height(body) + px(7)
+        permission_y = (counts_y + panel_line_height(small) if rich else y + activity_y + panel_line_height(body)) + px(7)
         for kind, label, x in (("permission", "Allow…", PAD_X),
                                ("permission-deny", "Deny", right - text_w("Deny", link_font))):
             box = _link(pen, x, permission_y, label, link_font, colour, True)
@@ -2696,10 +2752,32 @@ def agent_drawer_layout(agent):
         ("Project folder", agent.get("cwd") or "Not available", 3, "inline"),
         ("Latest message", agent.get("latest_message") or "Not in recent history", 3, "text"),
     ])
+    if agent.get("sub") and agent.get("activity"):
+        data = agent["activity"]
+        fields = fields[:1] if permissions else []
+        fields.extend([
+            ("Assigned task", agent.get("assigned_task") or "Assignment unavailable", 5, "text"),
+            ("timing", "", 1, "timing"),
+            ("Work", agent_work_counts(agent), 2, "text"),
+            ("Final reply" if data.get("status") in ("completed", "failed", "stopped") else "Latest message",
+             data.get("result") or agent.get("latest_message") or "No message recorded yet", 6, "text"),
+        ])
+        if data.get("last_output"):
+            fields.append(("Tool output", (data.get("output_tool") or "Tool") + "\n" + data["last_output"], 12, "output"))
+        elif data.get("last_tool"):
+            fields.append(("Tool activity", agent_activity(agent), 4, "text"))
     for title, value, limit, kind in fields:
         inset = px(8) if kind == "permission" else 0
         value_width = width - inset * 2 - (agent_detail_label_width() if kind == "inline" else 0)
-        lines = panel_wrap(value, body, value_width, limit)
+        if kind == "output":
+            command, _, value = value.partition("\n")
+            heading = panel_wrap(command, body, value_width, 2)
+            output_lines = []
+            for line in value.splitlines():
+                output_lines.extend(panel_wrap(line or " ", body, value_width, limit))
+            lines = heading + output_lines[-(limit-len(heading)):]
+        else:
+            lines = panel_wrap(value, body, value_width, limit)
         height = len(lines) * panel_line_height(body)
         if kind != "inline":
             height += panel_line_height(label) + px(4)
@@ -2730,10 +2808,11 @@ def render_drawer(pen, agent, y, now=None):
             left += px(8)
         if kind == "timing":
             since = agent.get("since")
-            age = agent_elapsed({"idle": max(0, (now if now is not None else time.time()) - since)}) if since else "Unknown"
+            ended = (agent.get("activity") or {}).get("ended_at")
+            age = agent_elapsed({"idle": max(0, (ended or (now if now is not None else time.time())) - since)}) if since else "Unknown"
             idle = agent_elapsed(agent)
             last = ("Just now" if agent.get("idle", 999) is not None and agent.get("idle", 999) < 5 else idle + " ago") if idle else "Unknown"
-            for x, heading, value in ((left, "Session age", age), (CONSOLE_W // 2 + px(8), "Last activity", last)):
+            for x, heading, value in ((left, "Task time" if agent.get("sub") else "Session age", age), (CONSOLE_W // 2 + px(8), "Last activity", last)):
                 pen.text((x, ty), caps(heading), font=label, fill=_ink(52))
                 pen.text((x, ty + panel_line_height(label) + px(4)), value, font=body, fill=_ink(78))
             continue

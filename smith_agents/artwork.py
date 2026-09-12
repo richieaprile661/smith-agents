@@ -5,6 +5,7 @@ paper becomes transparent coverage at render time so the same drawing works
 with each widget theme. Source rectangles retain the user's gallery numbers.
 """
 import json
+import re
 import zlib
 from functools import lru_cache
 from pathlib import Path
@@ -22,6 +23,41 @@ STATE_FIGURES = {
 }
 HEADER = "group_selfie"
 SUBAGENT = "little_helper"
+HELPER_FIGURES = tuple("helper_" + state for state in ("working", "reviewing", "testing", "needs", "finished", "unknown"))
+
+
+def helper_pose(agent):
+    """Only classify current tool evidence, never infer work from a task title."""
+    from .activity import current_tools
+    data = agent.get('activity') or {}
+    if agent.get('permissions'):
+        return 'helper_needs'
+    if agent.get('state') == 'closed' or data.get('loading') or data.get('status') in ('unknown', 'failed', 'stopped'):
+        return 'helper_unknown'
+    if data.get('status') == 'completed':
+        return 'helper_finished'
+    if data.get('disconnected'):
+        return 'helper_unknown'
+    if agent.get('state') == 'done':
+        return 'helper_finished'
+    if agent.get('state') == 'needs':
+        return 'helper_needs' if not data else 'helper_unknown'
+    labels = [tool.get('label', '').lower() for tool in current_tools(data)]
+    # Mixed concurrent work uses the general working pose. Specialized poses
+    # describe the observed commands, not whether a review or test succeeded.
+    def category(label):
+        if re.match(r'(?:(?:functions|tools)\.)?(read|read_file|readfile|glob|grep|search|web_search)\b', label):
+            return 'helper_reviewing'
+        command = re.sub(r'^(?:(?:functions|tools)\.)?(exec_command|bash|command|shell)\s+', '', label)
+        if command == label:
+            return 'helper_working'
+        if re.search(r'(?:^|[;&|]\s*)(?:(?:uv run|npx)\s+)?(?:python[\d.]* -m (?:pytest|unittest)|pytest|vitest|jest|cargo test|go test|npm (?:run )?test|pnpm (?:run )?test|dotnet test)\b', command):
+            return 'helper_testing'
+        if re.search(r'(?:^|[;&|]\s*)(?:git diff|git show|rg|cat|sed)\b', command):
+            return 'helper_reviewing'
+        return 'helper_working'
+    categories = {category(label) for label in labels}
+    return next(iter(categories)) if len(categories) == 1 else 'helper_working'
 
 
 class FigureAssignments:
@@ -37,7 +73,7 @@ class FigureAssignments:
         for agent in agents:
             identity = agent.get('id') or agent.get('name') or ''
             state = agent.get('state')
-            variants = ((SUBAGENT,) if agent.get('sub') else
+            variants = ((helper_pose(agent),) if agent.get('sub') else
                         STATE_FIGURES.get(state, STATE_FIGURES['working']))
             previous = self.choices.get(identity)
             if previous and previous[0] == state and previous[1] in variants:
@@ -68,7 +104,7 @@ def _sheet(name):
         return image.convert("L")
 
 
-@lru_cache(maxsize=15)
+@lru_cache(maxsize=32)
 def alpha_mask(name):
     entry = MANIFEST["figures"][name.removeprefix("approved_")]
     cut = _sheet(entry["source"]).crop(entry["rect"])
@@ -83,8 +119,8 @@ def alpha_mask(name):
     return alpha
 
 
-@lru_cache(maxsize=1)
-def _session_geometry():
+@lru_cache(maxsize=2)
+def _session_geometry(helpers=False):
     """One character scale and baseline, with room for every action canvas.
 
     Character heights are calibrated on the person, excluding raised hands,
@@ -96,6 +132,8 @@ def _session_geometry():
     profiles = {}
     widest = top = bottom = 0.0
     names = {pose for poses in STATE_FIGURES.values() for pose in poses} | {SUBAGENT}
+    if helpers:
+        names = set(HELPER_FIGURES)
     for name in sorted(names):
         alpha = figure_actions.alpha_frame(name, 0)
         bounds = alpha.point(lambda value: 255 if value > 4 else 0).getbbox()
@@ -110,9 +148,15 @@ def _session_geometry():
 @lru_cache(maxsize=256)
 def _session_placement(name, width, height):
     from . import figure_actions
-    profiles, widest, top, bottom = _session_geometry()
+    profiles, widest, top, bottom = _session_geometry(name in HELPER_FIGURES)
     body_h = profiles[name]
     visible_height = min(width / widest, height / (1 + top + bottom))
+    if name in HELPER_FIGURES:
+        # The simpler helper silhouette must not grow larger than the main
+        # character merely because its props occupy less of the frame.
+        _, main_width, main_top, main_bottom = _session_geometry()
+        main_body = min(width / main_width, height / (1 + main_top + main_bottom))
+        visible_height = min(visible_height, main_body * .9)
     scale = visible_height / body_h
     reference = figure_actions.alpha_frame(name, 0)
     # The helper pair has narrow standing bodies and finer source strokes.

@@ -9,9 +9,12 @@ from contextlib import closing
 from datetime import datetime
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import time
+
+from .activity import Activity, output, apply_activity, merge_activity
 
 
 def timestamp(value):
@@ -49,6 +52,9 @@ class Transcript:
         self.tokens = self.capacity = None
         self.request = self.message = self.tool = None
         self.tail = deque(maxlen=8)
+        self.activity = Activity()
+        self.running_commands = {}
+        self.polls = {}
 
     def read(self, path):
         stat = path.stat()
@@ -104,9 +110,13 @@ class Transcript:
         elif kind == "event_msg":
             if event in ("task_started", "turn_started"):
                 self.transition("working", at, payload.get("turn_id"))
+                self.activity.transition("running", at, explicit=True)
             elif event in ("task_complete", "turn_complete", "turn_aborted"):
                 if not self.turn or not payload.get("turn_id") or payload["turn_id"] == self.turn:
                     self.transition("done", at)
+                    self.activity.transition("stopped" if event == "turn_aborted" else "completed", at, explicit=True)
+                    if text(payload.get("last_agent_message")):
+                        self.message = text(payload["last_agent_message"])
             elif event == "token_count":
                 info = payload.get("info")
                 if isinstance(info, dict):
@@ -114,12 +124,21 @@ class Transcript:
                     # Cached input is a subset of input_tokens in Codex.
                     self.tokens = count(usage.get("input_tokens")) if isinstance(usage, dict) else None
                     self.capacity = count(info.get("model_context_window"))
+                    total = info.get("total_token_usage") or {}
+                    if isinstance(total, dict) and count(total.get("total_tokens")) is not None:
+                        self.activity.data["total_tokens"] = total["total_tokens"]
             elif event in ("user_message", "agent_message"):
                 self.prose("user" if event == "user_message" else "assistant", payload.get("message"))
             elif event == "item_completed" and isinstance(payload.get("item"), dict):
-                self.item(payload["item"])
+                self.item(payload["item"], at)
+            elif event == "exec_command_begin":
+                command = payload.get("command")
+                self.activity.start(payload.get("call_id"), "Command", " ".join(command) if isinstance(command, list) else command, at)
+            elif event == "exec_command_end":
+                self.activity.finish(payload.get("call_id"), payload.get("aggregated_output") or payload.get("stdout"), at,
+                                     payload.get("exit_code") not in (None, 0))
         elif kind == "response_item":
-            self.item(payload)
+            self.item(payload, at)
 
     def prose(self, role, value):
         value = text(value)
@@ -135,7 +154,7 @@ class Transcript:
         if not self.tail or self.tail[-1] != line:
             self.tail.append(line)
 
-    def item(self, item):
+    def item(self, item, at=0):
         kind = item.get("type")
         if kind in ("UserMessage", "AgentMessage"):
             content = item.get("content")
@@ -162,6 +181,49 @@ class Transcript:
                 arg = parsed.get("cmd") or parsed.get("command") or parsed.get("file_path") or ""
             self.tool = (name + " " + text(arg)).strip()
             self.tail.append(("cmd", self.tool[:160]))
+            self.activity.start(item.get("call_id"), name, item.get("arguments", item.get("input", "")), at)
+            if isinstance(parsed, dict) and name.rsplit(".", 1)[-1] in ("write_stdin", "wait"):
+                session = parsed.get("session_id", parsed.get("cell_id"))
+                original = self.running_commands.get(str(session))
+                if original:
+                    self.polls[item.get("call_id")] = original
+                    if len(self.polls) > 256:
+                        del self.polls[next(iter(self.polls))]
+        elif kind in ("function_call_output", "custom_tool_call_output"):
+            value = item.get("output")
+            key = item.get("call_id")
+            decoded = value
+            if isinstance(value, str):
+                try:
+                    decoded = json.loads(value)
+                except ValueError:
+                    pass
+            session = None
+            if isinstance(decoded, dict) and decoded.get("exit_code") is None:
+                session = decoded.get("session_id")
+            elif isinstance(value, str):
+                match = re.search(r"(?:Process running with session ID|Script running with cell ID)\s+(\S+)", value)
+                session = match.group(1) if match else None
+            original = self.polls.pop(key, None)
+            if session is not None:
+                self.running_commands[str(session)] = original or key
+                if len(self.running_commands) > 256:
+                    del self.running_commands[next(iter(self.running_commands))]
+                self.activity.observe_output(original or key, value, at)
+                if original:
+                    self.activity.finish(key, value, at)
+            else:
+                self.activity.finish(key, value, at)
+                if original:
+                    self.activity.finish(original, value, at)
+                    self.running_commands = {s: k for s, k in self.running_commands.items() if k != original}
+            if item.get("call_id") in self.activity.data["tools"]:
+                self.tail.append(("out", text(output(value), 160)))
+        elif kind == "commandExecution":
+            key = item.get("id")
+            self.activity.start(key, "Command", item.get("command"), at)
+            if item.get("status") in ("completed", "failed", "declined"):
+                self.activity.finish(key, item.get("aggregatedOutput"), at, item.get("exitCode") not in (None, 0))
 
 
 def processes():
@@ -221,7 +283,7 @@ class Scanner:
         self.closed = {}
 
     def scan(self, now=None):
-        from .codex_hooks import snapshots
+        from .codex_hooks import snapshots, child_snapshots
         now = time.time() if now is None else now
         owners = {}
         live = self.process_source()
@@ -241,8 +303,21 @@ class Scanner:
                 paths.update(locked_rollouts(root, missing).values())
             for path in paths:
                 owners.setdefault(path, []).append(process)
-        hooks = {}
+        hooks, children, retained = {}, {}, set()
         for root in roots:
+            for snapshot in child_snapshots(root):
+                owner = snapshot.get("owner") or {}
+                matches = [p for p in live if p["pid"] == owner.get("pid") and p["created"] == owner.get("created")]
+                if len(matches) != 1:
+                    continue
+                children[snapshot["id"]] = snapshot
+                path = snapshot.get("transcript")
+                resolved = {snapshot["id"]: Path(path)} if path else locked_rollouts(root, {snapshot["id"]})
+                if snapshot["id"] in resolved:
+                    path = resolved[snapshot["id"]]
+                    if path not in owners:
+                        owners[path] = matches
+                        retained.add(path)
             for snapshot in snapshots(root):
                 owner = snapshot.get("owner") or {}
                 matches = [process for process in live if process["pid"] == owner.get("pid")
@@ -256,6 +331,16 @@ class Scanner:
                 hooks[path] = snapshot
                 if path not in owners:
                     owners[path] = matches
+        # A helper can close its rollout handle when done. Read its remaining
+        # output while the verified process and parent still exist.
+        for previous in list(self.previous.values())[:512]:
+            if not previous.get("sub") or not previous.get("transcript"):
+                continue
+            matches = [p for p in live if p["pid"] == previous["pid"] and p["created"] == previous["process_created"]]
+            path = Path(previous["transcript"])
+            if len(matches) == 1 and path not in owners:
+                owners[path] = matches
+                retained.add(path)
         rows = {}
         for path, candidates in owners.items():
             if len(candidates) != 1:
@@ -279,6 +364,9 @@ class Scanner:
                     parent = parent or spawn.get("parent_thread_id")
             if not isinstance(parent, str) or parent == session:
                 parent = None
+            child_event = children.get(session)
+            if child_event and child_event.get("parent") != parent:
+                child_event = None  # A path cannot override transcript identity.
             cwd = meta.get("cwd") if isinstance(meta.get("cwd"), str) else ""
             entry = "codex-vscode" if source == "vscode" or meta.get("originator") == "codex_vscode" else "codex-cli"
             state = reader.state if caught_up else "needs"
@@ -301,18 +389,56 @@ class Scanner:
                    "stale": idle > 1800, "can_terminate": False,
                    "status_detail": "Loading session…" if not caught_up else
                        "Activity unknown" if not reader.state_at else None}
+            activity = reader.activity.snapshot()
+            activity["assignment"] = reader.request
             if hook:
                 row["status_detail"] = None
                 row["permissions"] = [{"actionable": False, "request": request}
                                       for request in hook.get("pending", {}).values()]
-            # A loaded helper can stay open after finishing; only show it during
-            # work or briefly after completion, rather than forever beside Ready.
-            if parent and state == "done" and idle > 120:
-                continue
+                observed = hook.get("activity") or {}
+                # Hook lifetime follows the actual command (including unified
+                # exec polls); a function-call result may just yield a session.
+                activity = merge_activity(activity, observed)
+            if child_event and child_event["updated"] >= activity.get("state_at", 0):
+                activity.update(status=child_event["status"], state_at=child_event["updated"], explicit=True,
+                                result=child_event.get("result"), started_at=child_event.get("started_at"))
+                if child_event.get("ended_at"):
+                    activity["ended_at"] = child_event["ended_at"]
+            if path in retained and activity.get("status") == "running" and not hook:
+                activity.update(status="unknown", disconnected=True)
+            if not caught_up:
+                activity.update(status="unknown", loading=True)
+            apply_activity(row, activity, now)
             rows[row["id"]] = row
+        for child in children.values():
+            key, parent_key = "codex:" + child["id"], "codex:" + child["parent"]
+            if key in rows or parent_key not in rows:
+                continue
+            parent = rows[parent_key]
+            if parent["pid"] != child["owner"]["pid"] or parent["process_created"] != child["owner"]["created"]:
+                continue
+            row = dict(parent, id=key, session_id=child["id"], parent=parent_key, sub=True,
+                       name=child.get("name") or "Helper", transcript=None, permissions=[],
+                       context_tokens=None, context_capacity=None, model=None, tail=[],
+                       last_request=None, latest_message=child.get("result"), last_tool=None,
+                       since=child.get("started_at"), idle=max(0, now-child["updated"]))
+            data = {k: child[k] for k in ("status", "result", "started_at", "ended_at") if k in child}
+            data.update(explicit=True, state_at=child["updated"], tools={})
+            apply_activity(row, data, now)
+            rows[key] = row
         # Keep only children whose parent is visible; never invent parent links
         # from a common directory or a shared process.
-        rows = {key: row for key, row in rows.items() if not row["sub"] or row["parent"] in rows}
+        def has_root(row):
+            seen = set()
+            while row.get("sub"):
+                if row["id"] in seen:
+                    return False
+                seen.add(row["id"])
+                row = rows.get(row["parent"])
+                if row is None:
+                    return False
+            return True
+        rows = {key: row for key, row in rows.items() if has_root(row)}
         for key, row in self.previous.items():
             if key not in rows and not row.get("sub"):
                 unreadable = any(p["pid"] == row["pid"] and p["created"] == row["process_created"]

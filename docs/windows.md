@@ -39,9 +39,17 @@ settings. Reload the VS Code window when idle afterward. Regeneration is also
 needed if you moved the checkout or removed the launcher's Python interpreter.
 
 The bridge forwards the protocol, arguments, working directory, and environment.
-It saves only the main session's reported context capacity and model metadata;
+It saves the main session's reported context capacity and model metadata;
 capacity is not guessed from a model name. Subagent capacities still require
 Claude's status-line feed, as on Mac.
+
+The bridge also observes helper task events and their own tool calls, output
+previews, and messages. Helpers show current work and runtime in the agent list;
+expand one to see its assignment and result. Up to three recently completed
+helpers stay visible per main session for two minutes. Earlier runs stay out of
+the live list, and lost activity feeds are labelled unknown. Local task snapshots in
+`widget-context/activity.sqlite` retain bounded previews and are removed after
+seven days during capture. These totals never substitute for context capacity.
 
 Pending permission requests use a token-authenticated server bound only to
 `127.0.0.1`, with a randomly assigned port. Request contents remain in memory;

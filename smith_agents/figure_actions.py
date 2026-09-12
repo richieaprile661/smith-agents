@@ -28,6 +28,12 @@ LABELS = {
     'approved_35': ('Scooter', 'Two pushes, then a quiet idle'),
     'group_selfie': ('Selfie', 'A camera flash, then quiet star twinkles'),
     'little_helper': ('Little helper', 'Two gentle head taps, then quiet idle'),
+    'helper_working': ('Working', 'Type at the laptop'),
+    'helper_reviewing': ('Reviewing', 'Scan the page with a magnifying glass'),
+    'helper_testing': ('Testing', 'Mark the test checklist'),
+    'helper_needs': ('Needs you', 'Raise a hand and wave'),
+    'helper_finished': ('Finished', 'Hand over the finished page'),
+    'helper_unknown': ('Activity unknown', 'Turn an empty palm upward'),
 }
 
 
@@ -197,6 +203,9 @@ def _joint_warp(alpha, fields):
 
 def alpha_frame(name, frame):
     """Render a bounded entrance/idle frame; shared source masks stay immutable."""
+    if name in artwork.HELPER_FIGURES:
+        from . import helper_motion
+        return helper_motion.alpha_frame(name, canonical_frame(frame))
     if name == 'approved_35':
         return scooter_motion.alpha_frame(frame)
     if name == artwork.SUBAGENT:

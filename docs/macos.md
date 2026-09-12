@@ -134,9 +134,16 @@ the agent keeps running:
   identified, the widget leaves other windows alone and reports that it can't open
   the session.
 
-Window controls require Accessibility access. In **System Settings > Privacy &
-Security > Accessibility**, allow Smith Agents, or Python if you run it from
-source. Without that access, a VS Code session link can still open its chat, but
+On first launch, the widget offers **Set up window controls** if Accessibility
+access is missing. Choose **Open Accessibility Settings** and enable the app named
+in the prompt (usually **Python** for the Python installer, or **Smith Agents**
+for a bundled build). macOS requires you to enable it yourself. **Not Now** keeps
+monitoring available and does not prompt again on every launch. You can return
+through **Set up window controls…** in the widget menu. An update that changes
+the Python executable offers setup again.
+
+Window controls require Accessibility access. Without that access, a VS Code
+session link can still open its chat, but
 **Hide** isn't available. The widget never activates or hides a whole app as a
 fallback.
 
@@ -174,10 +181,11 @@ main session's `context_window.context_window_size`. Its `subagentStatusLine` fe
 reports each task's `contextWindowSize` separately, in Claude Code 2.1.205 or
 later.
 
-The status-line bridge records only session and task IDs, the model, the capacity,
-and the update time, under `~/.claude/widget-context`. It passes the original input
+The status-line bridge records session and task IDs, model, capacity, task
+descriptions, progress labels, status, and timing under `~/.claude/widget-context`.
+It passes the original input
 through to your existing status-line commands, and keeps their output and settings.
-It doesn't save transcript content or credentials.
+It doesn't save credentials.
 
 From the repository, turn on the feed:
 
@@ -218,10 +226,11 @@ response.
 
 The launcher reads the same `result.modelUsage[model].contextWindow` value that
 Claude's VS Code extension uses. It matches the main conversation's model and
-session ID, and writes only the capacity metadata to `widget-context`. The
+session ID, and writes the capacity metadata to `widget-context`. The
 protocol, prompts, replies, error output, and cancellation pass through unchanged,
-and no conversation text is saved. The integration was checked against extension
-version 2.1.263.
+and the activity observer also captures task events and each helper's own tool
+calls, output previews, and messages in `widget-context/activity.sqlite`. The
+observer was checked against the task event shapes in extension 2.1.269.
 
 The same launcher sends pending permission requests to the widget over a private
 local Unix socket:
@@ -250,6 +259,20 @@ subagents use their own status-line feed.
 To restore the previous launcher, run the same installer with `--remove`, and then
 reopen the chat. If you move the app, reinstall the bridge with the new path. A chat
 that's already running keeps its launcher until you reopen it.
+
+### Helper activity
+
+Helpers show their current command and runtime in the existing agent list.
+Expand a helper for its assignment, own latest message or final result, and tool
+output. Tool counts and cumulative tokens are separate from context usage.
+Up to three recently completed helpers stay visible per main session for two
+minutes. Helpers from earlier runs stay out of the live list; running helpers
+are not removed because of a long command. Without a live bridge, local
+helper transcripts supply the available details; quiet or disconnected work is
+labelled unknown. Task snapshots and output previews stay local, retain at most
+256 recent tool identities per task, and are removed after seven days during
+capture. Updating an existing bridge requires reinstalling it with the updated
+executable and reopening VS Code chats.
 
 ## Local files
 

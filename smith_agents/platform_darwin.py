@@ -122,7 +122,7 @@ def terminate_agent(agent):
 def vscode_session_url(agent, window_id=None):
     from urllib.parse import urlencode
     from uuid import UUID
-    session = agent.get("parent") if agent.get("sub") else agent.get("id")
+    session = (agent.get("root_parent") or agent.get("parent")) if agent.get("sub") else agent.get("id")
     try:
         UUID(session)
     except (ValueError, TypeError, AttributeError):
@@ -433,6 +433,45 @@ def show_error(message):
     alert.setInformativeText_(message)
     alert.addButtonWithTitle_("OK")
     alert.runModal()
+
+
+def open_accessibility_settings():
+    # Request from the widget process, not the installer or a helper: macOS
+    # associates this permission with the executable that controls windows.
+    macos_windows.request_access()
+    subprocess.run(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"],
+                   check=True)
+
+
+def offer_accessibility_setup(config, save, force=False):
+    identity = str(Path(sys.executable).resolve())
+    if not force and config.get("accessibility_setup_executable") == identity:
+        return
+    if macos_windows.trusted():
+        config["accessibility_setup_executable"] = identity
+        save()
+        if force:
+            show_error("Window controls already have Accessibility access.")
+        return
+    import AppKit
+    from Foundation import NSBundle
+    name = NSBundle.mainBundle().objectForInfoDictionaryKey_("CFBundleName") or APP_NAME
+    alert = AppKit.NSAlert.alloc().init()
+    alert.setMessageText_("Set up window controls")
+    alert.setInformativeText_(
+        "To open and hide agent windows, allow %s in System Settings → Privacy & Security → Accessibility.\n\n"
+        "Enable %s in the list. Agent monitoring works without this permission. "
+        "You can set it up later from the menu: Set up window controls…." % (name, name))
+    alert.addButtonWithTitle_("Open Accessibility Settings")
+    alert.addButtonWithTitle_("Not Now")
+    choice = alert.runModal()
+    config["accessibility_setup_executable"] = identity
+    save()
+    if choice == AppKit.NSAlertFirstButtonReturn:
+        try:
+            open_accessibility_settings()
+        except (OSError, subprocess.SubprocessError):
+            show_error("Open System Settings → Privacy & Security → Accessibility and enable %s." % name)
 
 
 def _native_classes():
@@ -765,6 +804,8 @@ class MacTray:
         item(menu, "Start at login", w.toggle_autostart, autostart_enabled())
         item(menu, "Connect Claude Code…", w.connect_claude)
         item(menu, "Connect Codex status…", w.connect_codex)
+        if not w.demo:
+            item(menu, "Set up window controls…", lambda: w.setup_window_controls(force=True))
         item(menu, "About usage limits", lambda: webbrowser.open(c.USAGE_HELP_URL))
         menu.addItem_(A.NSMenuItem.separatorItem())
         item(menu, "Quit", w.quit)

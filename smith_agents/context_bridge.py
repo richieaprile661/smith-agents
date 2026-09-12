@@ -35,6 +35,13 @@ def capture(payload, directory, kind):
     session_id = payload.get("session_id")
     if not isinstance(session_id, str) or not session_id:
         return
+    if kind == "subagents":
+        from .claude_activity import capture_status
+        import sqlite3
+        try:
+            capture_status(payload, directory)
+        except (OSError, ValueError, TypeError, AttributeError, sqlite3.Error):
+            pass
     if kind == "main":
         window = payload.get("context_window") or {}
         model = payload.get("model") or {}
@@ -61,7 +68,7 @@ def _api_model(model):
 
 
 def read_capacity(directory, agent, model=None):
-    session_id = agent.get("parent") if agent.get("sub") else agent.get("id")
+    session_id = (agent.get("root_parent") or agent.get("parent")) if agent.get("sub") else agent.get("id")
     task_id = agent.get("id", "") if agent.get("sub") else ""
     if not session_id:
         return None

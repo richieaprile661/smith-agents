@@ -15,6 +15,11 @@ import sys
 import tempfile
 import time
 
+try:
+    from .activity import Activity, plain
+except ImportError:  # Installed hook also runs this file directly.
+    from activity import Activity, plain
+
 EVENTS = ("SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse",
           "PermissionRequest", "PostToolUse", "Stop", "Interrupt",
           "SubagentStart", "SubagentStop")
@@ -46,8 +51,7 @@ def capture(payload, root, owner, now=None):
         return
     event = payload["hook_event_name"]
     if event.startswith("Subagent"):
-        # These hooks carry the parent's session_id. Do not flip its state or
-        # consume its context by treating a child completion as a parent stop.
+        capture_child(payload, root, owner, now)
         return
     now = time.time() if now is None else now
     directory = Path(root) / "widget-events"
@@ -65,7 +69,21 @@ def capture(payload, root, owner, now=None):
             row = {}
         pending = row.setdefault("pending", {})
         inputs = payload.get("tool_input")
-        key = hashlib.sha256(json.dumps([payload.get("tool_name"), inputs], sort_keys=True).encode()).hexdigest()
+        key = payload.get("tool_use_id") or hashlib.sha256(json.dumps([payload.get("tool_name"), inputs], sort_keys=True).encode()).hexdigest()
+        activity = Activity(row.get("activity"))
+        if event == "PreToolUse":
+            activity.start(key, payload.get("tool_name"), inputs, now)
+            activity.transition("running", now, explicit=True)
+        elif event == "PostToolUse":
+            response = payload.get("tool_response")
+            failed = isinstance(response, dict) and (response.get("is_error") is True or response.get("exit_code") not in (None, 0))
+            activity.finish(key, response, now, failed)
+        elif event in ("Stop", "Interrupt", "SessionEnd"):
+            activity.transition("stopped" if event == "Interrupt" else "completed", now, explicit=True)
+            activity.data["result"] = plain(payload.get("last_assistant_message"))
+        elif event == "UserPromptSubmit":
+            activity.transition("running", now, explicit=True)
+        row["activity"] = activity.snapshot()
         if event == "PermissionRequest":
             encoded_inputs = json.dumps(inputs, ensure_ascii=False)
             shown_inputs = (inputs if isinstance(inputs, dict) else {"detail": inputs})
@@ -90,6 +108,48 @@ def capture(payload, root, owner, now=None):
         connection.execute("INSERT OR REPLACE INTO sessions VALUES (?, ?, ?)",
                            (session, now, json.dumps(row)))
         connection.execute("DELETE FROM sessions WHERE updated < ?", (now - 7 * 86400,))
+
+
+def capture_child(payload, root, owner, now=None):
+    """Lifecycle callbacks identify a child while naming the parent session."""
+    child = payload.get("agent_id")
+    if not isinstance(child, str) or not child or child == payload["session_id"]:
+        return
+    now = time.time() if now is None else now
+    directory = Path(root) / "widget-events"
+    directory.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(directory / "events.sqlite", timeout=.2)) as db, db:
+        db.execute("CREATE TABLE IF NOT EXISTS children (parent TEXT, id TEXT, updated REAL, data TEXT, PRIMARY KEY(parent, id))")
+        db.execute("BEGIN IMMEDIATE")
+        previous = db.execute("SELECT data FROM children WHERE parent=? AND id=?", (payload["session_id"], child)).fetchone()
+        row = json.loads(previous[0]) if previous else {}
+        if row.get("updated", 0) > now:
+            return
+        if row.get("owner") != owner:
+            row = {}
+        row.update(parent=payload["session_id"], id=child, owner=owner, updated=now,
+                   name=plain(payload.get("agent_type"), 120),
+                   status="running" if payload["hook_event_name"] == "SubagentStart" else "completed")
+        row.setdefault("started_at", now)
+        if payload.get("agent_transcript_path"):
+            row["transcript"] = payload["agent_transcript_path"]
+        if payload["hook_event_name"] == "SubagentStop":
+            row.update(result=plain(payload.get("last_assistant_message")), ended_at=now)
+        else:
+            row.pop("ended_at", None)
+        db.execute("INSERT OR REPLACE INTO children VALUES (?, ?, ?, ?)", (row["parent"], child, now, json.dumps(row)))
+        db.execute("DELETE FROM children WHERE updated < ?", (now - 7 * 86400,))
+
+
+def child_snapshots(root):
+    path = Path(root) / "widget-events/events.sqlite"
+    if not path.is_file():
+        return []
+    try:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=.05)) as db:
+            return [json.loads(r[0]) for r in db.execute("SELECT data FROM children ORDER BY updated DESC LIMIT 512")]
+    except (sqlite3.Error, OSError, ValueError):
+        return []
 
 
 def snapshots(root):

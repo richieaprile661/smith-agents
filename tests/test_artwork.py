@@ -96,10 +96,44 @@ class ApprovedArtworkTests(unittest.TestCase):
                 row['state'] = state
             selector.assign(parents + children)
             for row in children:
-                self.assertEqual(core.agent_style(row)[0], artwork.SUBAGENT)
-                self.assertEqual(row['_figure_pose'], artwork.SUBAGENT)
+                expected = {'working': 'helper_working', 'needs': 'helper_needs',
+                            'done': 'helper_finished', 'closed': 'helper_unknown'}[state]
+                self.assertEqual(core.agent_style(row)[0], expected)
+                self.assertEqual(row['_figure_pose'], expected)
                 self.assertIsNotNone(core.row_figure(row, 0, 78, 52))
-        self.assertEqual(core.agent_style({'id': 'new-child', 'sub': True, 'state': 'working'})[0], artwork.SUBAGENT)
+        self.assertEqual(core.agent_style({'id': 'new-child', 'sub': True, 'state': 'working'})[0], 'helper_working')
+
+    def test_helper_poses_follow_current_evidence_and_restart_on_tool_change(self):
+        from smith_agents.activity import Activity
+        from smith_agents.figure_actions import Timeline
+        row = dict(id='helper', sub=True, state='working', last_request='Run pytest then review code')
+        self.assertEqual(artwork.helper_pose(row), 'helper_working')
+        a = Activity(); a.start('read', 'Read', {'path': 'app.py'}, 10)
+        row['activity'] = a.data
+        self.assertEqual(artwork.helper_pose(row), 'helper_reviewing')
+        timeline = Timeline()
+        timeline.elapsed(row['id'], core.agent_style(row)[0], 10)
+        a.finish('read', 'contents', 11)
+        a.start('tests', 'exec_command', {'cmd': 'python -m unittest discover'}, 12)
+        self.assertEqual(artwork.helper_pose(row), 'helper_testing')
+        self.assertEqual(timeline.elapsed(row['id'], core.agent_style(row)[0], 12), 0)
+        a.start('other', 'Edit', {'path': 'app.py'}, 13)
+        self.assertEqual(artwork.helper_pose(row), 'helper_working')
+        row['permissions'] = [{'request': {}}]
+        self.assertEqual(artwork.helper_pose(row), 'helper_needs')
+        row['permissions'] = []
+        for status in ('failed', 'stopped', 'unknown'):
+            a.transition(status, 14)
+            self.assertEqual(artwork.helper_pose(row), 'helper_unknown')
+        a.transition('completed', 15)
+        a.data['disconnected'] = True
+        self.assertEqual(artwork.helper_pose(row), 'helper_finished')
+        a = Activity(); row['activity'] = a.data
+        a.start('edit', 'Edit', {'path': 'cat.py'}, 16)
+        self.assertEqual(artwork.helper_pose(row), 'helper_working')
+        a.finish('edit', 'ok', 17)
+        a.start('echo', 'Bash', {'command': 'echo pytest'}, 18)
+        self.assertEqual(artwork.helper_pose(row), 'helper_working')
 
     def test_packaged_sources_match_the_reviewed_artwork(self):
         for name, digest in artwork.MANIFEST["sources"].items():
@@ -109,6 +143,7 @@ class ApprovedArtworkTests(unittest.TestCase):
     def test_all_figures_fit_at_windows_and_retina_sizes_with_transparent_paper(self):
         names = [name for variants in artwork.STATE_FIGURES.values() for name in variants]
         names.extend((artwork.HEADER, artwork.SUBAGENT))
+        names.extend(artwork.HELPER_FIGURES)
         for name in names:
             logical_bounds = []
             for density in (1, 2):

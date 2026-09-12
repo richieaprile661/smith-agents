@@ -14,6 +14,8 @@ __pycache__/
 .idea/
 
 # Figure work: the scripts and traced paths are kept, what they render is not.
+# Local helper design drafts and generated previews.
+/design/
 # A comparison sheet is worth a look and then worth losing - and the raw
 # generation runs behind the figures are hundreds of megabytes.
 design/figure_v2/_*/

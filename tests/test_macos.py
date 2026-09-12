@@ -6,11 +6,58 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from types import SimpleNamespace
 
 if sys.platform == "darwin":
     from smith_agents import platform_darwin as mac
 else:
     mac = None
+
+
+@unittest.skipUnless(sys.platform == "darwin", "macOS backend")
+class AccessibilitySetupTests(unittest.TestCase):
+    def offer(self, config, choice=1001, trusted=False, force=False):
+        alert = Mock()
+        alert.runModal.return_value = choice
+        nsalert = Mock()
+        nsalert.alloc.return_value.init.return_value = alert
+        bundle = Mock()
+        bundle.mainBundle.return_value.objectForInfoDictionaryKey_.return_value = "Python"
+        save, open_settings = Mock(), Mock()
+        modules = {"AppKit": SimpleNamespace(NSAlert=nsalert, NSAlertFirstButtonReturn=1000),
+                   "Foundation": SimpleNamespace(NSBundle=bundle)}
+        with patch.dict(sys.modules, modules), patch.object(mac.macos_windows, "trusted", return_value=trusted), \
+             patch.object(mac, "open_accessibility_settings", open_settings):
+            mac.offer_accessibility_setup(config, save, force)
+        return alert, save, open_settings
+
+    def test_skip_is_remembered_without_requesting_permission(self):
+        config = {}
+        alert, save, settings = self.offer(config)
+        alert.runModal.assert_called_once()
+        self.assertIn("Python", alert.setInformativeText_.call_args.args[0])
+        settings.assert_not_called()
+        save.assert_called_once()
+        alert, _, settings = self.offer(config)
+        alert.runModal.assert_not_called()
+        settings.assert_not_called()
+
+    def test_settings_open_only_after_explicit_choice_and_menu_can_retry(self):
+        config = {"accessibility_setup_executable": str(Path(sys.executable).resolve())}
+        alert, _, settings = self.offer(config, choice=1000, force=True)
+        alert.runModal.assert_called_once()
+        settings.assert_called_once()
+
+    def test_already_granted_does_not_prompt(self):
+        config = {}
+        alert, save, settings = self.offer(config, trusted=True)
+        alert.runModal.assert_not_called()
+        settings.assert_not_called()
+        save.assert_called_once()
+
+    def test_new_executable_gets_setup_again(self):
+        alert, _, _ = self.offer({"accessibility_setup_executable": "/old/Python"})
+        alert.runModal.assert_called_once()
 
 
 @unittest.skipUnless(sys.platform == "darwin", "macOS backend")
@@ -47,6 +94,8 @@ class ProcessTests(unittest.TestCase):
         expected = "vscode://anthropic.claude-code/open?session=" + session + "&windowId=4"
         self.assertEqual(mac.vscode_session_url({"id": session}, 4), expected)
         self.assertEqual(mac.vscode_session_url({"id": "agent-child", "parent": session, "sub": True}, 4), expected)
+        self.assertEqual(mac.vscode_session_url({"id": "agent-nested", "parent": "agent-child",
+                                                "root_parent": session, "sub": True}, 4), expected)
         self.assertIsNone(mac.vscode_session_url({"id": "invalid&prompt=do-stuff"}, 4))
         self.assertIsNone(mac.vscode_session_url({"id": session}))
 

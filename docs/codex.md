@@ -43,10 +43,21 @@ The context reading uses the latest input token count, which already includes
 cached input. Compaction clears the previous reading. Missing data stays unknown.
 Codex context tokens aren't a reading of your subscription limits.
 
-Helpers stay attached to their parent session. Finished helpers appear briefly and
-then disappear. When a main session ends, it leaves a closed row for a short time,
+Helpers stay attached to their parent session, including nested helpers. Once
+observed, up to three recently finished helpers remain visible per main session
+for two minutes. Helpers from before the current process started stay out of the
+live list. Running helpers stay visible regardless of command duration. When a
+main session ends, it leaves a closed row for a short time,
 which you can dismiss. Session IDs include the provider, so Claude and Codex IDs
 never collide.
+
+Each helper row shows its current tool or command and elapsed time. Expand it to
+see its assigned task, its own latest message or final result, and a bounded
+preview of tool output. Results are matched to tool call IDs, including parallel
+calls and commands that yield a running session for later polling. Tool counts
+and cumulative tokens are separate from the context meter; missing values stay
+unknown. If ownership or the activity feed is lost, the row says so instead of
+claiming that an old command is still running.
 
 ## Usage and stats
 
@@ -105,7 +116,8 @@ controls. Native Windows verification is a release check.
 
 ## Optional: Show pending approvals
 
-Codex hooks can tell the widget when a session is waiting for an approval.
+Codex hooks report approvals, helper start/stop events, and tool lifetimes. They
+improve helper tracking when a child transcript is not available yet.
 
 1. In the tray or menu-bar menu, click **Connect Codex status**.
 2. In Codex, use the `/hooks` interface to review and trust the
@@ -128,8 +140,10 @@ and reconnect if you move it.
 The hooks report lifecycle and pending-permission events to a local snapshot,
 `widget-events/events.sqlite`:
 
-- Snapshots hold process identity, session and model metadata, and short previews
-  of pending tool input. They're never uploaded.
+- Snapshots hold process identity, session and model metadata, task lifecycle,
+  bounded tool input/output previews, and final messages. They're never uploaded.
+  The store retains at most 256 recent tool identities per session and removes
+  snapshots older than seven days during capture.
 - The hooks don't answer prompts or make approval decisions. The widget shows
   **Answer in Codex**, and you approve or deny in Codex itself.
 - An unrelated tool running in parallel, or a helper finishing, can't clear the

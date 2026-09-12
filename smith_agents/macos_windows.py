@@ -47,7 +47,7 @@ def trusted():
 
 @lru_cache(maxsize=1)
 def request_access():
-    """Let macOS present its permission prompt once, after an Open click."""
+    """Let macOS present its permission prompt once, after the user's choice."""
     ax, cf = _api()
     ptr = C.c_void_p
     cf.CFDictionaryCreate.argtypes = [ptr, C.POINTER(ptr), C.POINTER(ptr), C.c_long, ptr, ptr]

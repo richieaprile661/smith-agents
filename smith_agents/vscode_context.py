@@ -163,6 +163,16 @@ def main(argv):
         return 127
 
     from .permissions import PermissionRelay
+    from .claude_activity import TaskStream
+    import sqlite3
+    try:
+        import psutil
+        owner = {"pid": child.pid, "started": psutil.Process(child.pid).create_time()}
+    except ImportError:
+        owner = None
+    except psutil.Error:
+        owner = None
+    activity = TaskStream(directory, owner)
     output_lock = threading.Lock()
 
     def send_child(raw):
@@ -175,7 +185,14 @@ def main(argv):
             sys.stdout.buffer.flush()
 
     relay = PermissionRelay(directory, send_child, send_client)
-    observer = CapacityStream(directory, on_record=relay.observe)
+    def observe(data):
+        try:
+            activity.record(data)
+        except (OSError, ValueError, TypeError, AttributeError, KeyError, sqlite3.Error):
+            pass  # An unavailable observer cannot interfere with Claude.
+        relay.observe(data)
+
+    observer = CapacityStream(directory, on_record=observe)
 
     input_stopped = threading.Event()
     input_fd = sys.stdin.fileno()
@@ -231,6 +248,7 @@ def main(argv):
                 child.kill()
                 child.wait()
         input_thread.join(timeout=1)
+        activity.close()
         relay.close()
         try:
             child.stdin.close()

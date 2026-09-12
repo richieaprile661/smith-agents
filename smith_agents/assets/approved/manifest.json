@@ -179,6 +179,108 @@
       "character_height": 227,
       "display_scale": 1.18,
       "coverage_boost": 0.6
+    },
+    "helper_working": {
+      "source": "smith-helper-states.png",
+      "rect": [
+        0,
+        0,
+        512,
+        512
+      ],
+      "render_width": 400,
+      "character_height": 254,
+      "coverage_boost": 1.0,
+      "motion_origin": [
+        70,
+        176
+      ],
+      "motion_scale": 0.9478672985781991
+    },
+    "helper_reviewing": {
+      "source": "smith-helper-states.png",
+      "rect": [
+        512,
+        0,
+        1024,
+        512
+      ],
+      "render_width": 400,
+      "character_height": 268,
+      "coverage_boost": 1.0,
+      "motion_origin": [
+        592,
+        176
+      ],
+      "motion_scale": 1
+    },
+    "helper_testing": {
+      "source": "smith-helper-states.png",
+      "rect": [
+        1024,
+        0,
+        1536,
+        512
+      ],
+      "render_width": 400,
+      "character_height": 268,
+      "coverage_boost": 1.0,
+      "motion_origin": [
+        1100,
+        176
+      ],
+      "motion_scale": 1
+    },
+    "helper_needs": {
+      "source": "smith-helper-states.png",
+      "rect": [
+        0,
+        512,
+        512,
+        1024
+      ],
+      "render_width": 400,
+      "character_height": 272,
+      "coverage_boost": 1.0,
+      "motion_origin": [
+        70,
+        625
+      ],
+      "motion_scale": 1
+    },
+    "helper_finished": {
+      "source": "smith-helper-states.png",
+      "rect": [
+        512,
+        512,
+        1060,
+        1024
+      ],
+      "render_width": 400,
+      "character_height": 238,
+      "coverage_boost": 1.0,
+      "motion_origin": [
+        566,
+        625
+      ],
+      "motion_scale": 0.8733624454148472
+    },
+    "helper_unknown": {
+      "source": "smith-helper-states.png",
+      "rect": [
+        1060,
+        512,
+        1536,
+        1024
+      ],
+      "render_width": 400,
+      "character_height": 272,
+      "coverage_boost": 1.0,
+      "motion_origin": [
+        1103,
+        625
+      ],
+      "motion_scale": 1
     }
   },
   "sources": {
@@ -186,7 +288,8 @@
     "set-2.png": "66a999f47b48388c30c87fb255fe041848da086783e3f3f266d5e119cc86c01f",
     "group-selfie.png": "61d01931dcabf4f842f9d6cba1cf123bcde15bb932134e79e08ad0cc87bfd0dc",
     "tray.png": "efeb4a76c5e08777bd1ad15110275804e8626e4025efeaddff8da57b41fe5c89",
-    "little-helper.png": "425529462a8970a149a5010a87783c79cb129d1ba94df98d8ff8bdb25230c51b"
+    "little-helper.png": "425529462a8970a149a5010a87783c79cb129d1ba94df98d8ff8bdb25230c51b",
+    "smith-helper-states.png": "b93ea3c391204d6dcb33b98575c9cbc10854001e6b0f714ea2afa4383cf7f959"
   },
   "tray": "tray.png"
 }

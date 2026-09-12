@@ -24,6 +24,7 @@ smith_app=$("$smith_python" -m smith_agents.macos_launcher "$smith_install_dir")
 printf 'Installed: %s\n' "$smith_app"
 echo 'To reopen, search for Smith Agents in Spotlight, or open it from your Applications folder.'
 echo 'You can also drag the app onto your Dock.'
+echo 'On first launch, choose Open Accessibility Settings to enable window controls, or Not Now to set them up later.'
 if [ "${SMITH_AGENTS_NO_LAUNCH:-0}" != 1 ]; then
     open "$smith_app"
 fi

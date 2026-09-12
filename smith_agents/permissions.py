@@ -194,7 +194,7 @@ def permission_call(directory, session, message):
 def pending_permissions(directory, agent):
     if sys.platform not in ("darwin", "win32"):
         return []
-    session = agent.get("parent") if agent.get("sub") else agent.get("id")
+    session = (agent.get("root_parent") or agent.get("parent")) if agent.get("sub") else agent.get("id")
     if not session or agent.get("state") == "closed":
         return []
     task_id = agent.get("id", "").removeprefix("agent-") if agent.get("sub") else None
