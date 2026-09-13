@@ -529,7 +529,48 @@ def create_shell(widget, core):
         pass
     return root, surface
 
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+
+_MONITOR_DEFAULTTONEAREST = 2
+
+
+def _monitor_api():
+    user32 = ctypes.windll.user32
+    # Monitor handles are pointer-sized; the default int result truncates them.
+    signatures = (
+        ('MonitorFromPoint', [wintypes.POINT, wintypes.DWORD], wintypes.HMONITOR),
+        ('MonitorFromWindow', [wintypes.HWND, wintypes.DWORD], wintypes.HMONITOR),
+        ('GetMonitorInfoW', [wintypes.HMONITOR, ctypes.POINTER(_MONITORINFO)], wintypes.BOOL),
+    )
+    for name, args, result in signatures:
+        function = getattr(user32, name)
+        function.argtypes, function.restype = args, result
+    return user32
+
+
 def screen_bounds(root, position=None):
+    """Usable area of one monitor, as left, top, width and height.
+
+    A point picks the monitor under it - the pointer while dragging, otherwise
+    the widget's on-screen corner - and a point off every screen falls back to
+    the nearest one. Without a point, the monitor holding the window is used.
+    The work area already leaves out the taskbar, wherever it is docked."""
+    try:
+        user32 = _monitor_api()
+        if position is not None:
+            point = wintypes.POINT(int(position[0]), int(position[1]))
+            monitor = user32.MonitorFromPoint(point, _MONITOR_DEFAULTTONEAREST)
+        else:
+            monitor = user32.MonitorFromWindow(root.winfo_id(), _MONITOR_DEFAULTTONEAREST)
+        info = _MONITORINFO(cbSize=ctypes.sizeof(_MONITORINFO))
+        if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            work = info.rcWork
+            return work.left, work.top, work.right - work.left, work.bottom - work.top
+    except Exception:
+        pass
     return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight() - int(48 * SCALE)
 
 def start_tray(tray):

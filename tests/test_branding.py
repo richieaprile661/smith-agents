@@ -23,7 +23,7 @@ class BrandingTests(unittest.TestCase):
     def test_windows_launcher_prefers_smith_but_accepts_existing_shortcuts(self):
         # Exercise the OS-independent path lookup without loading Win32 APIs.
         source = Path(core.SCRIPT_DIR)/'platform_win32.py'
-        tree = ast.parse(source.read_text())
+        tree = ast.parse(source.read_text(encoding='utf-8'))
         node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_entry_exe')
         path = types.SimpleNamespace(join=os.path.join, exists=Mock())
         scope = {'os': types.SimpleNamespace(path=path),
@@ -38,7 +38,7 @@ class BrandingTests(unittest.TestCase):
 
     def test_windows_startup_migrates_only_after_replacement_succeeds(self):
         source = Path(core.SCRIPT_DIR)/'platform_win32.py'
-        tree = ast.parse(source.read_text())
+        tree = ast.parse(source.read_text(encoding='utf-8'))
         wanted = {'_legacy_startup_path', 'autostart_enabled', 'set_autostart'}
         nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
         with tempfile.TemporaryDirectory() as directory:

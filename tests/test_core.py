@@ -246,6 +246,21 @@ class GeometryTests(unittest.TestCase):
             self.assertEqual(x + self.widget._bar_size[0] - core.SHADOW_PAD, bounds[0] + bounds[2] - core.px(14))
             self.assertEqual(y + self.widget._bar_size[1] - core.SHADOW_PAD, bounds[1] + bounds[3] - core.px(14))
 
+    def test_monitor_lookup_uses_the_chip_corner_the_tuck_anchor_or_the_pointer(self):
+        # Flush against a right-hand monitor, the shadow canvas starts on the
+        # left-hand one; only the chip's own corner is on the right monitor.
+        self.widget.config.update(dock="free", x=1920 - core.SHADOW_PAD, y=-core.SHADOW_PAD)
+        with patch("smith_agents.app.platform.screen_bounds", return_value=(1920, 0, 1920, 1040)) as bounds:
+            self.widget._screen_bounds()
+            bounds.assert_called_with(self.widget.root, (1920, 0))
+            self.widget.config.update(tucked=True, tuck_x=3732, tuck_y=99)
+            self.widget._screen_bounds()
+            bounds.assert_called_with(self.widget.root, (3732, 99))
+            # A drag near the right edge of the left monitor must stay on it.
+            self.widget._peek_drag_point = (1919, 500)
+            self.widget._screen_bounds()
+            bounds.assert_called_with(self.widget.root, (1919, 500))
+
     def test_saved_position_recovers_after_monitor_is_removed(self):
         self.widget.config.update(dock="free", x=-10000, y=10000)
         with patch("smith_agents.app.platform.screen_bounds", return_value=(0, 50, 2000, 1500)):

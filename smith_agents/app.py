@@ -228,6 +228,11 @@ class SmithAgentsWidget:
                 keys = ('x', 'y')
             if self.config.get(keys[0]) is not None and self.config.get(keys[1]) is not None:
                 point = self.config[keys[0]], self.config[keys[1]]
+                if keys == ('x', 'y'):
+                    # x and y place the shadow canvas, which overhangs the chip.
+                    # Flush against a monitor's edge that corner sits on the
+                    # neighbouring monitor, so look up the chip's own corner.
+                    point = point[0] + SHADOW_PAD, point[1] + SHADOW_PAD
         return platform.screen_bounds(self.root, point)
 
     # -- polling -----------------------------------------------------------
