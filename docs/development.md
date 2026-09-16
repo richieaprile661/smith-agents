@@ -7,6 +7,7 @@ The widget is split into shared code and one backend for each platform:
 | File | Responsibility |
 | --- | --- |
 | `smith_agents/core.py` | Shared Claude data, themes, Pillow drawing, and layout |
+| `smith_agents/tucked.py` | Screen-edge strips, agent panels, and attached usage drawers |
 | `smith_agents/app.py` | Shared controller, polling, interactions, and configuration |
 | `smith_agents/runtime.py` | Selects the backend for the current operating system |
 | `smith_agents/activity.py` | Bounded tool identities, output, lifecycle, and helper transcript parsing |
@@ -42,11 +43,12 @@ The widget follows these rules when it assigns and animates figures:
 - A session keeps its figure through refreshes, scrolling, and reordering until
   its state changes.
 - The first time a figure appears, it plays one 3.2-second action and then settles
-  into a subtle idle. It doesn't repeat on a timer or when sessions are rescanned.
-  A state change, or scrolling to a figure you haven't seen yet, starts a new
-  action.
+  into a subtle idle. Tucked figures replay their action every minute. Rescanning
+  sessions does not restart the animation. A state change, or scrolling to a
+  figure you haven't seen yet, starts a new action.
 - On the laptop figure, only the code and the blinking caret on the screen move.
-- The selfie in the header flashes its stars once, then twinkles quietly.
+- The header uses the Smith icon and live wordmark text. Tucked strips keep only
+  the icon, alongside the glowing provider logos.
 
 The renderer uses the approved images as theme-colored masks and resamples them
 for the display density. The source images stay unchanged.
@@ -120,14 +122,21 @@ packaging, see [Mac setup](macos.md).
 ## Regenerate the README images
 
 The images in `docs/images/` come from the widget's own renderer, using one set of
-sample sessions for every image. After an interface change, rebuild them on
-Windows:
+sample sessions for every image. After an interface change, regenerate them.
+
+**Windows:**
 
 ```powershell
 py tools/render_readme_images.py
 ```
 
-Render on Windows because the Claude theme uses Segoe UI, a Windows system font.
-The script renders each theme in a separate process with temporary settings. It
+**macOS:**
+
+```sh
+.venv/bin/python tools/render_readme_images.py
+```
+
+Fonts follow the rendering platform (for example, Segoe UI on Windows). The
+script renders each theme in a separate process with temporary settings. It
 doesn't read credentials, transcripts, or account readings. For what each image
 shows, see [docs/images/README.md](images/README.md).

@@ -1,19 +1,25 @@
 # README images
 
-`tools/render_readme_images.py` renders these images with the widget's own
-renderer. All of them use the same three sample sessions: `api-service` waiting for
-approval, `storefront` running tests in Codex, and `design-system` ready. No
-credentials, account readings, or conversation files are read.
+`tools/render_readme_images.py` creates the README artwork from the current
+widget renderer, with isolated settings and sample data. It doesn't read real
+credentials, account readings, or conversation files.
+
+The samples are `api-service` waiting for Claude approval, `storefront` running
+Codex tests, and `design-system` ready. The hero and session detail image focus on
+the first two. Claude usage is 42% / 18%; Codex usage is 71% / 31% (5h / week).
 
 | Image | What it shows |
 | --- | --- |
-| `github-hero.png` | The wordmark, the tagline, and the full widget. |
-| `github-work.png` | One session's details, with callouts for the approval, the running command, the last request, the latest message, and the window link. |
-| `github-tuck.png` | The strip tucked against the top edge of a screen, over a code editor, with one agent's panel open. |
-| `github-themes.png` | The same sessions in the Claude, Matrix, and E-ink themes. |
+| `github-hero.png` | Brand, tagline, and the current full widget. |
+| `github-work.png` | Session identity, context, activity, and folded Read more controls. |
+| `github-usage.png` | Both providers' 5h and weekly Signal Fields and glowing logos. |
+| `github-tuck.png` | Horizontal and vertical strips with attached usage drawers. |
+| `github-themes.png` | Claude, Matrix, and E-ink using the same layout. |
 
-The canvases are 1760 pixels wide, and the widget renders at zoom 2.5, so the
-images stay sharp and readable at GitHub's README width. These images illustrate the interface with
-sample data. They aren't release artifacts. When the interface changes, regenerate
-them. For the command, see
+Canvases are 1600 pixels wide. The main UI renders at zoom 2.5; the three-theme
+comparison uses 1.45. Fonts follow the platform used to render (the current images
+were generated on macOS). Each theme renders in a separate child process.
+
+Regenerate these images after interface changes. They illustrate the UI with
+sample data and aren't release artifacts. See
 [Regenerate the README images](../development.md#regenerate-the-readme-images).

@@ -1,74 +1,66 @@
 <p align="center">
-  <img src="docs/images/github-hero.png" alt="The Smith Agents widget listing three sessions: api-service waiting for approval, storefront running tests, and design-system ready, under Claude usage readings of 42%, 68%, and 23%." width="880">
+  <img src="docs/images/github-hero.png" alt="Smith Agents: Your agents. In view. The current widget shows Claude and Codex sessions with figures, context, activity, and separate 5-hour and weekly usage fields." width="880">
 </p>
 
-<p align="center">
-  <em>"We're not here because we're free. We're here because we're not free."</em>
-</p>
+**Smith Agents** keeps your **Claude Code** and **Codex** sessions in view on
+**Windows and macOS**. See what your agents are doing, check account usage, and
+jump back to a session from a small floating widget or a strip at the edge of
+your screen.
 
-**Smith Agents** is a small floating widget for **Claude Code** and **Codex** on
-**Windows** and **macOS**. It shows every agent you have running, what each one
-is doing, which ones need you, and how much of your usage is left, while you keep
-working in your editor.
+[Install](#install) · [Sessions](#your-sessions-at-a-glance) · [Usage](#usage-in-a-field-of-signals) · [Screen edges](#small-at-every-edge) · [Codex setup](docs/codex.md)
 
-[Install](#install) · [How it works](#how-it-works) · [Codex setup](docs/codex.md) · [Privacy](#privacy) · [Development](docs/development.md)
+| Follow the work | Watch your usage | Keep your screen |
+| --- | --- | --- |
+| Figures, context, and current activity for each session. | Separate **5h** and **week** fields, in your provider's color. | Tuck to any screen edge, with details and usage a click away. |
 
-## Why Smith Agents
+## Your sessions at a glance
 
-- **Keep working while your agents run.** Tuck the widget against the top, bottom,
-  left, or right edge of your screen. Each agent appears as a small figure whose pose
-  and color show its state, so a glance tells you who's working, who's done, and
-  who's waiting.
-- **See the actual work, not just "busy".** Every session shows the command it's
-  running, updated about once a second. Open a session to see your last request,
-  its latest reply, the Git branch, how long it's been running, and how full its
-  context is.
-- **Catch a stuck agent before it costs you.** When a Claude session goes quiet in
-  the middle of a task for 90 seconds, it turns yellow and moves to the top of
-  the list. Approval requests show up the same way. An agent waiting on you for an
-  hour is an hour of paid time spent doing nothing, and Smith Agents points it out
-  in minutes.
-- **Jump between agents, with your usage in view.** Bring any agent's terminal,
-  chat, or window to the front in one click, or hide it again. The account usage
-  strip opens all available limits in **Usage**. Readings refresh every five minutes, or
-  immediately when you ask. Expand a panel with its chevron for the reply, then
-  use **Read more** below **Go to session** for window controls and metadata.
+<img src="docs/images/github-work.png" alt="The current session panel: project identity and provider above context, activity below, and an expanded storefront card with Go to session and folded Read more controls." width="880">
 
-## See what every agent is doing
+Click a session to open its current activity or latest reply. **Go to session**
+brings you back to its app. Extra controls and metadata stay folded under
+**Read more**.
 
-<img src="docs/images/github-work.png" alt="The widget with the storefront session open. Callouts mark api-service's approval request, storefront's running command, the last request, the latest message, and the Open window link." width="880">
+Sessions marked as needing attention sort to the top. Yellow can mean a pending
+request, a quiet session, or unavailable activity information; check the status
+text for the reason. It doesn't always mean there's a question to answer.
 
-Sessions that need you sort to the top. For Claude Code in VS Code, you can allow
-or deny a pending request from the widget after you set up the optional bridge
-([Windows](docs/windows.md), [Mac](docs/macos.md)). Other requests show which app
-to answer them in.
+For supported Claude Code requests in VS Code, the optional approval bridge lets
+you review and allow or deny them from the widget
+([Windows setup](docs/windows.md), [Mac setup](docs/macos.md)). Other requests point
+you to the app where you can answer.
 
-## Tuck it away and keep working
+## Usage, in a field of signals
 
-<img src="docs/images/github-tuck.png" alt="A code editor fills the screen. The Smith Agents strip sits along the top edge with three figures, and the selected api-service panel shows an approval request with Allow and Deny." width="880">
+<img src="docs/images/github-usage.png" alt="Codex in blue with 71% used over 5 hours and 31% used over a week; Claude in orange with 42% and 18%. Both headers show two square Signal Fields beside the glowing provider logos." width="880">
 
-The tucked strip follows the monitor's outer edges, independent of editor or
-terminal windows, including the menu bar and taskbar areas. Click
-a figure to open that agent's panel, and click it again to put the panel away.
-The agents keep running either way. Each tile has a centered figure, a small
-name underneath, and its provider logo in the upper-left corner. The side
-strip is 88 px wide; tiles across the top and bottom remain 108 px wide.
-Panels open inward and keep extra details under **Read more**. Click a glowing
-provider logo to unfold the attached usage drawer; click its reading to switch
-between available limits, such as 5 hours and a week. Each lit cell in the
-Signal Field represents 1% used, in Codex blue or Claude orange.
-The open widget's header shows separate square fields for 5 hours and a week.
-Tucked branding keeps only the Smith icon and provider lamps; click the Smith
-icon to return to the full view.
+The header shows **5-hour and weekly usage together**. Each lit cell represents
+**1% used**: blue for Codex, orange for Claude. Click a glowing provider logo to
+switch providers. A missing reading shows **—**, not zero.
+
+The **Usage** tab keeps the detailed limits and reset times. Readings refresh
+about every five minutes, or through **Refresh now** in the tray menu.
+
+## Small at every edge
+
+<img src="docs/images/github-tuck.png" alt="The current horizontal and vertical tucked layouts with icon-only Smith branding, glowing provider logos, agent figures, and attached Claude and Codex usage drawers." width="880">
+
+Tuck to the **top, bottom, left, or right edge of your screen**, independent of
+editor and terminal windows.
+
+- **Click a figure** to open its session panel inward from the edge.
+- **Click a provider logo** to unfold the attached usage drawer.
+- **Click the drawer reading** to cycle through available limits, including 5h and week.
+- **Click the Smith icon** to return to the full widget.
 
 ## Pick a theme
 
-<img src="docs/images/github-themes.png" alt="The same three sessions in the warm Claude theme, the green Matrix theme, and the light E-ink theme." width="880">
+<img src="docs/images/github-themes.png" alt="The current Smith Agents layout in Claude, The Matrix, and E-ink themes." width="880">
 
 Choose **Claude**, **The Matrix**, or **E-ink** from the tray or menu-bar menu.
 
-*The images show sample sessions rendered by the widget itself. They contain no
-real account or conversation data.*
+*All images use sample sessions and usage readings rendered by the actual widget.
+No real account or conversation data is shown.*
 
 ## Install
 
@@ -146,8 +138,8 @@ on macOS.
    show readings for the selected provider. Click a session to see its details.
 3. **Tuck it away.** Click the tuck control, then drag the strip along any
    of the four screen edges.
-4. **Go to an agent.** Click **Open terminal**, **Open chat**, or **Open window**.
-   If that window is already open, the link reads **Hide** instead.
+4. **Go to an agent.** Click **Go to session**. Open **Read more** for extra
+   window controls and session metadata.
 
 The tray or menu-bar menu has settings for refresh, theme, size, visibility, and
 starting at sign-in. The widget remembers your provider and tuck position.
@@ -168,9 +160,9 @@ To start Smith Agents when you sign in, turn on **Start with Windows** or
 
 | Reading or control | What it means |
 | --- | --- |
-| Usage percentage | Your account's limit reading from the provider. Refreshes about every five minutes, or when you click **Refresh now**. Click the account strip to open all limits and reset times in **Usage**. |
+| Usage percentage | The percentage **used** of a provider limit. Each lit Signal Field cell is 1%. Open **Usage** for all limits and reset times; a missing reading shows **—**. |
 | Context | How much of the session's context window the latest request used, not a total for the whole conversation. `—` means the token reading is missing; `?` means the capacity is unknown. |
-| Quiet · check chat | A Claude session stopped in the middle of a task and hasn't written anything for 90 seconds. It might be waiting for you, or running a long command. |
+| Quiet · check chat | A Claude session hasn't written activity for 90 seconds during an unfinished turn. It might be waiting for you, or running a long command. |
 | Approval needed | A supported Claude Code request in VS Code is waiting. Click **Review request** to review it, or **Deny**. Requires the optional bridge. |
 | Stats | Each provider's activity data. Claude and Codex count tokens differently, so they're shown separately. |
 | Hide | Minimizes the agent's window. The agent keeps running. |
