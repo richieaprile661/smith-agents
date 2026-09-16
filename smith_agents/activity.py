@@ -132,7 +132,7 @@ def visible_helpers(rows, now):
         data = row.get("activity") or {}
         observed = max(data.get("state_at") or 0, data.get("output_at") or 0,
                        data.get("last_tool_at") or 0)
-        process_start = root.get("process_created") or root.get("started_at") or 0
+        process_start = root.get("process_created", root.get("started_at")) or 0
         if observed < process_start:
             continue
         if data.get("status") in ("completed", "failed", "stopped"):

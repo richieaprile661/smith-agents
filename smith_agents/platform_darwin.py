@@ -72,6 +72,11 @@ def process_started(pid):
         return None
 
 
+def process_start_time(started):
+    """macOS process identities already use Unix seconds."""
+    return started if started and started > 0 else 0
+
+
 def session_process_start(data, pid):
     """Capture Unix process identity and reject a PID reused after the session."""
     actual = process_started(pid)

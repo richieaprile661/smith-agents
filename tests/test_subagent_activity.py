@@ -1,10 +1,13 @@
 """Provider event attribution, recovery, and the real widget activity panels."""
 import json
+import os
 from pathlib import Path
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
+import psutil
 
 from smith_agents.activity import Activity, ClaudeTranscript, current_tools, apply_activity, merge_activity, visible_helpers
 from smith_agents.claude_activity import TaskStream, capture_status, read
@@ -120,10 +123,74 @@ class ClaudeActivityTests(unittest.TestCase):
         newer.record(dict(type="system", subtype="task_started", task_id="child", session_id="parent",
                           timestamp=200, tool_use_id="spawn"))
         self.stream.close()
-        with patch("smith_agents.runtime.backend") as backend:
-            backend.return_value.pid_alive.return_value = True
+        with patch("smith_agents.claude_activity.psutil.Process") as process:
+            process.side_effect = lambda pid: SimpleNamespace(create_time=lambda: pid, is_running=lambda: True)
             tasks = read(self.root, {"id": "parent"})
         self.assertFalse(tasks["child"]["disconnected"])
+
+    def test_windows_parent_identity_does_not_hide_current_helpers(self):
+        from test_session_windows import win
+        from smith_agents.activity import visible_helpers
+        started = 1_800_000_000
+        filetime = (started + 11644473600) * 10000000
+        session = dict(sessionId="parent", pid=123, procStart=filetime, cwd=str(self.root))
+        sessions = self.root / "sessions"
+        sessions.mkdir()
+        (sessions / "parent.json").write_text(json.dumps(session))
+        capture_status({"session_id": "parent", "tasks": [{"id": "child", "status": "running"}]},
+                       self.root / "widget-context", started + 10)
+        with patch.object(core, "platform", win), patch.object(win, "pid_alive", return_value=True), \
+             patch.object(core, "SESSIONS_DIR", str(sessions)), \
+             patch.object(core, "CLAUDE_DIR", str(self.root)), \
+             patch.object(core, "PROJECTS_DIR", str(self.root)), \
+             patch("time.time", return_value=started + 15):
+            rows = visible_helpers(core._list_claude_agents(), started + 15)
+        self.assertEqual([r["id"] for r in rows], ["parent", "agent-child"])
+        self.assertEqual(rows[0]["started_at"], filetime)
+        self.assertEqual(rows[0]["process_created"], started)
+        self.assertEqual(rows[1]["state"], "working")
+
+    def test_stream_owner_checks_unix_time_and_rejects_reused_or_dead_pid(self):
+        self.stream.owner = {"pid": 123, "started": 100.25}
+        self.send("task_started", at=101, tool_use_id="spawn")
+        for actual, running, expected in ((100.25, True, "running"), (200, True, "unknown"),
+                                          (100.25, False, "unknown")):
+            with patch("smith_agents.claude_activity.psutil.Process") as process:
+                process.return_value.create_time.return_value = actual
+                process.return_value.is_running.return_value = running
+                self.assertEqual(read(self.root, {"id": "parent"})["child"]["status"], expected)
+        with patch("smith_agents.claude_activity.psutil.Process", side_effect=psutil.NoSuchProcess(123)):
+            self.assertEqual(read(self.root, {"id": "parent"})["child"]["status"], "unknown")
+
+    def test_empty_status_snapshot_clears_helpers_but_missing_metadata_does_not(self):
+        capture_status({"session_id": "parent", "tasks": [{"id": "child", "status": "running"}]}, self.root, 110)
+        capture_status({"session_id": "parent"}, self.root, 115)
+        self.assertIn("child", read(self.root, {"id": "parent"}, 116))
+        capture_status({"session_id": "parent", "tasks": []}, self.root, 120)
+        self.assertEqual(read(self.root, {"id": "parent"}, 121), {})
+        self.assertEqual(read(self.root, {"id": "parent"}, 200), {})
+
+    def test_recent_transcript_is_not_crowded_out_by_256_old_helpers(self):
+        parent = dict(id="parent", cwd=str(self.root), pid=123, state="working", started_at=100)
+        folder = self.root / core._encode_path(str(self.root)) / "parent" / "subagents"
+        folder.mkdir(parents=True)
+        for index in range(257):
+            path = folder / ("agent-%03d.jsonl" % index)
+            at = 200 if index == 256 else 10
+            path.write_text(json.dumps(claude("user", "Assigned work", at)) + "\n")
+            os.utime(path, (at, at))
+        # Force the new helper to be last regardless of filesystem order.
+        with os.scandir(folder) as scan:
+            entries = sorted(scan, key=lambda entry: entry.name)
+        with patch.object(core, "PROJECTS_DIR", str(self.root)), \
+             patch.object(core, "CLAUDE_DIR", str(self.root)), \
+             patch.object(core.os, "scandir", return_value=iter(entries)), \
+             patch("time.time", return_value=210):
+            rows = core.list_subagents(parent)
+        from smith_agents.activity import visible_helpers
+        shown = visible_helpers([parent, *rows], 210)
+        self.assertEqual([r["id"] for r in shown], ["parent", "agent-256"])
+        self.assertLessEqual(len(rows), 256)
 
 
     def test_task_stream_uses_child_messages_and_retains_completion(self):

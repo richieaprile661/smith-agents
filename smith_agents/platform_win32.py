@@ -461,6 +461,10 @@ def session_process_start(data, pid):
         return -1
     return actual
 
+def process_start_time(started):
+    """Unix seconds for activity comparisons; keep FILETIME for identity checks."""
+    return started / 10000000 - 11644473600 if started and started > 0 else 0
+
 def show_error(message):
     ctypes.windll.user32.MessageBoxW(None, message, APP_NAME, 0x50010)
 

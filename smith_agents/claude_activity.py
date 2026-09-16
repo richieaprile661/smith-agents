@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sqlite3
 import time
+import psutil
 
 from .activity import Activity, number, plain, stamp, merge_activity
 
@@ -32,13 +33,18 @@ def read(directory, parent, now=None):
         for source, updated, raw in rows:
             data = json.loads(raw)
             # Do not reuse a previous process's running state after a resume.
-            if updated < (parent.get("started_at") or 0):
+            if updated < (parent.get("process_created", parent.get("started_at")) or 0):
                 continue
             disconnected = not data.get("connected", True) or source == "statusline" and now - updated > 30
             owner = data.get("owner")
             if owner:
-                from .runtime import backend
-                disconnected |= not backend().pid_alive(owner["pid"], owner["started"])
+                # The bridge records psutil's Unix timestamp on both platforms.
+                # Windows' native pid_alive expects a FILETIME identity instead.
+                try:
+                    process = psutil.Process(owner["pid"])
+                    disconnected |= process.create_time() != owner["started"] or not process.is_running()
+                except psutil.Error:
+                    disconnected = True
             for key, value in data.get("tasks", {}).items():
                 row = dict(value)
                 row["disconnected"] = disconnected
@@ -52,6 +58,8 @@ def read(directory, parent, now=None):
 
 
 def capture_status(payload, directory, now=None):
+    if not isinstance(payload.get("tasks"), list):
+        return  # Missing task metadata is not an authoritative empty snapshot.
     now = time.time() if now is None else now
     previous = {}
     path = Path(directory) / "activity.sqlite"
@@ -83,8 +91,7 @@ def capture_status(payload, directory, now=None):
                                and old.get("started_at") == row.get("started_at") else None) or now
             row["state_at"] = row["ended_at"]
         tasks[task["id"]] = row
-    if tasks:
-        save(directory, payload.get("session_id"), "statusline", {"tasks": tasks}, now)
+    save(directory, payload.get("session_id"), "statusline", {"tasks": tasks}, now)
 
 
 class TaskStream:

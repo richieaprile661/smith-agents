@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "smith-agents"
-version = "1.1.0"
+version = "1.1.1"
 description = "Smith Agents: a floating Windows and macOS console for Claude Code and Codex"
 readme = "README.md"
 requires-python = ">=3.10"

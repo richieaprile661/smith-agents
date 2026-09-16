@@ -905,6 +905,7 @@ def _list_claude_agents(idle_after=AGENT_IDLE_S):
         agents.append({
             "pid": pid,
             "started_at": started,
+            "process_created": platform.process_start_time(started),
             "id": session_id,
             "name": data.get("name") or pretty_project(_encode_path(cwd)) or "claude",
             "cwd": cwd,
@@ -985,14 +986,29 @@ def list_subagents(parent, idle_after=AGENT_IDLE_S):
     now = time.time()
     reported = read_activity(os.path.join(CLAUDE_DIR, "widget-context"), parent, now)
     paths = {}
+    modified_at = {}
     try:
         for entry in os.scandir(folder):
             if entry.name.startswith("agent-") and entry.name.endswith(".jsonl"):
-                paths[entry.name[6:-6]] = entry.path
+                try:
+                    modified = entry.stat().st_mtime
+                except OSError:
+                    continue
+                key = entry.name[6:-6]
+                paths[key] = entry.path
+                modified_at[key] = modified
     except OSError:
         pass
     found = []
-    for key in list(dict.fromkeys([*reported, *paths]))[:256]:
+    def latest_activity(key):
+        data = reported.get(key, {})
+        return (max(modified_at.get(key, 0), data.get("state_at") or 0,
+                    data.get("output_at") or 0, data.get("last_tool_at") or 0), key)
+
+    # Directory order is arbitrary. Spend the bounded transcript budget on
+    # recent activity, so old helper files cannot crowd out new work.
+    keys = sorted(set(reported) | set(paths), key=latest_activity, reverse=True)
+    for key in keys[:256]:
         path = paths.get(key)
         data, modified = {}, now
         try:

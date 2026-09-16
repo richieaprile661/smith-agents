@@ -99,6 +99,19 @@ python -m unittest discover -s tests -v
 nested helpers, late task events, disconnected observers, process reuse,
 completion retention, bounded previews, and native renderer geometry.
 
+The repository ships a wheel in `release/`. After changing package code or
+resources, rebuild it before running the full suite:
+
+```sh
+python -m pip install build
+python -m build --wheel --outdir release
+```
+
+For a release, update the version in `pyproject.toml`, `smith_agents/__init__.py`,
+and `tools/build_macos.py`, then remove the previous wheel after building its
+replacement. `test_release.py` checks that exactly one wheel ships, that its
+version matches the source, and that its code and resources match the checkout.
+
 The workflow in `.github/workflows/test.yml` runs these tests and starts the
 widget with sample data on Windows and macOS. For the VS Code bridge and the
 approval review, see [Windows setup](windows.md). For the Mac smoke test and
