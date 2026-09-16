@@ -131,7 +131,8 @@ class AgentContextTests(unittest.TestCase):
                 self.assertEqual({a["session_label"] for a in rows}, {"qilobot-30", "qilobot-31"})
                 for row in rows:
                     self.assertEqual(row["name"], "qilobot")
-                    self.assertEqual(tucked._name_lines(row), ["qilobot", row["session_label"]])
+                    # Compact tiles show the project; the full panel retains the session label.
+                    self.assertEqual(tucked._name_lines(row), ["qilobot"])
                 rows[1]["state"] = "closed"
                 rows.append(dict(rows[0], id="helper", name="Review tests", sub=True))
                 core.label_shared_sessions(rows)

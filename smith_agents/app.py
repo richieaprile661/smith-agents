@@ -24,7 +24,6 @@ from .core import (
     DOCKS,
     IDLE_REFRESH_MS,
     MAX_BACKOFF_S,
-    PEEK_W,
     SHADOW_PAD,
     TAB_H,
     THEMES,
@@ -106,7 +105,7 @@ class SmithAgentsWidget:
         self._peek_open_id = None
         self._peek_scroll = 0
         self._peek_panel_scroll = 0
-        self._peek_details = False
+        self._peek_details = True
         self._peek_layout = None
 
         # Warm start from the last good response, so a restart shows numbers
@@ -233,7 +232,7 @@ class SmithAgentsWidget:
                     # Flush against a monitor's edge that corner sits on the
                     # neighbouring monitor, so look up the chip's own corner.
                     point = point[0] + SHADOW_PAD, point[1] + SHADOW_PAD
-        return platform.screen_bounds(self.root, point)
+        return platform.screen_bounds(self.root, point, work_area=not self.config.get('tucked', False))
 
     # -- polling -----------------------------------------------------------
     def _scan_local(self):
@@ -465,10 +464,11 @@ class SmithAgentsWidget:
     def _tuck_side(self):
         """Which edge the chip would tuck to from where it sits now."""
         x, y = self._position(self._bar_size)
-        left, top, width, _height = self._screen_bounds()
+        left, top, width, height = self._screen_bounds()
         gaps = {'left': abs(x+SHADOW_PAD-left),
                 'right': abs(left+width-(x+self._bar_size[0]-SHADOW_PAD)),
-                'top': abs(y+SHADOW_PAD-top)}
+                'top': abs(y+SHADOW_PAD-top),
+                'bottom': abs(top+height-(y+self._bar_size[1]-SHADOW_PAD))}
         return min(tucked.EDGES, key=gaps.get)
 
     def _on_motion(self, event):
@@ -504,37 +504,42 @@ class SmithAgentsWidget:
         x, y = self._position(size)
         if self.tuck_anim <= 0:
             return x, y
-        left, top, screen_w, _height = self._screen_bounds()
+        left, top, screen_w, screen_h = self._screen_bounds()
         chip_w = size[0] - SHADOW_PAD * 2
-        if self.config['tuck_side'] == 'top':
-            gone = top-size[1]+SHADOW_PAD+px(80)
+        if self.config['tuck_side'] in ('top', 'bottom'):
+            gone = (top-size[1]+SHADOW_PAD+tucked.TOP_RAIL_H if self.config['tuck_side'] == 'top'
+                    else top+screen_h-SHADOW_PAD-px(86))
             return x, int(round(y+(gone-y)*self._ease(self.tuck_anim)))
         if self.config["tuck_side"] == "left":
-            gone = left - chip_w + PEEK_W - SHADOW_PAD
+            gone = left - chip_w + tucked.RAIL_W - SHADOW_PAD
         else:
-            gone = left + screen_w - PEEK_W - SHADOW_PAD
+            gone = left + screen_w - tucked.RAIL_W - SHADOW_PAD
         return int(round(x + (gone - x) * self._ease(self.tuck_anim))), y
 
     def _peek_position(self, size):
         """Anchor the strip itself, so opening a panel cannot move it.
 
-        Top placement keeps its saved x; side placement keeps its saved y.
+        Horizontal placement keeps its saved x; side placement keeps its saved y.
         The legacy fallback uses the console's bar until a strip is rendered.
         """
         if getattr(self, '_peek_layout', None) is not None:
-            left, top, screen_w, _height = self._screen_bounds()
+            left, top, screen_w, screen_h = self._screen_bounds()
             if self._peek_layout.horizontal:
-                return (left+self._peek_layout.rail_x-self._peek_layout.rail[0],
-                        top-self._peek_layout.rail[1])
+                y = (top-self._peek_layout.rail[1] if self.config['tuck_side'] == 'top'
+                     else top+screen_h-self._peek_layout.rail[3])
+                return left+self._peek_layout.rail_x-self._peek_layout.rail[0], y
             x = left-SHADOW_PAD if self.config['tuck_side'] == 'left' else left+screen_w-size[0]+SHADOW_PAD
             return x, top+px(14)+self._peek_layout.rail_y-self._peek_layout.rail[1]
         x, _unused = self._position(size)
         _also, y = self._position(self._bar_size)
-        left, _top, screen_w, _height = self._screen_bounds()
-        if self.config["tuck_side"] == "left":
+        left, top, screen_w, screen_h = self._screen_bounds()
+        if self.config['tuck_side'] in ('top', 'bottom'):
+            y = (top-SHADOW_PAD if self.config['tuck_side'] == 'top'
+                 else top+screen_h-size[1]+SHADOW_PAD)
+        elif self.config["tuck_side"] == "left":
             x = left - SHADOW_PAD
         else:
-            x = left + screen_w - PEEK_W - SHADOW_PAD
+            x = left + screen_w - tucked.RAIL_W - SHADOW_PAD
         return x, y
 
     def set_tuck(self, tucked, side=None):
@@ -835,7 +840,7 @@ class SmithAgentsWidget:
                 self.set_tuck(False)
             elif kind == 'peek-agent':
                 self._peek_open_id = None if self._peek_open_id == agent['id'] else agent['id']
-                self._peek_details = False
+                self._peek_details = True
                 self._peek_panel_scroll = 0
                 self._confirm_kill = None
             elif kind == 'peek-close':
@@ -846,8 +851,7 @@ class SmithAgentsWidget:
                 maximum = self._peek_layout.panel_scroll_max if kind.startswith('peek-panel') else self._peek_layout.rail_scroll_max
                 step = px(120)
                 if attribute == '_peek_panel_scroll':
-                    panel = self._peek_layout.panel
-                    viewport = panel[3]-panel[1]-px(26)-core.FOOT_H
+                    viewport = self._peek_layout.panel_viewport_height
                     step = min(step, max(1, viewport//2), max(1, viewport-px(36)))
                 movement = -step if kind.endswith('up') else step
                 setattr(self, attribute, max(0, min(maximum, getattr(self, attribute)+movement)))
@@ -1101,8 +1105,16 @@ def main(argv=None):
                             widget.agents = [dict(sample, id='smoke-%d' % i) for i in range(20)]
                             widget._repaint()
                             def peek_click(kind, identity=None):
-                                box = next(box for box in widget.agent_rows if box[0] == kind
-                                           and (identity is None or box[-1]['id'] == identity))
+                                def target():
+                                    return next((box for box in widget.agent_rows if box[0] == kind
+                                                 and (identity is None or box[-1]['id'] == identity)), None)
+                                box = target()
+                                while box is None and kind == 'peek-agent':
+                                    previous_scroll = widget._peek_scroll
+                                    peek_click('peek-down')
+                                    assert widget._peek_scroll > previous_scroll, 'Agent scroll did not advance'
+                                    box = target()
+                                assert box is not None, 'Missing tuck control: '+kind
                                 widget._on_peek_click(SimpleNamespace(x=(box[1]+box[3])/2,
                                                                      y=(box[2]+box[4])/2))
                             assert widget._peek_layout.rail_scroll_max > 0
@@ -1112,9 +1124,6 @@ def main(argv=None):
                             assert widget._peek_layout.panel is not None
                             peek_click('peek-agent', 'smoke-2')
                             assert widget._peek_open_id == 'smoke-2'
-                            while widget._peek_panel_scroll < widget._peek_layout.panel_scroll_max:
-                                peek_click('peek-panel-down')
-                            peek_click('row')
                             while widget._peek_panel_scroll < widget._peek_layout.panel_scroll_max:
                                 peek_click('peek-panel-down')
                             peek_click('kill')
@@ -1128,14 +1137,23 @@ def main(argv=None):
                                 for edge in tucked.EDGES:
                                     widget.set_tuck(True, side=edge)
                                     widget._repaint()
-                                    assert widget._peek_layout.horizontal == (edge == 'top')
+                                    assert widget._peek_layout.horizontal == (edge in ('top', 'bottom'))
+                                    if sys.platform == 'darwin':
+                                        frame = widget.root.panel.frame()
+                                        actual = (round(frame.origin.x*platform.RASTER_SCALE),
+                                            round((platform._desktop_top()-frame.origin.y-frame.size.height)
+                                                  *platform.RASTER_SCALE))
+                                        assert max(abs(a-b) for a, b in zip(actual, widget._paint_xy)) <= 1, \
+                                            'Native window shifted away from its screen-edge position'
                                     previous_provider = widget.config['usage_provider']
-                                    peek_click('provider:toggle')
+                                    peek_click('provider:'+('codex' if previous_provider == 'claude' else 'claude'))
                                     assert widget.config['usage_provider'] != previous_provider
                                     peek_click('peek-agent', 'smoke-1')
                                     assert widget._peek_open_id == 'smoke-1'
                                     if edge == 'top':
                                         assert widget._peek_layout.panel[1] > widget._peek_layout.rail[3]
+                                    elif edge == 'bottom':
+                                        assert widget._peek_layout.panel[3] < widget._peek_layout.rail[1]
                                     peek_click('peek-close')
                                 # A drag ending over a control must only move.
                                 rail = widget._peek_layout.rail

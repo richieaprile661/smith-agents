@@ -555,13 +555,14 @@ def _monitor_api():
     return user32
 
 
-def screen_bounds(root, position=None):
-    """Usable area of one monitor, as left, top, width and height.
+def screen_bounds(root, position=None, *, work_area=True):
+    """Selected display, as left, top, width and height.
 
     A point picks the monitor under it - the pointer while dragging, otherwise
     the widget's on-screen corner - and a point off every screen falls back to
     the nearest one. Without a point, the monitor holding the window is used.
-    The work area already leaves out the taskbar, wherever it is docked."""
+    Full widgets use the work area; tucked strips include the taskbar area
+    so they stay at the monitor's outer edge."""
     try:
         user32 = _monitor_api()
         if position is not None:
@@ -571,11 +572,12 @@ def screen_bounds(root, position=None):
             monitor = user32.MonitorFromWindow(root.winfo_id(), _MONITOR_DEFAULTTONEAREST)
         info = _MONITORINFO(cbSize=ctypes.sizeof(_MONITORINFO))
         if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
-            work = info.rcWork
+            work = info.rcWork if work_area else info.rcMonitor
             return work.left, work.top, work.right - work.left, work.bottom - work.top
     except Exception:
         pass
-    return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight() - int(48 * SCALE)
+    return (0, 0, root.winfo_screenwidth(),
+            root.winfo_screenheight() - (int(48 * SCALE) if work_area else 0))
 
 def start_tray(tray):
     import threading
@@ -614,7 +616,7 @@ def build_tray(self):
         pystray.MenuItem("Tuck position", pystray.Menu(*[
             pystray.MenuItem(edge.title(), ui(lambda edge=edge: self.set_tuck(True, side=edge)),
                              checked=lambda _i, edge=edge: self.config['tucked'] and self.config['tuck_side'] == edge)
-            for edge in ('top', 'left', 'right')])),
+            for edge in ('top', 'bottom', 'left', 'right')])),
         pystray.MenuItem("Dock", pystray.Menu(*[dock_item(d) for d in DOCKS])),
         pystray.MenuItem("Opacity", pystray.Menu(*[opacity_item(v)
                                                    for v in (1.0, 0.94, 0.85, 0.7)])),
@@ -677,7 +679,7 @@ def build_context_menu(self):
     menu.add_separator()
     menu.add_command(label="Tuck to edge", command=lambda: self.set_tuck(True))
     tuck_menu = tk.Menu(menu, tearoff=0)
-    for edge in ('top', 'left', 'right'):
+    for edge in ('top', 'bottom', 'left', 'right'):
         tuck_menu.add_command(label=edge.title(), command=lambda edge=edge: self.set_tuck(True, side=edge))
     menu.add_cascade(label="Tuck position", menu=tuck_menu)
     menu.add_command(label="Hide console", command=self.toggle_bar)

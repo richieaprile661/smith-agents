@@ -142,7 +142,7 @@ class ProviderViewTests(unittest.TestCase):
                 self.assertEqual(first[0],'provider:claude')
         for edge in tucked.EDGES:
             image,boxes,layout=tucked.render(core.demo_agents(),metrics,metrics[0],0,side=edge,provider='codex')
-            box=next(b for b in boxes if b[0]=='provider:toggle')
+            box=next(b for b in boxes if b[0]=='provider:claude')
             self.assertGreaterEqual(box[1],0);self.assertLessEqual(box[3],image.width)
             self.assertLessEqual(box[4],image.height)
 

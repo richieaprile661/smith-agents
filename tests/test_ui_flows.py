@@ -86,8 +86,6 @@ class UserFlowTests(unittest.TestCase):
                     opened.assert_called_once_with(w.agents[1])
                     w.agents[1]['_window_open'] = True
                     w._repaint()
-                    self.reveal(w, 'row')
-                    self.click(w, 'row')
                     self.reveal(w, 'details')
                     self.click(w, 'details')
                     self.reveal(w, 'hide')
@@ -110,18 +108,18 @@ class UserFlowTests(unittest.TestCase):
                 self.assertTrue(w.config['tucked'])
                 self.assertEqual(len(w.agents), 20)
 
-    def test_provider_reading_scrolling_switching_and_expand_on_every_edge(self):
+    def test_provider_lamps_scrolling_switching_and_expand_on_every_edge(self):
         for side in tucked.EDGES:
             with self.subTest(side=side):
                 w = self.widget(side)
                 self.click(w, 'peek-agent', '0')
-                self.click(w, 'provider:toggle')
+                self.click(w, 'provider:codex')
                 self.assertEqual(w.config['usage_provider'], 'codex')
                 self.assertEqual(w._peek_open_id, '0')
-                # Choose a point in the number, above the top-strip provider button.
-                reading = next(b for b in w.agent_rows if b[0] == 'reading')
-                w._on_peek_click(SimpleNamespace(x=reading[1]+c.px(40), y=reading[2]+c.px(6)))
-                self.assertNotEqual(w.config['bar_mode'], 'worst')
+                self.assertNotIn('reading', [b[0] for b in w.agent_rows])
+                self.click(w, 'provider:claude')
+                self.assertEqual(w.config['usage_provider'], 'claude')
+                self.assertEqual(w._peek_open_id, '0')
                 panel_scroll = w._peek_panel_scroll
                 rail = w._peek_layout.rail
                 w._on_agent_wheel(SimpleNamespace(x=(rail[0]+rail[2])/2, y=(rail[1]+rail[3])/2, delta=-120))
@@ -155,64 +153,50 @@ class UserFlowTests(unittest.TestCase):
                     self.click(w, 'permission-deny')
                     self.assertEqual(answer.call_args.args[1:], (item, 'deny'))
 
-    def test_long_quota_labels_fit_every_edge_with_and_without_short_label(self):
+    def test_strip_has_live_branding_and_no_quota_numbers_on_every_edge(self):
         original = ImageDraw.ImageDraw.text
         for side in tucked.EDGES:
-            for header_label in (None, 'Spark'):
+            with self.subTest(side=side):
+                texts, branding = [], []
                 metric = {'key': 'codex:spark', 'pct': 100,
-                          'label': 'GPT-5.3-Codex-Spark · 1w', 'header_label': header_label}
-                drawn = []
+                          'label': 'GPT-5.3-Codex-Spark · 1w', 'header_label': 'Spark'}
                 def record(pen, xy, text, *args, **kwargs):
-                    if text.startswith(('SPARK', 'GPT-')):
-                        drawn.append(pen.textbbox(xy, text, font=kwargs['font']))
-                    return original(pen, xy, text, *args, **kwargs)
-                with patch.object(ImageDraw.ImageDraw, 'text', record):
-                    tucked.render([], [metric], metric, 0, side=side, provider='codex')
-                self.assertTrue(drawn)
-                self.assertTrue(all(box[2] <= c.PEEK_W for box in drawn))
-
-    def test_bucket_windows_and_provider_click_targets_are_distinct(self):
-        for side in tucked.EDGES:
-            labels = []
-            for window in ('5h', '1w'):
-                metric = {'key': window, 'label': window, 'header_label': 'Spark', 'pct': 0}
-                texts = []
-                original = ImageDraw.ImageDraw.text
-                def record(pen, xy, text, *args, **kwargs):
-                    if text.startswith('SPARK'):
-                        texts.append((text, pen.textbbox(xy, text, font=kwargs['font'])))
+                    texts.append(text)
+                    if text in ('Smith', 'Agents') and kwargs.get('fill') != 255:
+                        branding.append((xy[0], kwargs['font'].size))
                     return original(pen, xy, text, *args, **kwargs)
                 with patch.object(ImageDraw.ImageDraw, 'text', record):
                     _, boxes, _ = tucked.render([], [metric], metric, 0, side=side, provider='codex')
-                self.assertEqual(len(texts), 1)
-                label, bounds = texts[0]
-                labels.append(label)
-                self.assertIn(window.upper(), label)
-                x, y = (bounds[0]+bounds[2])/2, (bounds[1]+bounds[3])/2
-                first = next(b for b in boxes if b[1]<=x<=b[3] and b[2]<=y<=b[4])
-                self.assertEqual(first[0], 'reading')
-            self.assertNotEqual(*labels)
+                self.assertTrue({'Smith', 'Agents'} <= set(texts))
+                self.assertNotIn('Open widget', texts)
+                self.assertEqual(len(set(branding)), 1)
+                self.assertFalse(any('100' in text or 'Spark' in text or 'used' in text for text in texts))
+                for provider in ('claude', 'codex'):
+                    box = next(b for b in boxes if b[0] == 'provider:'+provider)
+                    x, y = (box[1]+box[3])/2, (box[2]+box[4])/2
+                    hits = [b[0] for b in boxes if b[1] < x < b[3] and b[2] < y < b[4]]
+                    self.assertEqual(hits, ['provider:'+provider])
 
-    def test_wrapped_top_name_leaves_panel_on_screen_and_all_controls_reachable(self):
-        w = self.widget('top', count=1, height=240)
-        w.agents[0]['name'] = 'a-project-' + ('long-name-' * 8)
-        w._repaint()
-        self.click(w, 'peek-agent', '0')
-        self.assertLessEqual(w._peek_layout.panel[3]-c.SHADOW_PAD, c.px(240))
-        self.reveal(w, 'row')
-        self.click(w, 'row')
-        self.reveal(w, 'details')
-        self.click(w, 'details')
-        w._peek_panel_scroll = 0
-        w._repaint()
-        # Each press advances by at most half a viewport, so controls are not skipped.
-        seen = set()
-        while True:
-            seen.update(b[0] for b in w.agent_rows)
-            if w._peek_panel_scroll >= w._peek_layout.panel_scroll_max:
-                break
-            self.click(w, 'peek-panel-down')
-        self.assertTrue({'open', 'kill'} <= seen)
+    def test_wrapped_names_leave_all_controls_reachable_on_small_screens(self):
+        for side in tucked.EDGES:
+            with self.subTest(side=side):
+                w = self.widget(side, count=1, height=240)
+                w.agents[0]['name'] = 'a-project-' + ('long-name-' * 8)
+                w._repaint()
+                self.click(w, 'peek-agent', '0')
+                self.assertLessEqual(w._peek_layout.panel[3]-c.SHADOW_PAD, c.px(240))
+                self.reveal(w, 'details')
+                self.click(w, 'details')
+                w._peek_panel_scroll = 0
+                w._repaint()
+                # Each press advances by at most half a viewport, so controls are not skipped.
+                seen = set()
+                while True:
+                    seen.update(b[0] for b in w.agent_rows)
+                    if w._peek_panel_scroll >= w._peek_layout.panel_scroll_max:
+                        break
+                    self.click(w, 'peek-panel-down')
+                self.assertTrue({'open', 'kill'} <= seen)
 
 
 if __name__ == '__main__':

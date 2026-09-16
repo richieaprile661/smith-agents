@@ -251,14 +251,14 @@ class GeometryTests(unittest.TestCase):
         self.widget.config.update(dock="free", x=1920 - core.SHADOW_PAD, y=-core.SHADOW_PAD)
         with patch("smith_agents.app.platform.screen_bounds", return_value=(1920, 0, 1920, 1040)) as bounds:
             self.widget._screen_bounds()
-            bounds.assert_called_with(self.widget.root, (1920, 0))
+            bounds.assert_called_with(self.widget.root, (1920, 0), work_area=True)
             self.widget.config.update(tucked=True, tuck_x=3732, tuck_y=99)
             self.widget._screen_bounds()
-            bounds.assert_called_with(self.widget.root, (3732, 99))
+            bounds.assert_called_with(self.widget.root, (3732, 99), work_area=False)
             # A drag near the right edge of the left monitor must stay on it.
             self.widget._peek_drag_point = (1919, 500)
             self.widget._screen_bounds()
-            bounds.assert_called_with(self.widget.root, (1919, 500))
+            bounds.assert_called_with(self.widget.root, (1919, 500), work_area=False)
 
     def test_saved_position_recovers_after_monitor_is_removed(self):
         self.widget.config.update(dock="free", x=-10000, y=10000)

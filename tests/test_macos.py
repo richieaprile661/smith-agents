@@ -14,6 +14,42 @@ else:
     mac = None
 
 
+@unittest.skipUnless(sys.platform == 'darwin', 'macOS backend')
+class ScreenPlacementTests(unittest.TestCase):
+    def screens(self):
+        import AppKit as A
+        primary = SimpleNamespace(frame=lambda: A.NSMakeRect(0, 0, 1920, 1080),
+                                  visibleFrame=lambda: A.NSMakeRect(0, 85, 1920, 970))
+        secondary = SimpleNamespace(frame=lambda: A.NSMakeRect(-1920, 0, 1920, 1080),
+                                    visibleFrame=lambda: A.NSMakeRect(-1920, 40, 1920, 1015))
+        root = SimpleNamespace(panel=Mock())
+        root.panel.screen.return_value = primary
+        return A, primary, secondary, root
+
+    def test_tucked_display_bounds_include_menu_bar_and_dock(self):
+        A, primary, secondary, root = self.screens()
+        with patch.object(A, 'NSScreen', Mock(screens=lambda: [primary, secondary])):
+            self.assertEqual(mac.screen_bounds(root, (100, 100)), (0, 50, 3840, 1940))
+            self.assertEqual(mac.screen_bounds(root, (100, 100), work_area=False), (0, 0, 3840, 2160))
+            # A different window or host monitor does not change the chosen display.
+            root.panel.screen.return_value = secondary
+            self.assertEqual(mac.screen_bounds(root, (100, 100), work_area=False), (0, 0, 3840, 2160))
+
+    def test_pointer_near_monitor_boundary_is_not_offset_to_another_monitor(self):
+        A, primary, secondary, root = self.screens()
+        with patch.object(A, 'NSScreen', Mock(screens=lambda: [primary, secondary])):
+            self.assertEqual(mac.screen_bounds(root, (-1, 400), work_area=False), (-3840, 0, 3840, 2160))
+            self.assertEqual(mac.screen_bounds(root, (0, 400), work_area=False), (0, 0, 3840, 2160))
+            self.assertEqual(mac.screen_bounds(root, (-10000, 400), work_area=False), (-3840, 0, 3840, 2160))
+
+    def test_top_edge_anchor_stays_on_its_monitor_with_a_display_above(self):
+        A, primary, _, root = self.screens()
+        above = SimpleNamespace(frame=lambda: A.NSMakeRect(0, 1080, 1920, 1080))
+        with patch.object(A, 'NSScreen', Mock(screens=lambda: [primary, above])):
+            self.assertEqual(mac.screen_bounds(root, (100, 0), work_area=False), (0, 0, 3840, 2160))
+            self.assertEqual(mac.screen_bounds(root, (100, -1), work_area=False), (0, -2160, 3840, 2160))
+
+
 @unittest.skipUnless(sys.platform == "darwin", "macOS backend")
 class AccessibilitySetupTests(unittest.TestCase):
     def offer(self, config, choice=1001, trusted=False, force=False):

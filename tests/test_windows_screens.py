@@ -1,4 +1,4 @@
-"""Windows placement follows the monitor under the widget and clears the taskbar."""
+"""Full widgets clear the taskbar; tucked strips follow the display edges."""
 import sys
 import unittest
 from types import SimpleNamespace
@@ -45,6 +45,13 @@ class WindowsScreenTests(unittest.TestCase):
         _x, _y, width, height = self.win.screen_bounds(self.root, (10 ** 6, 10 ** 6))
         self.assertGreater(width, 0)
         self.assertGreater(height, 0)
+
+    def test_tucked_bounds_include_taskbar_and_match_the_physical_monitor(self):
+        for left, top, right, bottom in self.monitors():
+            with self.subTest(monitor=(left, top, right, bottom)):
+                self.assertEqual(self.win.screen_bounds(self.root,
+                    ((left+right)//2, (top+bottom)//2), work_area=False),
+                    (left, top, right-left, bottom-top))
 
 
 if __name__ == '__main__':

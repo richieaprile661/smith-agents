@@ -494,6 +494,12 @@ def _native_classes():
         def canBecomeMainWindow(self):
             return False
 
+        def constrainFrameRect_toScreen_(self, frame, screen):
+            # The controller already clamps the visible chip to the monitor.
+            # AppKit otherwise moves the *shadow canvas* below the menu bar
+            # on orderFront, shifting the strip and its pointer coordinates.
+            return frame
+
     class WidgetView(A.NSView):
         def isFlipped(self):
             return True
@@ -620,6 +626,10 @@ class MacWindow:
     def paint(self, image, x, y, opacity=1.0):
         import AppKit as A
         self.xy = (x, y)
+        # A tucked strip belongs to the display edge, including over the menu
+        # bar. The full widget keeps the usual floating-window level.
+        self.panel.setLevel_(A.NSStatusWindowLevel+1 if self.view.widget.config.get('tucked')
+                             else A.NSFloatingWindowLevel)
         width, height = image.width / RASTER_SCALE, image.height / RASTER_SCALE
         self.panel.setFrame_display_(A.NSMakeRect(x / RASTER_SCALE,
             _desktop_top() - y / RASTER_SCALE - height, width, height), False)
@@ -689,20 +699,32 @@ class MacWindow:
         self.application.postEvent_atStart_(wake, True)
 
 
-def screen_bounds(root, position=None):
-    """Usable screen in shared top-left, Retina-pixel coordinates.
+def screen_bounds(root, position=None, *, work_area=True):
+    """Selected display in shared top-left, Retina-pixel coordinates.
 
-    visibleFrame excludes the menu bar/notch and Dock. Free placement follows
-    the monitor containing the widget and recovers if that monitor disappears.
+    Full widgets clear the menu bar and Dock. Tucked strips use the physical
+    display frame, independent of every application window.
     """
     import AppKit as A
     screens = list(A.NSScreen.screens())
     selected = root.panel.screen() or screens[0]
     if position is not None:
-        point = A.NSMakePoint((position[0] + 80) / RASTER_SCALE,
-                              _desktop_top() - (position[1] + 80) / RASTER_SCALE)
-        selected = next((s for s in screens if A.NSPointInRect(point, s.frame())), selected)
-    frame = selected.visibleFrame()
+        point = A.NSMakePoint(position[0] / RASTER_SCALE,
+                              _desktop_top() - position[1] / RASTER_SCALE)
+        def distance(screen):
+            frame = screen.frame()
+            dx = max(frame.origin.x-point.x, 0, point.x-frame.origin.x-frame.size.width)
+            dy = max(frame.origin.y-point.y, 0, point.y-frame.origin.y-frame.size.height)
+            return dx*dx+dy*dy
+        def contains(screen):
+            frame = screen.frame()
+            # Shared coordinates include the top edge, unlike AppKit's
+            # bottom-left convention. A top-edge anchor stays on its monitor.
+            return (frame.origin.x <= point.x < frame.origin.x+frame.size.width
+                    and frame.origin.y < point.y <= frame.origin.y+frame.size.height)
+        selected = next((s for s in screens if contains(s)),
+                        min(screens, key=distance))
+    frame = selected.visibleFrame() if work_area else selected.frame()
     return (round(frame.origin.x * RASTER_SCALE),
             round((_desktop_top() - frame.origin.y - frame.size.height) * RASTER_SCALE),
             round(frame.size.width * RASTER_SCALE), round(frame.size.height * RASTER_SCALE))
@@ -795,7 +817,7 @@ class MacTray:
         item(menu, "Tuck to edge", w.toggle_tuck, w.config["tucked"])
         submenu("Tuck position", [(edge.title(), lambda edge=edge: w.set_tuck(True, side=edge),
                                     w.config['tucked'] and w.config['tuck_side'] == edge)
-                                   for edge in ('top', 'left', 'right')])
+                                   for edge in ('top', 'bottom', 'left', 'right')])
         submenu("Dock", [(d.replace("-", " ").title(), lambda d=d: w.set_dock(d),
                            w.config["dock"] == d) for d in c.DOCKS])
         submenu("Opacity", [("%d%%" % (v * 100), lambda v=v: w.set_opacity(v),

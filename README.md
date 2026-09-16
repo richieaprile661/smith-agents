@@ -15,8 +15,8 @@ working in your editor.
 
 ## Why Smith Agents
 
-- **Keep working while your agents run.** Tuck the widget against the top, left,
-  or right edge of your screen. Each agent appears as a small figure whose pose
+- **Keep working while your agents run.** Tuck the widget against the top, bottom,
+  left, or right edge of your screen. Each agent appears as a small figure whose pose
   and color show its state, so a glance tells you who's working, who's done, and
   who's waiting.
 - **See the actual work, not just "busy".** Every session shows the command it's
@@ -47,9 +47,15 @@ to answer them in.
 
 <img src="docs/images/github-tuck.png" alt="A code editor fills the screen. The Smith Agents strip sits along the top edge with three figures, and the selected api-service panel shows an approval request with Allow and Deny." width="880">
 
-The tucked strip keeps one figure per agent along the edge of your screen. Click
+The tucked strip follows the monitor's outer edges, independent of editor or
+terminal windows, including the menu bar and taskbar areas. Click
 a figure to open that agent's panel, and click it again to put the panel away.
-The agents keep running either way.
+The agents keep running either way. Each tile has a centered figure, a small
+name underneath, and its provider logo in the upper-left corner. The side
+strip is 88 px wide; tiles across the top and bottom remain 108 px wide.
+Panels open inward and keep extra details under **Read more**. Click a glowing
+provider logo to switch providers. Click the Smith icon on the side or top strip
+to return to the full view.
 
 ## Pick a theme
 
@@ -134,8 +140,8 @@ on macOS.
    Smith Agents finds it within a few seconds.
 2. **Check in.** The **Agents** tab lists your sessions. **Usage** and **Stats**
    show readings for the selected provider. Click a session to see its details.
-3. **Tuck it away.** Click the tuck control, then drag the strip along the top or
-   either side of the screen.
+3. **Tuck it away.** Click the tuck control, then drag the strip along any
+   of the four screen edges.
 4. **Go to an agent.** Click **Open terminal**, **Open chat**, or **Open window**.
    If that window is already open, the link reads **Hide** instead.
 

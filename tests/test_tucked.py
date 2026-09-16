@@ -25,7 +25,7 @@ class TuckedTests(unittest.TestCase):
                 self.assertGreaterEqual(motion.frame_at(motion.periodic_elapsed(start + seconds)), motion.ACTION_FRAMES)
         self.assertGreaterEqual(motion.frame_at(60), motion.ACTION_FRAMES)
 
-    def test_top_scrolls_horizontally_with_fixed_counts_and_reading(self):
+    def test_top_scrolls_horizontally_with_fixed_brand_and_lamps(self):
         rows = agents(20)
         first, top_boxes, layout = self.render(rows, side='top', max_width=core.px(700))
         last, end_boxes, end_layout = self.render(rows, side='top', max_width=core.px(700), scroll=10**6)
@@ -33,7 +33,7 @@ class TuckedTests(unittest.TestCase):
         self.assertGreater(layout.rail_scroll_max, 0)
         self.assertEqual(first.size, last.size)
         self.assertEqual(layout.rail, end_layout.rail)
-        for kind in ('peek-expand', 'reading'):
+        for kind in ('peek-expand', 'provider:claude', 'provider:codex'):
             box = next(b for b in top_boxes if b[0] == kind)
             self.assertEqual(box, next(b for b in end_boxes if b[0] == kind))
             p = core.SHADOW_PAD
@@ -60,12 +60,12 @@ class TuckedTests(unittest.TestCase):
         self.assertEqual(len(set(origins)), 1)
         self.assertEqual(origins[0][1], core.px(30))
 
-    def test_only_top_and_two_sides_are_drag_destinations(self):
+    def test_all_four_edges_are_drag_destinations(self):
         bounds = (-1000, 30, 1000, 800)
         for point, edge in (((-999, 400), 'left'), ((-1, 400), 'right'),
-                            ((-500, 32), 'top'), ((-900, 829), 'left')):
+                            ((-500, 32), 'top'), ((-900, 829), 'bottom')):
             self.assertEqual(tucked.nearest_edge(bounds, *point), edge)
-        self.assertNotIn('bottom', tucked.EDGES)
+        self.assertIn('bottom', tucked.EDGES)
 
     def test_tucked_drag_selects_edge_saves_position_and_does_not_click(self):
         widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
@@ -120,16 +120,16 @@ class TuckedTests(unittest.TestCase):
         rows[1]['state'] = 'closed'
         self.assertEqual([a['id'] for a in order.sync(rows + [helper])], ['0', 'helper', '2'])
 
-    def test_short_list_fits_and_twenty_scroll_with_fixed_header_and_usage(self):
-        _, boxes, layout = self.render(agents(7))
+    def test_short_list_fits_and_twenty_scroll_with_fixed_brand_and_lamps(self):
+        _, boxes, layout = self.render(agents(5))
         self.assertEqual(layout.rail_scroll_max, 0)
-        self.assertEqual(len([b for b in boxes if b[0] == 'peek-agent']), 7)
+        self.assertEqual(len([b for b in boxes if b[0] == 'peek-agent']), 5)
         image, top, layout = self.render(agents(20))
         bottom_image, bottom, bottom_layout = self.render(agents(20), scroll=10**6)
         self.assertGreater(layout.rail_scroll_max, 0)
         self.assertEqual(image.size, bottom_image.size)
         self.assertEqual(layout.rail, bottom_layout.rail)
-        for kind in ('peek-expand', 'reading'):
+        for kind in ('peek-expand', 'provider:claude', 'provider:codex'):
             a = next(b for b in top if b[0] == kind)
             b = next(b for b in bottom if b[0] == kind)
             self.assertEqual(a, b)
@@ -180,6 +180,79 @@ class TuckedTests(unittest.TestCase):
         self.assertNotIn('kill', [b[0] for b in boxes])
         rows[1].update(sub=True, parent='0')
         _, boxes, _ = self.render(rows, selected='1')
+        self.assertNotIn('kill', [b[0] for b in boxes])
+
+    def test_panels_open_inward_and_stay_on_offset_monitors_at_all_corners(self):
+        p = core.px
+        bounds = (-p(1200), p(30), p(1200), p(650))
+        rows = agents(4)
+        for side in tucked.EDGES:
+            for anchor in (0, p(2000)):
+                with self.subTest(side=side, anchor=anchor):
+                    widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
+                    widget.config = {'tuck_side': side}
+                    widget._screen_bounds = lambda: bounds
+                    origins = []
+                    for selected in (None, '0', '3'):
+                        im, boxes, layout = self.render(rows, side=side, selected=selected,
+                            max_width=bounds[2], max_height=bounds[3]-p(28), rail_x=anchor, rail_y=anchor)
+                        widget._peek_layout = layout
+                        x, y = widget._peek_position(im.size)
+                        origins.append((x+layout.rail[0], y+layout.rail[1]))
+                        for rect in (layout.rail, layout.panel):
+                            if rect:
+                                self.assertGreaterEqual(x+rect[0], bounds[0])
+                                self.assertGreaterEqual(y+rect[1], bounds[1])
+                                self.assertLessEqual(x+rect[2], bounds[0]+bounds[2])
+                                self.assertLessEqual(y+rect[3], bounds[1]+bounds[3])
+                        if side == 'left':
+                            self.assertEqual(x+layout.rail[0], bounds[0])
+                            if selected:
+                                self.assertGreater(layout.panel[0], layout.rail[2])
+                        elif side == 'right':
+                            self.assertEqual(x+layout.rail[2], bounds[0]+bounds[2])
+                            if selected:
+                                self.assertLess(layout.panel[2], layout.rail[0])
+                        elif side == 'top':
+                            self.assertEqual(y+layout.rail[1], bounds[1])
+                            if selected:
+                                self.assertGreater(layout.panel[1], layout.rail[3])
+                        else:
+                            self.assertEqual(y+layout.rail[3], bounds[1]+bounds[3])
+                            if selected:
+                                self.assertLess(layout.panel[3], layout.rail[1])
+                    self.assertEqual(len(set(origins)), 1)
+
+    def test_long_names_and_empty_or_overflowing_lists_have_valid_hit_targets(self):
+        for side in tucked.EDGES:
+            for count in (0, 1, 20):
+                rows = agents(count)
+                for agent in rows:
+                    agent.update(name='very-long-project-name-'*10, session_label='Session 123456')
+                    self.assertLessEqual(len(tucked._name_lines(agent)), 2)
+                for scroll in (0, 10**6):
+                    with self.subTest(side=side, count=count, scroll=scroll):
+                        im, boxes, layout = self.render(rows, side=side, max_height=core.px(240),
+                            max_width=core.px(400), scroll=scroll, selected='0' if rows else None)
+                        self.assertLessEqual(im.height-2*core.SHADOW_PAD, core.px(240))
+                        self.assertLessEqual(im.width-2*core.SHADOW_PAD, core.px(400))
+                        if not layout.horizontal:
+                            self.assertEqual(layout.rail[2]-layout.rail[0], core.px(88))
+                        for kind, x0, y0, x1, y1, _ in boxes:
+                            self.assertTrue(0 <= x0 < x1 <= im.width-2*core.SHADOW_PAD, kind)
+                            self.assertTrue(0 <= y0 < y1 <= im.height-2*core.SHADOW_PAD, kind)
+                        if rows:
+                            ids = [b[-1]['id'] for b in boxes if b[0] == 'peek-agent']
+                            self.assertIn(str(count-1) if scroll else '0', ids)
+
+    def test_panel_shows_reply_and_read_more_without_unused_footer(self):
+        row = agents(1)[0]
+        _, boxes, layout = self.render([row], selected='0', max_height=core.px(900))
+        self.assertEqual(layout.panel_scroll_max, 0)
+        self.assertEqual(layout.panel[3]-layout.panel[1],
+                         tucked.PANEL_HEAD_H+core.agent_row_height(row, True)+core.agent_drawer_height(row))
+        self.assertIn('open', [b[0] for b in boxes])
+        self.assertIn('details', [b[0] for b in boxes])
         self.assertNotIn('kill', [b[0] for b in boxes])
 
     def test_controller_selects_switches_and_closes_without_untucking(self):
