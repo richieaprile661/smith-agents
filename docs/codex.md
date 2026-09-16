@@ -3,13 +3,15 @@
 Smith Agents shows local Codex CLI and VS Code extension sessions next to your
 Claude Code sessions, in the **Agents** tab and in the tucked strip. Codex sessions
 use the same figures, state colors, context meters, and project names. A provider
-logo on each row shows whether Claude or Codex runs it. Monitoring Codex doesn't require a
+logo on each card shows whether Claude or Codex runs it. Monitoring Codex doesn't require a
 Claude login or an OpenAI API key.
 
-The **Usage** and **Stats** tabs show the provider that's selected with the
-Claude and Codex switch above the header readings. In the tucked strip, click the
+The **Usage** and **Stats** tabs show the provider selected with the
+Claude and Codex logos at the top right; the selected logo glows. In the tucked strip, click the
 provider logo beside the usage reading to switch. The agent list always shows both
-providers.
+providers. Completed helpers appear as compact rows under their parent session;
+**View result** opens their reply and details. The footer counts sessions and
+helpers separately. Internal permission-review threads are excluded.
 
 ## Set up Codex monitoring
 
@@ -78,8 +80,8 @@ the reset time, and any model-specific buckets. It doesn't assume that every pla
 has both a 5-hour and a weekly limit. The main Codex bucket comes first, and each
 additional bucket has its own label.
 
-- Click the header readings to switch between the percentage used, the percentage
-  remaining, and the reset time or day. The small caption shows the current view.
+- Click the account usage strip below the session cards to open **Usage**. The
+  strip shows weekly usage when available; the full view shows every limit.
 - In the tucked strip, click the reading to cycle through the available windows.
 
 ### Stats
@@ -157,8 +159,8 @@ separate from the transcript reader because
 
 ## Window controls
 
-**Open window** brings the agent's host window to the front, and **Hide window**
-minimizes it while the agent keeps running:
+**Go to session** brings the agent's host window to the front. **Hide window**
+under **Read more** below **Go to session** minimizes it while the agent keeps running:
 
 - These controls don't switch to a particular terminal tab or extension
   conversation.

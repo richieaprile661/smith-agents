@@ -101,6 +101,43 @@ class AgentContextTests(unittest.TestCase):
                               ("custom-model", "custom-model")):
             self.assertEqual(core.agent_model_source({"model": raw, "entrypoint": "claude-vscode"}), expected + " · VS Code")
 
+    def test_project_titles_preserve_real_folder_suffixes_on_both_platforms(self):
+        for path, expected in (("/Users/me/Projects/qilobot", "qilobot"),
+                               ("C:\\Users\\me\\Projects\\qilobot\\", "qilobot"),
+                               ("/projects/qilobot-30", "qilobot-30"),
+                               ("/", "/"), ("", "Named session")):
+            with self.subTest(path=path):
+                self.assertEqual(core.project_title(path, "Named session"), expected)
+
+    def test_claude_session_label_only_appears_for_shared_live_project(self):
+        from smith_agents import tucked
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = str(root / "qilobot")
+            first = dict(sessionId="first", pid=123, name="qilobot-30", cwd=project)
+            (root / "first.json").write_text(json.dumps(first))
+            with patch.object(core, "SESSIONS_DIR", directory), \
+                 patch.object(core.platform, "session_process_start", return_value=0), \
+                 patch.object(core, "_pid_alive", return_value=True), \
+                 patch.object(core, "_agent_transcript", return_value=None), \
+                 patch.object(core, "list_subagents", return_value=[]):
+                rows = core.label_shared_sessions(core._list_claude_agents())
+                self.assertEqual(rows[0]["name"], "qilobot")
+                self.assertEqual(rows[0]["session_name"], "qilobot-30")
+                self.assertNotIn("session_label", rows[0])
+                self.assertEqual(tucked._name_lines(rows[0]), ["qilobot"])
+                (root / "second.json").write_text(json.dumps(dict(first, sessionId="second", name="qilobot-31")))
+                rows = core.label_shared_sessions(core._list_claude_agents())
+                self.assertEqual({a["session_label"] for a in rows}, {"qilobot-30", "qilobot-31"})
+                for row in rows:
+                    self.assertEqual(row["name"], "qilobot")
+                    self.assertEqual(tucked._name_lines(row), ["qilobot", row["session_label"]])
+                rows[1]["state"] = "closed"
+                rows.append(dict(rows[0], id="helper", name="Review tests", sub=True))
+                core.label_shared_sessions(rows)
+                self.assertTrue(all("session_label" not in row for row in rows))
+                self.assertEqual(rows[-1]["name"], "Review tests")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -127,11 +127,10 @@ class PermissionTests(unittest.TestCase):
             widget.agents = [row]
             _, boxes = core.render_console([], None, {}, [row], time.time())
             widget.agent_rows = boxes
-            # Choose the explicit bottom action, not the Approval needed link.
+            # Primary review and secondary deny must not overlap the details disclosure.
             box = [box for box in boxes if box[0] == kind][-1]
             row_box = next(box for box in boxes if box[0] == 'row')
-            self.assertGreaterEqual(box[2], row_box[2])
-            self.assertLessEqual(box[4], row_box[4])
+            self.assertGreater(box[2], row_box[4])
             before = len(self.child)
             with patch.object(app.platform, 'review_permission', return_value=decision) as review, \
                  patch.object(app, 'answer_permission', side_effect=lambda directory, item, choice:

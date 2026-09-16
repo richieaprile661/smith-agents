@@ -86,6 +86,11 @@ class UserFlowTests(unittest.TestCase):
                     opened.assert_called_once_with(w.agents[1])
                     w.agents[1]['_window_open'] = True
                     w._repaint()
+                    self.reveal(w, 'row')
+                    self.click(w, 'row')
+                    self.reveal(w, 'details')
+                    self.click(w, 'details')
+                    self.reveal(w, 'hide')
                     self.click(w, 'hide')
                     hidden.assert_called_once_with(w.agents[1])
                     ended.assert_not_called()
@@ -194,6 +199,12 @@ class UserFlowTests(unittest.TestCase):
         w._repaint()
         self.click(w, 'peek-agent', '0')
         self.assertLessEqual(w._peek_layout.panel[3]-c.SHADOW_PAD, c.px(240))
+        self.reveal(w, 'row')
+        self.click(w, 'row')
+        self.reveal(w, 'details')
+        self.click(w, 'details')
+        w._peek_panel_scroll = 0
+        w._repaint()
         # Each press advances by at most half a viewport, so controls are not skipped.
         seen = set()
         while True:

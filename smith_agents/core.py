@@ -82,7 +82,7 @@ ZOOM = _startup_zoom()
 def px(value):
     return int(round(value * SCALE * ZOOM))
 
-# The console is drawn at the handoff's 320px; 1.0 is its true size and every
+# The console is drawn at 280px; 1.0 is its true size and every
 # step above it is an upscale, which is why they are offered rather than baked.
 ZOOM_STEPS = (1.0, 1.15, 1.3, 1.5)
 
@@ -638,6 +638,29 @@ def pretty_project(name):
     return name.strip("-") or name
 
 
+def project_title(cwd, fallback="Claude session"):
+    """Display the actual folder name, without changing legitimate suffixes."""
+    path = (cwd or "").replace("\\", "/").rstrip("/")
+    return path.rsplit("/", 1)[-1] if path else (cwd or fallback)
+
+
+def label_shared_sessions(agents):
+    """Keep provider session names secondary, only for shared live projects."""
+    groups = {}
+    for agent in agents:
+        agent.pop("session_label", None)
+        if agent.get("sub") or agent.get("state") == "closed" or not agent.get("cwd"):
+            continue
+        key = os.path.normcase(os.path.normpath(agent["cwd"]))
+        groups.setdefault(key, []).append(agent)
+    for group in groups.values():
+        if len(group) > 1:
+            for agent in group:
+                if agent.get("session_name"):
+                    agent["session_label"] = agent["session_name"]
+    return agents
+
+
 # Parsing every transcript on every poll is wasteful - only the session being
 # written to actually changes, so results are memoised on (size, mtime, window).
 STATS_DAYS = 14
@@ -907,7 +930,8 @@ def _list_claude_agents(idle_after=AGENT_IDLE_S):
             "started_at": started,
             "process_created": platform.process_start_time(started),
             "id": session_id,
-            "name": data.get("name") or pretty_project(_encode_path(cwd)) or "claude",
+            "name": project_title(cwd, data.get("name") or "Claude session"),
+            "session_name": data.get("name"),
             "cwd": cwd,
             "entrypoint": data.get("entrypoint"),
             "state": state,
@@ -971,7 +995,7 @@ def list_agents(idle_after=AGENT_IDLE_S):
     except Exception as error:
         # One provider must not hide the other provider's sessions.
         log_line("Codex session scan: %s" % type(error).__name__)
-    return visible_helpers(agents, time.time())
+    return label_shared_sessions(visible_helpers(agents, time.time()))
 
 
 def list_subagents(parent, idle_after=AGENT_IDLE_S):
@@ -1205,14 +1229,12 @@ def agent_activity_stamp(agent):
     tools = current_tools(data)
     if tools and tools[-1].get("started_at"):
         return agent_elapsed({"idle": time.time() - tools[-1]["started_at"]}) + " in tool"
-    if data.get("ended_at") and data.get("started_at"):
-        return agent_elapsed({"idle": data["ended_at"] - data["started_at"]}) + " total"
     elapsed = agent_elapsed(agent)
     if not elapsed:
         return "Activity unknown"
     if agent.get("idle", 0) < 5 and agent.get("state") == "working":
         return "Active now"
-    return ("Updated " if agent.get("state") == "working" else "Idle ") + elapsed
+    return "Last activity just now" if agent.get("idle", 0) < 5 else "Last activity " + elapsed + " ago"
 
 
 def agent_activity(agent):
@@ -1509,7 +1531,7 @@ ICON_PATH = os.path.join(SCRIPT_DIR, "assets", "smith-agents.ico")
 # --------------------------------------------------------------------------
 # the agent console - transcribed from design/handoff_agent_console
 #
-# One 320px shell. Collapsed it is a bar: a figure, the session percentage, a
+# One 280px shell. Collapsed it is a bar: a figure, the session percentage, a
 # meta line and three state counts. Expanded it is a segmented tab bar -
 # Usage, Stats, Agents - over a single flat ruled sheet.
 # --------------------------------------------------------------------------
@@ -1541,7 +1563,7 @@ STATE_STRIP = {state: names[0] for state, names in STATE_STRIPS.items()}
 STATE_MOVES = ("working", "needs", "done", "closed")
 STATE_RANK = {"needs": 0, "working": 1, "done": 2, "closed": 3}
 
-CONSOLE_W = px(320)
+CONSOLE_W = px(280)
 PAD_X = px(12)
 # The strips are drawn 88px wide with a two pixel pen. Squeezed into the
 # handoff's 40x24 cell they lose the pen entirely, so the cell is sized to the
@@ -1551,10 +1573,10 @@ CELL_H = px(52)
 BAR_H = px(88)
 TAB_H = px(28)
 ROW_H = px(108)  # minimum; long names and font metrics can grow a row
-ROW_FIGURE_W = px(57)
-ROW_FIGURE_H = px(44)
+ROW_FIGURE_W = px(56)
+ROW_FIGURE_H = px(42)
 ROW_NAME_GAP = px(8)
-FOOT_H = px(27)
+FOOT_H = px(49)
 KILL_W = px(16)
 GAP = px(8)
 # Tucked, this much of the console stays on screen: the group over the
@@ -1563,7 +1585,7 @@ PEEK_W = px(108)
 
 DRAWER_LINES = 6
 
-TABS = ("usage", "stats", "agents")
+TABS = ("agents", "usage", "stats")
 TAB_LABEL = {"usage": "Usage", "stats": "Stats", "agents": "Agents"}
 
 
@@ -2186,127 +2208,108 @@ def render_peek(counts, metrics, front, now, side="right", mode="worst", header_
     return with_shadow(chip), boxes
 
 
-def render_header_numbers(pen, metrics, front, counts, mode, notice, reading_view="used"):
-    """Align usage readings and agent counts in two fixed groups."""
-    label_font = FONT("bold", 9)
-    value_font = FONT("semi", 17)
-    label_y, value_y = px(36), px(50)
-    usage_right = px(138)
-    shown = bar_reading(metrics, front, mode)
-    if shown is not None:
-        readings = list(metrics or [shown])
-        if shown not in readings[:3]:
-            readings = [shown] + [m for m in readings if m is not shown]
-        column = (usage_right - PAD_X) // 3
-        for index, metric in enumerate(readings[:3]):
-            x = PAD_X + index * column
-            room = column - px(5)
-            pen.text((x, label_y), elide(caps(metric.get("header_label") or metric["label"]), label_font, room),
-                     font=label_font, fill=_tok("fg") if metric is shown else _ink(62))
-            value = header_reading_value(metric, reading_view)
-            font = value_font
-            for size in (16, 15, 14, 13, 12, 11):
-                if text_w(value, font) <= room:
-                    break
-                font = FONT("semi", size)
-            pen.text((x, value_y + ascent(value_font) - ascent(font)), value,
-                     font=font, fill=usage_tone(metric["pct"]))
-        hint = {"used": "Used · click →",
-                "remaining": "Remaining · click →",
-                "reset": "Resets · click →"}.get(reading_view, "Used")
-        pen.text((PAD_X, px(74)), hint, font=FONT("book", 8), fill=_ink(62))
-    else:
-        kind, message = notice if notice else ("", "Usage offline")
-        pen.text((PAD_X, label_y), caps("usage"), font=label_font, fill=_ink(62))
-        pen.text((PAD_X, value_y), "--", font=value_font, fill=_ink(45))
-        message_font = FONT("book", 9)
-        pen.text((PAD_X + px(24), value_y + ascent(value_font) - ascent(message_font)),
-                 elide(message, message_font, usage_right - PAD_X - px(28)),
-                 font=message_font, fill=_tok("crit") if kind == "auth" else _ink(62))
+BRAND_TEXT_SIZE = 16
 
-    divider_x = px(142)
-    pen.line([(divider_x, px(11)), (divider_x, BAR_H - px(11))],
-             fill=_ink(13), width=max(1, px(0.5)))
-    agents_left, agents_width = px(151), px(66)
-    title = caps("agents")
-    pen.text((agents_left + (agents_width - text_w(title, label_font)) // 2, px(24)),
-             title, font=label_font, fill=_ink(62))
-    colours = {"working": ("ff5f57", "e0443e"),
-               "needs": ("ffbd2e", "dea123"),
-               "done": ("28c840", "1aab29")}
-    count_font = FONT("semi", 10)
-    for index, state in enumerate(("working", "needs", "done")):
-        cx = agents_left + (index * 2 + 1) * agents_width // 6
-        count = counts.get(state, 0)
-        fill, outline = (tuple(_rgb(value) for value in colours[state])
-                         if count else (_ink(20), _ink(30)))
-        pen.ellipse((cx - px(6), px(43), cx + px(6) - 1, px(55) - 1),
-                    fill=fill, outline=outline, width=max(1, px(0.5)))
-        text = str(count) if count < 100 else "99+"
-        pen.text((cx - text_w(text, count_font) // 2, px(60)), text,
-                 font=count_font, fill=_ink(78) if count else _ink(45))
-    return shown is not None
+
+@lru_cache(maxsize=8)
+def brand_font(size=BRAND_TEXT_SIZE):
+    """One actual typeface and point size for both brand labels."""
+    candidates = (
+        os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "cour.ttf"),
+        "/System/Library/Fonts/Supplemental/Courier New.ttf",
+        "/System/Library/Fonts/Courier.ttc",
+    )
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, px(size))
+        except OSError:
+            pass
+    return _variable_font(os.path.join(FONT_DIR, "FiraCode.ttf"), size, ("Regular",))
+
+
+def brand_baseline(font, height):
+    ascent, descent = font.getmetrics()
+    return (height - ascent - descent) // 2 + ascent
+
+
+@lru_cache(maxsize=32)
+def brand_glow(text, size, height):
+    font = brand_font(size)
+    width = 2 * math.ceil(text_w(text, font) / 2) + px(12)
+    mask = Image.new("L", (width, height))
+    ImageDraw.Draw(mask).text((width//2, brand_baseline(font, height)), text,
+                             font=font, anchor="ms", fill=255)
+    glow = Image.new("RGBA", mask.size)
+    for radius, colour, strength in ((3, (69, 217, 0), .25),
+                                      (1.5, (98, 255, 0), .45),
+                                      (.5, (139, 255, 54), .6)):
+        halo = Image.new("RGBA", mask.size, colour + (0,))
+        halo.putalpha(mask.filter(ImageFilter.GaussianBlur(px(radius) * size / BRAND_TEXT_SIZE)).point(
+            lambda value: round(value * strength)))
+        glow.alpha_composite(halo)
+    return glow
+
+
+def draw_brand_text(chip, pen, text, center_x, top, height, active=True,
+                    size=BRAND_TEXT_SIZE, monochrome_ink=None):
+    font = brand_font(size)
+    if monochrome_ink is None and THEME_NAME != "eink":
+        glow = brand_glow(text, size, height)
+        if not active:
+            glow = glow.copy()
+            glow.putalpha(glow.getchannel("A").point(lambda value: round(value * .6)))
+        chip.alpha_composite(glow, (round(center_x-glow.width/2), top))
+    ink = monochrome_ink or (_tok("fg") if THEME_NAME == "eink" else (255, 254, 240, 255))
+    if not active:
+        ink = _ink(62)
+    pen.text((center_x, top + brand_baseline(font, height)), text,
+             font=font, anchor="ms", fill=ink)
+
+
+def smith_wordmark(width, height, monochrome_ink=None):
+    """Render live lettering for documentation exports too."""
+    image = Image.new("RGBA", (width, height))
+    draw_brand_text(image, ImageDraw.Draw(image), "Smith", width//2, 0, height,
+                    size=BRAND_TEXT_SIZE * width / px(64), monochrome_ink=monochrome_ink)
+    return image
 
 
 @lru_cache(maxsize=16)
-def smith_wordmark(width, height, monochrome_ink=None):
-    """Keep the approved lettering and spacing identical on both platforms."""
-    with Image.open(os.path.join(SCRIPT_DIR, "assets", "smith-wordmark-mask.png")) as source:
-        mask = source.convert("L").resize((width, height), Image.Resampling.LANCZOS)
-    logo = Image.new("RGBA", (width, height))
-    if monochrome_ink is None:
-        unit = width / 64
-        for radius, colour, strength in ((3, (69, 217, 0), .25),
-                                          (1.5, (98, 255, 0), .45),
-                                          (.5, (139, 255, 54), .6)):
-            halo = Image.new("RGBA", logo.size, colour + (0,))
-            halo.putalpha(mask.filter(ImageFilter.GaussianBlur(radius * unit)).point(
-                lambda value: round(value * strength)))
-            logo.alpha_composite(halo)
-    lettering = Image.new("RGBA", logo.size, monochrome_ink or (255, 254, 240, 255))
-    lettering.putalpha(mask)
-    logo.alpha_composite(lettering)
-    return logo
+def smith_header_icon(width, height, ink):
+    icon = artwork.tray_icon(min(width, height), ink)
+    # Center the visible ink, so the extended arm does not push the body right.
+    def ink_center(alpha):
+        values = alpha.tobytes()
+        total = sum(values)
+        return (sum((index % alpha.width + .5) * value for index, value in enumerate(values)) / total
+                if total else alpha.width / 2)
+    lettering = Image.new("L", (width, px(22)))
+    font = brand_font()
+    ImageDraw.Draw(lettering).text((width//2, brand_baseline(font, lettering.height)),
+                                   "Smith", font=font, anchor="ms", fill=255)
+    left = round(ink_center(lettering) - ink_center(icon.getchannel("A")))
+    cell = Image.new("RGBA", (width, height))
+    cell.alpha_composite(icon, (left, height-icon.height))
+    return cell
 
 
 def render_console_bar(chip, pen, metrics, front, spend, counts, now,
                        expanded, mode="worst", notice=None, header_frame=None, provider=None,
                        reading_view="used"):
-    """Show usage columns, agent counts, figure, and fold/tuck controls.
-
-    Clicking the usage group cycles used, remaining, and reset. Both platforms
-    use the same layout; fonts and geometry follow the selected theme/scale.
-    """
+    """Provider lamps, Smith icon, and fold/tuck controls."""
     boxes = []
     if expanded:
         band(pen, EDGE, BAR_H, _ink(5), corners=(True, True, False, False))
 
-    # the figure takes the colour of the most urgent state present, so the
-    # folded bar still says whether anything is waiting on you
-    lead = None
-    for state in ("needs", "working", "done", "closed"):
-        if counts.get(state):
-            lead = state
-            break
-    # with nothing running there is nothing to be urgent about, so the figure
-    # goes quiet rather than taking the last state's colour
-    lead_ink = state_colour(lead) if lead else _ink(52)
-    # a narrower cell than the rows use: the bar has one figure and two lines of
-    # numbers to fit, and the numbers are what it is for
-    BAR_CELL = px(64)
-    fig_x = CONSOLE_W - PAD_X - px(14) - BAR_CELL
-    figure = agent_figure(artwork.HEADER, figure_actions.frame_at(now) if header_frame is None else header_frame,
-                          lead_ink, BAR_CELL, CELL_H)
-    if figure is not None:
-        chip.alpha_composite(figure, (fig_x, (BAR_H - CELL_H) // 2 - px(4)))
+    icon_width = px(64)
+    icon_x = (CONSOLE_W // 3 - icon_width) // 2
+    icon = smith_header_icon(icon_width, CELL_H, _tok("fg"))
+    chip.alpha_composite(icon, (icon_x, (BAR_H - CELL_H) // 2 - px(4)))
 
-    # The existing Agents tab supplies the second line of the name.
-    # Keep the selfie at its full size and use the space beneath its baseline.
-    logo = smith_wordmark(px(64), px(22), _tok("fg") if THEME_NAME == "eink" else None)
-    logo_x = (CONSOLE_W // 3) * 2 + (CONSOLE_W // 3 - logo.width) // 2
-    chip.alpha_composite(logo, (logo_x, BAR_H - logo.height))
+    draw_brand_text(chip, pen, "Smith", (CONSOLE_W // 3)//2,
+                    BAR_H-px(22), px(22))
 
-    caret_x = CONSOLE_W - PAD_X - px(10)
+    caret_x = CONSOLE_W - px(12)
     _chevron(pen, caret_x + px(5), BAR_H // 2,
              _tok("fg") if expanded else _ink(78), expanded)
 
@@ -2317,17 +2320,14 @@ def render_console_bar(chip, pen, metrics, front, spend, counts, now,
     pen.line([(tuck_x - px(4), tuck_y), (tuck_x + px(4), tuck_y)],
              fill=_ink(52), width=max(1, px(1)))
 
-    has_reading = render_header_numbers(pen, metrics, front, counts, mode, notice, reading_view)
     if provider:
         boxes += render_provider_switch(chip, pen, provider)
     boxes.append(("tuck", tuck_x - px(9), 0, tuck_x + px(9), tuck_y + px(8), None))
-    if has_reading:
-        boxes.append(("reading", PAD_X, px(33), px(138), BAR_H - px(3), None))
     boxes.append(("bar", 0, 0, CONSOLE_W, BAR_H, None))
     return boxes
 
 
-def render_tabs(pen, tab, needs):
+def render_tabs(chip, pen, tab, needs):
     """Three equal columns. The active tab is ink with a 2px ink underline; the
     others sit at 78%."""
     boxes = []
@@ -2335,15 +2335,21 @@ def render_tabs(pen, tab, needs):
     font = FONT("bold", 10)
     column = CONSOLE_W // 3
     for index, key in enumerate(TABS):
-        label = TAB_LABEL[key]
-        if key == "agents" and needs:
-            label += " · %d" % needs
-        label = caps(label)
-        width = tracked_w(label, font, px(10) * 0.07)
-        x = index * column + (column - width) // 2
         on = key == tab
-        draw_tracked(pen, (x, BAR_H + px(8)), label, font,
-                     _tok("fg") if on else _ink(78), px(10) * 0.07)
+        if key == "agents":
+            draw_brand_text(chip, pen, TAB_LABEL[key], index*column+column//2,
+                            BAR_H+(TAB_H-px(22))//2, px(22), active=on)
+            if needs:
+                badge_font = FONT("bold", 7)
+                badge = str(needs) if needs < 100 else "99+"
+                pen.text(((index+1)*column-px(3)-text_w(badge, badge_font), BAR_H+px(10)),
+                         badge, font=badge_font, fill=state_colour("needs"))
+        else:
+            label = caps(TAB_LABEL[key])
+            width = tracked_w(label, font, px(10) * 0.07)
+            x = index * column + (column - width) // 2
+            draw_tracked(pen, (x, BAR_H + px(8)), label, font,
+                         _tok("fg") if on else _ink(78), px(10) * 0.07)
         if on:
             pen.rectangle([max(EDGE, index * column), BAR_H + TAB_H - px(2),
                            min(RULE_R, (index + 1) * column),
@@ -2559,28 +2565,73 @@ def panel_wrap(text, font, width, limit=None):
     return lines or ["—"]
 
 
-def agent_row_layout(agent):
-    title_font, small = FONT("semi", 12), FONT("book", 10)
-    text_x = PAD_X + ROW_FIGURE_W + ROW_NAME_GAP + (px(10) if agent.get("sub") else 0)
-    titles = panel_wrap(agent.get("name") or "Claude session", title_font,
-                        CONSOLE_W - PAD_X - px(17) - text_x, 2)
-    identity_h = max(ROW_FIGURE_H, len(titles) * panel_line_height(title_font)
-                     + px(3) + panel_line_height(FONT("semi", 10)))
-    context_y = px(8) + identity_h + px(6) + panel_line_height(small) + px(4)
-    track_y = context_y + panel_line_height(small) + px(2)
-    state_y = track_y + px(3) + px(6)
-    activity_y = state_y + panel_line_height(small) + px(2)
-    height = max(ROW_H, activity_y + panel_line_height(FONT("book", 11)) + px(7))
-    if agent.get("sub") and agent.get("activity"):
-        lines = panel_wrap(agent_activity(agent), FONT("book", 11), CONSOLE_W - PAD_X * 2, 2)
-        height += (len(lines)-1) * panel_line_height(FONT("book", 11)) + panel_line_height(small) + px(7)
-    if (agent.get("permissions") or [{}])[0].get("actionable"):
-        height += panel_line_height(FONT("semi", 10)) + px(8)
-    return titles, text_x, context_y, track_y, state_y, activity_y, height
+def reply_text(value):
+    """Readable prose without Markdown delimiters; fenced code stays literal."""
+    lines, in_code = [], False
+    for line in str(value or "").splitlines():
+        if line.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        if not in_code:
+            line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
+            line = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", line)
+            line = re.sub(r"(\*\*|__)(.+?)\1", r"\2", line)
+            line = re.sub(r"`([^`]+)`", r"\1", line)
+            line = re.sub(r"^\s*[-*]\s+", "• ", line)
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
-def agent_row_height(agent):
-    return agent_row_layout(agent)[-1]
+def compact_helper(agent):
+    return bool(agent.get("sub") and agent.get("state") in ("done", "closed")
+                and not agent.get("permissions"))
+
+
+def quiet_card_layout(agent, open_=False):
+    """Measure the screenshot's identity → context → status → reply order."""
+    title, body, small = FONT("semi", 14), FONT("book", 13), FONT("book", 11)
+    width = CONSOLE_W - 2 * PAD_X
+    text_x = PAD_X + ROW_FIGURE_W + px(8)
+    titles = panel_wrap(agent.get("name") or "Session", title, CONSOLE_W-PAD_X-px(18)-text_x, 2)
+    title_y = px(12)
+    session_y = title_y + len(titles) * panel_line_height(title) + px(3)
+    model_y = session_y + (panel_line_height(small)+px(3) if agent.get('session_label') else 0)
+    context_y = max(px(12)+ROW_FIGURE_H, model_y+panel_line_height(small)) + px(10)
+    track_y = context_y + panel_line_height(small) + px(4)
+    state_y = track_y + px(12)
+    preview_y = state_y + panel_line_height(small) + px(7)
+    data = agent.get("activity") or {}
+    permissions = agent.get("permissions") or []
+    message = data.get("result") or agent.get("latest_message")
+    if permissions or agent.get("state") == "working":
+        heading, message = "Current activity", agent_activity(agent)
+        prose = False
+    else:
+        heading, message = "Latest reply", message or "No reply recorded yet."
+        prose = True
+    value = reply_text(message) if prose else str(message)
+    lines = []
+    for line in value.splitlines():
+        lines.extend(panel_wrap(line or " ", body, width))
+    more = len(lines) > 4
+    shown = lines if agent.get("_reply_expanded", False) else lines[:4]
+    message_y = preview_y + px(7)
+    action_y = message_y + panel_line_height(FONT("bold", 10)) + px(7) + len(shown) * panel_line_height(body) + px(14)
+    reply_y = action_y
+    if more:
+        action_y += panel_line_height(small) + px(12)
+    height = action_y+px(48) if open_ else preview_y+panel_line_height(small)+px(12)
+    if permissions and permissions[0].get("actionable"):
+        height += px(28)
+    return dict(titles=titles, text_x=text_x, title_y=title_y, session_y=session_y,
+                model_y=model_y, stamp_y=state_y, state_y=state_y, preview_y=preview_y,
+                heading=heading, value=value, lines=shown, more=more, message_y=message_y,
+                reply_y=reply_y, action_y=action_y, context_y=context_y,
+                track_y=track_y, height=height)
+
+
+def agent_row_height(agent, open_=False):
+    return px(88) if compact_helper(agent) else quiet_card_layout(agent, open_)["height"]
 
 
 def provider_name(agent):
@@ -2608,18 +2659,44 @@ def draw_provider_badge(chip, agent, left, top):
     return True
 
 
+@lru_cache(maxsize=8)
+def provider_lamp(provider, active):
+    """A bare logo with a coloured halo only for the selected account."""
+    size, inset = px(34), px(8)
+    lamp = Image.new("RGBA", (size, size))
+    logo = _provider_logo(provider, px(18))
+    if logo is None:
+        return lamp
+    if active:
+        mask = Image.new("L", lamp.size)
+        mask.paste(logo.getchannel("A"), (inset, inset))
+        colour = _rgb("ef956c" if provider == "claude" else "8094ff")
+        halo = Image.new("RGBA", lamp.size, colour)
+        glow = mask.filter(ImageFilter.GaussianBlur(px(3)))
+        if provider == "codex":
+            # Keep the transparent terminal mark dark; only the outer edge glows.
+            silhouette = mask.point(lambda alpha: 255 if alpha > 16 else 0)
+            ImageDraw.floodfill(silhouette, (0, 0), 128)
+            silhouette = silhouette.point(lambda value: 0 if value == 128 else 255)
+            glow = ImageChops.subtract(glow, silhouette).point(lambda alpha: round(alpha * .9))
+        else:
+            glow = glow.point(lambda alpha: min(255, round(alpha * 1.5)))
+        halo.putalpha(glow)
+        lamp.alpha_composite(halo)
+    else:
+        logo = logo.copy()
+        logo.putalpha(logo.getchannel("A").point(lambda alpha: round(alpha * .4)))
+    lamp.alpha_composite(logo, (inset, inset))
+    return lamp
+
+
 def render_provider_switch(chip, pen, provider):
     boxes = []
-    top, height, width = px(8), px(22), px(63)
+    top, size = px(3), px(34)
     for index, name in enumerate(("claude", "codex")):
-        x = PAD_X + index * width
-        if name == provider:
-            pen.rounded_rectangle((x, top, x+width-px(3), top+height), radius=px(3), fill=_ink(12))
-        logo = _provider_logo(name, px(18))
-        if logo:
-            chip.alpha_composite(logo, (x+px(2), top+px(2)))
-        pen.text((x+px(23), top+px(6)), name.title(), font=FONT("semi", 8), fill=_ink(88 if name == provider else 52))
-        boxes.append(("provider:"+name, x, top, x+width-px(3), top+height, None))
+        x = CONSOLE_W - px(94) + index * px(36)
+        chip.alpha_composite(provider_lamp(name, name == provider), (x, top))
+        boxes.append(("provider:"+name, x, top, x+size, top+size, None))
     return boxes
 
 
@@ -2650,109 +2727,122 @@ def _window_action_icon(pen, x, y, kind, colour):
         _arrow(pen, x, y, colour)
 
 
+def render_compact_helper(pen, agent, y, open_):
+    """Keep completed work nested and readable without a second full card."""
+    height, right = agent_row_height(agent), CONSOLE_W-PAD_X
+    left = PAD_X+px(14)
+    pen.line((PAD_X+px(3), y+px(8), PAD_X+px(3), y+height-px(8)), fill=_ink(30), width=max(1, px(2)))
+    font, small = FONT("semi", 13), FONT("book", 12)
+    status = agent_status(agent)
+    status_x = right-text_w(status, small)
+    name = agent.get("name") or "Helper"
+    if name != "Helper":
+        name = "Helper · " + name
+    pen.text((left, y+px(12)), elide(name, font, status_x-left-px(12)), font=font, fill=_ink(88))
+    pen.text((status_x, y+px(13)), status, font=small, fill=state_colour(agent.get("state")))
+    pen.text((left, y+px(36)), elide(agent_activity_stamp(agent), small, right-left), font=small, fill=_ink(78))
+    pen.text((left, y+px(62)), "Hide result" if open_ else "View result", font=small, fill=_ink(78))
+    _chevron(pen, right-px(5), y+px(69), _ink(62), open_)
+    return [("row", left, y+px(5), right, y+height-px(4), agent)]
+
+
 def render_row(pen, chip, agent, y, now, open_, confirm, figure_elapsed=None, draw_figure=True):
-    """Compact identity, then full-width context, state/time, and activity."""
-    boxes = []
-    titles, text_x, context_y, track_y, state_y, activity_y, height = agent_row_layout(agent)
-    small, title_font = FONT("book", 10), FONT("semi", 12)
-    right = CONSOLE_W - PAD_X
+    """Compact, foldable agent panel with status below its context meter."""
+    if compact_helper(agent):
+        return render_compact_helper(pen, agent, y, open_)
+    layout = quiet_card_layout(agent, open_)
+    right, small = CONSOLE_W-PAD_X, FONT("book", 11)
     colour = state_colour(agent.get("state"))
+    boxes = []
     rule(pen, y, _ink(13))
-    if agent.get("state") == "needs" or open_:
-        band(pen, y + px(1), y + height, _tint(colour, 6) if agent.get("state") == "needs" else _ink(5))
-        pen.rectangle([EDGE, y + px(1), EDGE + px(2) - 1, y + height], fill=colour)
-    figure = (row_figure(agent, now if figure_elapsed is None else figure_elapsed,
-                         ROW_FIGURE_W, ROW_FIGURE_H) if draw_figure else None)
-    if figure is not None:
-        chip.alpha_composite(figure, (PAD_X, y + px(8)))
-    has_badge = draw_provider_badge(chip, agent, PAD_X - px(6), y + px(2))
-    if confirm:
-        pen.text((text_x, y + px(14)), "End this session?", font=title_font, fill=_tok("fg"))
-        pen.text((PAD_X, y + state_y), "This stops the running " + provider_name(agent) + " session.", font=small, fill=_ink(78))
-        for kind, label, x, tone in (("yes", "End session", PAD_X, _tok("crit")),
-                                     ("no", "Cancel", right - text_w("Cancel", small), _ink(78))):
-            box = _link(pen, x, y + activity_y, label, small, tone, True)
-            boxes.append((kind,) + box + (agent,))
-        return boxes
-    model_font = FONT("semi", 10)
-    title_block_h = len(titles) * panel_line_height(title_font) + px(3) + panel_line_height(model_font)
-    ty = y + px(8) + max(0, (ROW_FIGURE_H - title_block_h) // 2)
     if agent.get("sub"):
-        pen.line([(text_x - px(7), ty), (text_x - px(7), ty + px(8)),
-                  (text_x - px(2), ty + px(8))], fill=_ink(52), width=max(1, px(1)))
-    for line in titles:
-        pen.text((text_x, ty), line, font=title_font, fill=_ink(62) if agent.get("state") == "closed" else _tok("fg"))
-        ty += panel_line_height(title_font)
-    pen.text((text_x, ty + px(3)), elide(agent_model_source(agent, include_provider=not has_badge), model_font, right - px(17) - text_x),
-             font=model_font, fill=_ink(88))
-    _chevron(pen, right - px(5), y + px(25), _ink(62), open_)
-
-    window_y = y + context_y - panel_line_height(small) - px(4)
-    pen.text((PAD_X, window_y), elide(agent_window_label(agent), small, right - PAD_X),
-             font=small, fill=_ink(78))
-
+        pen.line((PAD_X-px(5), y+px(10), PAD_X-px(5), y+layout['height']-px(10)), fill=_ink(30), width=max(1, px(2)))
+    if confirm:
+        pen.text((PAD_X, y+px(18)), "End this session?", font=FONT("semi", 17), fill=_tok("fg"))
+        pen.text((PAD_X, y+px(54)), "This stops the running " + provider_name(agent) + " session.", font=small, fill=_ink(78))
+        for kind, label, x, tone in (("yes", "End session", PAD_X, _tok("crit")),
+                                   ("no", "Cancel", right-text_w("Cancel", small), _ink(78))):
+            boxes.append((kind,) + _link(pen, x, y+px(88), label, small, tone, True) + (agent,))
+        return boxes
+    if draw_figure:
+        figure = row_figure(agent, now if figure_elapsed is None else figure_elapsed, ROW_FIGURE_W, ROW_FIGURE_H)
+        if figure is not None:
+            chip.alpha_composite(figure, (PAD_X, y+px(12)))
+    draw_provider_badge(chip, agent, PAD_X-px(4), y+px(4))
+    text_x, ty = layout['text_x'], y+layout['title_y']
+    for line in layout['titles']:
+        pen.text((text_x, ty), line, font=FONT("semi", 14), fill=_tok("fg"))
+        ty += panel_line_height(FONT("semi", 14))
+    if agent.get("session_label"):
+        pen.text((text_x, y+layout['session_y']), elide(agent['session_label'], small, right-px(18)-text_x), font=small, fill=_ink(62))
+    pen.text((text_x, y+layout['model_y']), elide(agent_model_source(agent, include_provider=False), small, right-px(18)-text_x), font=small, fill=_ink(78))
+    _chevron(pen, right-px(5), y+px(22), _ink(78), open_)
     tokens, capacity = agent.get("context_tokens"), agent.get("context_capacity")
-    pct = tokens / capacity * 100 if capacity and tokens is not None else None
-    label = "Context" + ("  %.1f%%" % pct if pct is not None else "")
-    value = (compact_tokens(tokens) if tokens is not None else "—") + " / " + (compact_tokens(capacity) if capacity else "?")
-    value_x = right - text_w(value, small)
-    pen.text((PAD_X, y + context_y), elide(label, small, value_x - PAD_X - px(8)), font=small, fill=_ink(62))
-    pen.text((value_x, y + context_y), value, font=small, fill=_ink(78))
-    pen.rounded_rectangle((PAD_X, y + track_y, right, y + track_y + px(3)), radius=px(1), fill=_ink(13))
+    pct = tokens/capacity*100 if capacity and tokens is not None else None
+    value = ((compact_tokens(tokens) if tokens is not None else "—") + " / " + (compact_tokens(capacity) if capacity else "?"))
+    vx = right-text_w(value, small)
+    label = "Context" + ("  %.0f%%" % pct if pct is not None else "")
+    pen.text((PAD_X, y+layout['context_y']), elide(label, small, vx-PAD_X-px(8)), font=small, fill=_ink(78))
+    pen.text((vx, y+layout['context_y']), value, font=small, fill=_ink(78))
+    track_y = y+layout['track_y']
+    pen.rounded_rectangle((PAD_X, track_y, right, track_y+px(3)), radius=px(1), fill=_ink(13))
     if pct is not None and pct > 0:
-        tone = _tok("crit") if pct >= 90 else state_colour("needs") if pct >= 75 else colour
-        pen.rectangle((PAD_X, y + track_y, PAD_X + max(1, round((right - PAD_X) * min(pct, 100) / 100)),
-                       y + track_y + px(3)), fill=tone)
-    stamp = agent_activity_stamp(agent)
-    stamp_x = right - text_w(stamp, small)
-    pen.text((stamp_x, y + state_y), stamp, font=small, fill=_ink(62))
-    pen.ellipse((PAD_X, y + state_y + px(4), PAD_X + px(5), y + state_y + px(9)), fill=colour)
-    status = elide(agent_status(agent), small, stamp_x - PAD_X - px(18))
-    if (agent.get("permissions") or [{}])[0].get("actionable"):
-        box = _link(pen, PAD_X + px(10), y + state_y, status, small, colour, True)
-        boxes.append(("permission",) + box + (agent,))
+        tone = _tok("crit") if pct >= 90 else state_colour("needs") if pct >= 75 else state_colour("done")
+        pen.rectangle((PAD_X, track_y, PAD_X+max(1, round((right-PAD_X)*min(pct,100)/100)), track_y+px(3)), fill=tone)
+    sy = y+layout['state_y']
+    stamp_font = FONT("book", 10)
+    stamp = elide(agent_activity_stamp(agent), stamp_font, (right-PAD_X)*.55)
+    stamp_x = right-text_w(stamp, stamp_font)
+    status = elide(agent_status(agent), small, stamp_x-PAD_X-px(18))
+    pen.polygon([(PAD_X, sy+px(7)), (PAD_X+px(3), sy+px(4)), (PAD_X+px(6), sy+px(7)), (PAD_X+px(3), sy+px(10))], fill=colour)
+    pen.text((PAD_X+px(10), sy), status, font=small, fill=colour)
+    pen.text((stamp_x, sy+ascent(small)-ascent(stamp_font)), stamp, font=stamp_font, fill=_ink(62))
+    actionable = (agent.get("permissions") or [{}])[0].get("actionable")
+    kind, label = ("permission", "Review request…") if actionable else ("open", "Go to parent session" if agent.get("sub") else "Go to session")
+    if agent.get("state") == "closed" and not agent.get("sub"):
+        kind, label = "kill", "Dismiss session"
+    if open_:
+        ty = y+layout['message_y']
+        pen.text((PAD_X, ty), caps(layout['heading']), font=FONT("bold", 10), fill=_ink(62))
+        ty += panel_line_height(FONT("bold", 10))+px(7)
+        for line in layout['lines']:
+            pen.text((PAD_X, ty), line, font=FONT("book", 13), fill=_ink(88))
+            ty += panel_line_height(FONT("book", 13))
+        if layout['more']:
+            text = "Show less" if agent.get('_reply_expanded') else "Read more…"
+            boxes.append(("reply",) + _link(pen, PAD_X, y+layout['reply_y'], text, small, _ink(78), True) + (agent,))
+        ay = y+layout['action_y']
+        pen.rounded_rectangle((PAD_X, ay, right, ay+px(36)), radius=px(5), fill=_ink(88))
+        font = FONT("semi", 12)
+        pen.text(((CONSOLE_W-text_w(label,font))//2, ay+(px(36)-panel_line_height(font))//2), label, font=font, fill=_tok("paper"))
+        boxes.append((kind, PAD_X, ay, right, ay+px(36), agent))
+        secondary_y = ay+px(45)
     else:
-        pen.text((PAD_X + px(10), y + state_y), status, font=small, fill=colour)
-    body = FONT("book", 11)
-    link_font = FONT("semi", 10)
-    action_kind, open_label = agent_window_action(agent)
-    rich = agent.get("sub") and agent.get("activity")
-    activity_lines = panel_wrap(agent_activity(agent), body, right - PAD_X, 2) if rich else []
-    counts_y = y + activity_y + len(activity_lines) * panel_line_height(body) + px(4)
-    open_x = right - px(12) - text_w(open_label, link_font)
-    open_y = (counts_y if rich else y + activity_y) + ascent(body) - ascent(link_font)
-    box = _link(pen, open_x, open_y, open_label, link_font, _tok("fg"), True)
-    _window_action_icon(pen, right - px(7), open_y + px(1), action_kind, _tok("fg"))
-    # Actions must be tested before the enclosing row's expand/collapse box.
-    boxes.append((action_kind, box[0], box[1], right + px(4), box[3], agent))
-    if rich:
-        for index, line in enumerate(activity_lines):
-            pen.text((PAD_X, y + activity_y + index * panel_line_height(body)), line, font=body, fill=_ink(88))
-        pen.text((PAD_X, counts_y), elide(agent_work_counts(agent), small, open_x - PAD_X - px(8)), font=small, fill=_ink(62))
-    else:
-        pen.text((PAD_X, y + activity_y),
-                 elide(agent_activity(agent), body, open_x - PAD_X - px(12)), font=body, fill=_ink(78))
-    if (agent.get("permissions") or [{}])[0].get("actionable"):
-        permission_y = (counts_y + panel_line_height(small) if rich else y + activity_y + panel_line_height(body)) + px(7)
-        for kind, label, x in (("permission", "Allow…", PAD_X),
-                               ("permission-deny", "Deny", right - text_w("Deny", link_font))):
-            box = _link(pen, x, permission_y, label, link_font, colour, True)
-            boxes.append((kind,) + box + (agent,))
-    boxes.append(("row", 0, y, CONSOLE_W, y + height, agent))
+        ay = y+layout['preview_y']
+        font = FONT("semi", 11)
+        action_x = right-text_w(label,font)
+        boxes.append((kind,) + _link(pen, action_x, ay, label, font, _tok('fg'), True) + (agent,))
+        preview = ("Last reply · " if layout['heading'] == 'Latest reply' else '') + layout['value']
+        pen.text((PAD_X, ay), elide(preview, small, action_x-PAD_X-px(12)), font=small, fill=_ink(78))
+        secondary_y = ay+panel_line_height(small)+px(8)
+    if actionable:
+        for secondary, text, x in (("open", "Go to session", PAD_X), ("permission-deny", "Deny", right-text_w("Deny",small))):
+            boxes.append((secondary,) + _link(pen, x, secondary_y, text, small, _ink(78), True) + (agent,))
+    boxes.append(("row", PAD_X, y+px(3), right, y+layout['context_y']-px(4), agent))
     return boxes
 
 
 def agent_detail_label_width():
     # Size the key column from the actual theme/system font, not a guessed
     # width that truncates short labels on another platform.
-    font = FONT("bold", 9)
+    font = FONT("bold", 10)
     return math.ceil(max(text_w(caps(title), font) for title in
                          ("Last request", "Git branch", "Project folder"))) + px(8)
 
 
 def agent_drawer_layout(agent):
     """Measure the same blocks that are drawn; missing/short text wastes no rows."""
-    body, label = FONT("book", 11), FONT("bold", 9)
+    body, label = FONT("book", 12), FONT("bold", 10)
     width = CONSOLE_W - PAD_X * 2
     blocks, top = [], px(8)
     permissions = agent.get("permissions") or []
@@ -2766,7 +2856,9 @@ def agent_drawer_layout(agent):
         ("timing", "", 1, "timing"),
         ("Git branch", agent.get("branch") or "Not available", 2, "inline"),
         ("Project folder", agent.get("cwd") or "Not available", 3, "inline"),
-        ("Latest message", agent.get("latest_message") or "Not in recent history", 3, "text"),
+        ("Model / source", agent_model_source(agent), 2, "text"),
+        ("Window", agent_window_label(agent), 2, "text"),
+        ("Context tokens", (str(agent.get("context_tokens")) if agent.get("context_tokens") is not None else "Unavailable") + " / " + (str(agent.get("context_capacity")) if agent.get("context_capacity") else "Unknown capacity"), 2, "text"),
     ])
     if agent.get("sub") and agent.get("activity"):
         data = agent["activity"]
@@ -2775,13 +2867,19 @@ def agent_drawer_layout(agent):
             ("Assigned task", agent.get("assigned_task") or "Assignment unavailable", 5, "text"),
             ("timing", "", 1, "timing"),
             ("Work", agent_work_counts(agent), 2, "text"),
-            ("Final reply" if data.get("status") in ("completed", "failed", "stopped") else "Latest message",
-             data.get("result") or agent.get("latest_message") or "No message recorded yet", 6, "text"),
         ])
         if data.get("last_output"):
             fields.append(("Tool output", (data.get("output_tool") or "Tool") + "\n" + data["last_output"], 12, "output"))
         elif data.get("last_tool"):
             fields.append(("Tool activity", agent_activity(agent), 4, "text"))
+    if agent.get("sub") and agent.get("activity"):
+        fields.extend([
+            ("Model / source", agent_model_source(agent), 2, "text"),
+            ("Window", agent_window_label(agent), 2, "text"),
+        ])
+    if compact_helper(agent):
+        fields.insert(0, ("Final reply", reply_text((agent.get("activity") or {}).get("result") or
+                                                  agent.get("latest_message") or "No reply recorded yet."), None, "text"))
     for title, value, limit, kind in fields:
         inset = px(8) if kind == "permission" else 0
         value_width = width - inset * 2 - (agent_detail_label_width() if kind == "inline" else 0)
@@ -2800,19 +2898,29 @@ def agent_drawer_layout(agent):
         blocks.append((title, lines, kind, top, height + inset * 2))
         top += height + inset * 2 + px(8)
     # A separate permission action line leaves Open chat available as well.
-    footer_h = px(55) if permissions and permissions[0].get("actionable") else px(30)
+    footer_h = px(58) if compact_helper(agent) else px(30)
     return blocks, top, top + footer_h
 
 
 def agent_drawer_height(agent):
-    return agent_drawer_layout(agent)[-1]
+    if compact_helper(agent):
+        return agent_drawer_layout(agent)[-1]
+    return px(32) + (agent_drawer_layout(agent)[-1] if agent.get('_details_expanded') else 0)
 
 
 def render_drawer(pen, agent, y, now=None):
-    blocks, foot, height = agent_drawer_layout(agent)
-    body, label = FONT("book", 11), FONT("bold", 9)
-    right = CONSOLE_W - PAD_X
     boxes = []
+    if not compact_helper(agent):
+        expanded = bool(agent.get('_details_expanded'))
+        text = "Show less" if expanded else "Read more"
+        boxes.append(("details",) + _link(pen, PAD_X, y+px(8), text,
+                                         FONT("book", 11), _ink(78), True) + (agent,))
+        if not expanded:
+            return boxes
+        y += px(32)
+    blocks, foot, height = agent_drawer_layout(agent)
+    body, label = FONT("book", 12), FONT("bold", 10)
+    right = CONSOLE_W - PAD_X
     rule(pen, y, _ink(8))
     band(pen, y + px(1), y + height, _ink(3))
     for title, lines, kind, top, block_h in blocks:
@@ -2845,18 +2953,15 @@ def render_drawer(pen, agent, y, now=None):
             ty += panel_line_height(body)
     fy = y + foot
     pen.line((PAD_X, fy - px(2), right, fy - px(2)), fill=_ink(13))
-    permissions = agent.get("permissions") or []
-    link_font = FONT("semi", 11)
-    if permissions and permissions[0].get("actionable"):
-        for kind, text, x in (("permission", "Review & allow…", PAD_X),
-                              ("permission-deny", "Deny", right - text_w("Deny", link_font))):
-            box = _link(pen, x, fy + px(6), text, link_font, state_colour("needs"), True)
-            boxes.append((kind,) + box + (agent,))
-        fy += px(25)
-    action_kind, open_label = agent_window_action(agent)
-    box = _link(pen, PAD_X, fy + px(6), open_label, link_font, _tok("fg"), True)
-    _window_action_icon(pen, box[2] + px(3), fy + px(7), action_kind, _tok("fg"))
-    boxes.append((action_kind, box[0], box[1], box[2] + px(11), box[3], agent))
+    link_font = FONT("semi", 12)
+    if compact_helper(agent):
+        box = _link(pen, PAD_X, fy+px(6), "Go to parent session", link_font, _tok("fg"), True)
+        boxes.append(("open",) + box + (agent,))
+        fy += px(28)
+    if agent.get('_window_open') and agent.get('state') != 'closed':
+        text = "Hide parent window" if agent.get('sub') else "Hide window"
+        box = _link(pen, PAD_X, fy+px(6), text, link_font, _ink(62), True)
+        boxes.append(("hide",) + box + (agent,))
     if not agent.get("sub") and (agent.get("state") == "closed" or agent.get("can_terminate", True)):
         text = "Dismiss" if agent.get("state") == "closed" else "End session…"
         box = _link(pen, right - text_w(text, link_font), fy + px(6), text, link_font, _ink(62))
@@ -2870,8 +2975,21 @@ def render_drawer(pen, agent, y, now=None):
 def agents_height(agents, open_id):
     if not agents:
         return ROW_H + FOOT_H
-    return sum(agent_row_height(a) + (agent_drawer_height(a) if a.get("id") == open_id else 0)
+    return sum(agent_row_height(a, a.get("id") == open_id) + (agent_drawer_height(a) if a.get("id") == open_id else 0)
                for a in agents) + FOOT_H
+
+
+def account_summary(metrics, provider=None, notice=None, data_notice=None):
+    """Keep the account, window, and freshness explicit in the compact strip."""
+    weekly = next((m for m in metrics if m.get("key") == "weekly" or
+                   (str(m.get("key", "")).startswith("codex:codex:") and m.get("label") == "1w")), None)
+    metric = weekly or (metrics[0] if metrics else None)
+    name = (provider or (metric or {}).get("provider") or "claude").title()
+    if metric is None:
+        return ((notice[1] if isinstance(notice, tuple) else notice) or "Account usage unavailable") + " · " + name
+    window = "Weekly" if weekly else metric.get("detail") or metric.get("label") or "Account"
+    text = window + " · " + header_reading_value(metric, "used") + " used · " + name
+    return ("Last reading · " if data_notice else "") + text
 
 
 def render_console(metrics, spend, stats, agents, now, tab="agents",
@@ -2913,7 +3031,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
     if not expanded:
         return with_shadow(chip), boxes
 
-    boxes += render_tabs(pen, tab, counts.get("needs", 0))
+    boxes += render_tabs(chip, pen, tab, counts.get("needs", 0))
     y = BAR_H + TAB_H
     if data_notice and tab in ("usage", "stats"):
         pen.text((PAD_X, y+px(6)), elide(data_notice, FONT("book", 10), CONSOLE_W-2*PAD_X),
@@ -2931,9 +3049,9 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
                      "No agents running.", font=empty_font, fill=_ink(52))
             y += ROW_H
         for agent in rows:
-            row_height = agent_row_height(agent)
+            row_height = agent_row_height(agent, agent.get("id") == open_id)
             if y < visible_bottom and y + row_height > visible_top:
-                figure_visible = y + px(8) < visible_bottom and y + px(8) + ROW_FIGURE_H > visible_top
+                figure_visible = not compact_helper(agent) and y + px(12) < visible_bottom and y + px(12) + ROW_FIGURE_H > visible_top
                 elapsed = figure_elapsed(agent) if figure_visible and figure_elapsed else None
                 boxes += render_row(pen, chip, agent, y, now,
                                     agent.get("id") == open_id,
@@ -2949,10 +3067,17 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
         band(pen, y + px(1), y + FOOT_H - px(2), _ink(5),
              corners=(False, False, True, True))
         live = sum(1 for a in rows if not a.get("sub"))
-        foot_font = FONT("book", 10)
-        pen.text((PAD_X, y + px(7)),
-                 "%d session%s" % (live, "" if live == 1 else "s"),
-                 font=foot_font, fill=_ink(62))
+        foot_font = FONT("book", 11)
+        account_font = FONT("book", 11)
+        account = account_summary(metrics, provider, notice, data_notice)
+        pen.text((PAD_X, y+px(7)), elide(account, account_font, CONSOLE_W-2*PAD_X-px(14)), font=account_font, fill=_ink(78))
+        _arrow(pen, CONSOLE_W-PAD_X-px(7), y+px(8), _ink(62))
+        boxes.append(("account", PAD_X, y+px(3), CONSOLE_W-PAD_X, y+px(23), None))
+        helpers = sum(bool(a.get("sub")) for a in rows)
+        count_label = "%d session%s" % (live, "" if live == 1 else "s")
+        if helpers:
+            count_label += " · %d helper%s" % (helpers, "" if helpers == 1 else "s")
+        pen.text((PAD_X, y + px(30)), count_label, font=foot_font, fill=_ink(78))
         # closed rows linger for half an hour so you can see the one you just
         # ended. This is how you stop looking at the rest of them.
         shut = sum(1 for a in rows
@@ -2960,7 +3085,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
         if shut:
             label = "Clear %d closed" % shut
             link = _link(pen, CONSOLE_W - PAD_X - (px(65) if overflow else 0) - text_w(label, foot_font),
-                         y + px(7), label, foot_font, _ink(78), True)
+                         y + px(30), label, foot_font, _ink(78), True)
             boxes.append(("clear",) + link + (None,))
 
     if overflow:
@@ -2996,7 +3121,7 @@ def fit_agent_viewport(chip, boxes, max_height, scroll):
     pen = ImageDraw.Draw(result)
     for kind, text, x, enabled in (("scroll-up", "Up", CONSOLE_W - PAD_X - px(52), offset > 0),
                                   ("scroll-down", "Down", CONSOLE_W - PAD_X - px(25), offset < old_bottom - bottom)):
-        box = _link(pen, x, bottom + px(7), text, FONT("book", 9), _ink(78) if enabled else _ink(30))
+        box = _link(pen, x, bottom + px(30), text, FONT("book", 9), _ink(78) if enabled else _ink(30))
         if enabled:
             visible.insert(0, (kind,) + box + (None,))
     # A narrow thumb indicates position without consuming a text column.

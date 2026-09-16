@@ -341,7 +341,7 @@ class Scanner:
             if len(matches) == 1 and path not in owners:
                 owners[path] = matches
                 retained.add(path)
-        rows = {}
+        rows, internal_sessions = {}, set()
         for path, candidates in owners.items():
             if len(candidates) != 1:
                 continue  # Ambiguous ownership cannot authorize controls.
@@ -356,6 +356,12 @@ class Scanner:
             if not isinstance(session, str) or not session:
                 continue
             source = meta.get("source")
+            # Guardian is Codex's internal permission reviewer, not delegated
+            # project work. Use explicit provenance, never the reply's content.
+            sub_source = source.get("subagent") if isinstance(source, dict) else None
+            if isinstance(sub_source, dict) and sub_source.get("other") == "guardian":
+                internal_sessions.add(session)
+                continue
             parent = meta.get("parent_thread_id")
             if isinstance(source, dict):
                 sub = source.get("subagent")
@@ -412,7 +418,7 @@ class Scanner:
             rows[row["id"]] = row
         for child in children.values():
             key, parent_key = "codex:" + child["id"], "codex:" + child["parent"]
-            if key in rows or parent_key not in rows:
+            if child["id"] in internal_sessions or key in rows or parent_key not in rows:
                 continue
             parent = rows[parent_key]
             if parent["pid"] != child["owner"]["pid"] or parent["process_created"] != child["owner"]["created"]:

@@ -80,20 +80,25 @@ The menu-bar figure is a template image, so it follows the macOS appearance. An
 
 ### Agent rows
 
-Click an agent to show its last request, model and source, timing, Git branch,
-project folder, and latest message. Scroll long lists with the wheel, the
-trackpad, or the **Up** and **Down** links in the footer. The header and footer
+Each compact panel shows its figure and provider badge beside the project and
+model, then context, status, last activity, and a reply preview. Its chevron
+expands or folds the reply. **Read more** within the reply reveals any remaining
+text. **Go to session** brings the session window forward. The separate **Read more**
+below that button reveals the last request, timing, Git branch, project folder,
+and window controls; these details start collapsed.
+Scroll long lists with the wheel, trackpad, or the **Up** and **Down** links in
+the footer. The header and footer
 stay visible.
 
 Session age and idle time are separate. Idle time is the time since the session's
 transcript was last updated.
 
-Each row says whether the session is a **Main agent** or a **Subagent**, and
+The details say whether the session is a **Main agent** or a **Subagent**, and
 whether its host window is **in front**, **in background**, **hidden**, or
 **unknown**:
 
-- A subagent shows its **parent window**, and its **Open** and **Hide** links act
-  on that window.
+- A subagent shows its **parent window**, and its **Go to parent session** and
+  **Hide parent window** controls act on that window.
 - **In background** describes window focus. It doesn't mean that the agent
   stopped working.
 - The state describes the host window, not the selected chat or terminal tab.
@@ -122,8 +127,8 @@ It doesn't include output tokens, and it doesn't add requests together.
 
 ### Open and hide windows
 
-**Open** brings the agent's window to the front, and **Hide** minimizes it while
-the agent keeps running:
+**Go to session** brings the agent's window to the front. **Hide window** under
+**Read more** below that button minimizes it while the agent keeps running:
 
 - The widget matches a window by a unique project title in the host app, or by the
   host app's only window. When more than one window matches, the widget leaves

@@ -69,13 +69,18 @@ processes shared with other sessions or listed subagents are not terminated.
 Stop shared agents individually inside Claude. Other independent sessions in
 the project remain running.
 
-Each agent row distinguishes **Main agent** from **Subagent** and reports its
-host window as **in front**, **in background**, **hidden**, or **unknown**.
+Each compact panel shows the figure and provider badge, project, model, and
+context. Status is below the context bar on the left; last activity is on the
+right. The chevron expands or folds the reply. **Go to session** brings its window
+forward. **Read more** within a long reply reveals the remaining text; the separate
+**Read more** below the button reveals metadata and window controls, collapsed by
+default. The details distinguish **Main agent** from **Subagent** and report the host
+window as **in front**, **in background**, **hidden**, or **unknown**.
 Background means another window has focus; it does not mean the agent stopped
 working. Hidden means minimized or hidden by the operating system. Unknown
 means the widget cannot reliably identify or inspect the window.
-Subagents report their **parent window**, and their Open/Hide actions use that
-window. The indicator describes the host window, not the selected chat or
+Subagents report their **parent window**. **Go to parent session** and
+**Hide parent window** act on that window. The indicator describes the host window, not the selected chat or
 terminal tab; sessions sharing one window share its window state.
 
 To restore the previous wrapper while preserving other current settings:

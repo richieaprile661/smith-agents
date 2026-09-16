@@ -54,7 +54,11 @@ def _translated(boxes, x, y):
 
 def _name_lines(agent):
     label = ('↳ ' if agent.get('sub') else '') + (agent.get('name') or 'Agent')
-    return c.panel_wrap(label, c.FONT('book', 9), c.PEEK_W-c.px(12))
+    font, width = c.FONT('book', 9), c.PEEK_W-c.px(12)
+    lines = list(c.panel_wrap(label, font, width))
+    if agent.get('session_label'):
+        lines.append(c.elide(agent['session_label'], font, width))
+    return lines
 
 
 def _usage_label(shown):
@@ -97,7 +101,7 @@ def _agent_cell(agent, width, height, lines, selected, side, now, elapsed, visib
     font = c.FONT('book', 9)
     for i, line in enumerate(lines):
         draw.text(((width-c.text_w(line, font))//2, c.px(48)+i*c.panel_line_height(font)),
-                  line, font=font, fill=c._ink(88))
+                  line, font=font, fill=c._ink(58 if agent.get('session_label') and i == len(lines)-1 else 88))
     return cell
 
 
@@ -182,7 +186,7 @@ def _strip(agents, metrics, front, now, selected, side, mode, max_height, scroll
 
 def _panel(agent, now, details, confirm, max_height, scroll, elapsed):
     head, foot = c.px(26), c.FOOT_H
-    row_h = c.agent_row_height(agent)
+    row_h = c.agent_row_height(agent, details)
     content_h = row_h+(c.agent_drawer_height(agent) if details and not confirm else 0)
     height = min(max_height, head+content_h+foot)
     viewport = height-head-foot
@@ -190,7 +194,7 @@ def _panel(agent, now, details, confirm, max_height, scroll, elapsed):
     offset = max(0, min(int(scroll), scroll_max))
     content = c.console_base((c.CONSOLE_W, content_h))
     draw = ImageDraw.Draw(content)
-    figure_visible = offset < c.px(8)+c.ROW_FIGURE_H
+    figure_visible = not c.compact_helper(agent) and offset < c.px(12)+c.ROW_FIGURE_H
     boxes = c.render_row(draw, content, agent, 0, now, details, confirm,
                          figure_elapsed=elapsed(agent) if figure_visible and elapsed else None,
                          draw_figure=figure_visible)

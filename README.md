@@ -29,9 +29,10 @@ working in your editor.
   hour is an hour of paid time spent doing nothing, and Smith Agents points it out
   in minutes.
 - **Jump between agents, with your usage in view.** Bring any agent's terminal,
-  chat, or window to the front in one click, or hide it again. Your Claude and
-  Codex limits sit in the header, including the 5-hour and weekly windows. They
-  refresh every five minutes, or immediately when you ask.
+  chat, or window to the front in one click, or hide it again. The account usage
+  strip opens all available limits in **Usage**. Readings refresh every five minutes, or
+  immediately when you ask. Expand a panel with its chevron for the reply, then
+  use **Read more** below **Go to session** for window controls and metadata.
 
 ## See what every agent is doing
 
@@ -157,10 +158,10 @@ To start Smith Agents when you sign in, turn on **Start with Windows** or
 
 | Reading or control | What it means |
 | --- | --- |
-| Usage percentage | Your account's limit reading from the provider. Refreshes about every five minutes, or when you click **Refresh now**. Click the header to switch between used, remaining, and reset time. |
-| Context | How much of the session's context window the latest request used, not a total for the whole conversation. `?` means the capacity isn't available. |
+| Usage percentage | Your account's limit reading from the provider. Refreshes about every five minutes, or when you click **Refresh now**. Click the account strip to open all limits and reset times in **Usage**. |
+| Context | How much of the session's context window the latest request used, not a total for the whole conversation. `—` means the token reading is missing; `?` means the capacity is unknown. |
 | Quiet · check chat | A Claude session stopped in the middle of a task and hasn't written anything for 90 seconds. It might be waiting for you, or running a long command. |
-| Approval needed | A supported Claude Code request in VS Code is waiting. Click **Allow** to review it, or **Deny**. Requires the optional bridge. |
+| Approval needed | A supported Claude Code request in VS Code is waiting. Click **Review request** to review it, or **Deny**. Requires the optional bridge. |
 | Stats | Each provider's activity data. Claude and Codex count tokens differently, so they're shown separately. |
 | Hide | Minimizes the agent's window. The agent keeps running. |
 | End session | Asks before it stops a verified, standalone Claude session. For Codex sessions, the panel shows **End in Codex**. |

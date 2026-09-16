@@ -155,12 +155,14 @@ class TuckedTests(unittest.TestCase):
                 self.assertEqual({b[-1]['id'] for b in actions}, {selected} if selected else set())
                 if selected:
                     self.assertIn('open', [b[0] for b in actions])
-                    self.assertIn('kill', [b[0] for b in actions])
+                    self.assertIn('details', [b[0] for b in actions])
+                    self.assertNotIn('kill', [b[0] for b in actions])
             self.assertEqual(origins[0], origins[1])
             self.assertEqual(origins[0], origins[2])
 
     def test_small_screen_scrolls_panel_and_clips_actions(self):
         rows = agents(20)
+        rows[0]['_details_expanded'] = True
         _, boxes, layout = self.render(rows, selected='0', max_height=core.px(240))
         self.assertGreater(layout.panel_scroll_max, 0)
         self.assertNotIn('kill', [b[0] for b in boxes])

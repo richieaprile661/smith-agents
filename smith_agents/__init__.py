@@ -3,7 +3,7 @@
 The Pillow renderer and controller are shared. Each operating system provides
 its own window, tray/menu bar, credential reader, and process services.
 """
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 
 __all__ = ["__version__", "main"]
 

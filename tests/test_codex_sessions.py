@@ -127,6 +127,23 @@ class ScannerTests(unittest.TestCase):
         self.assertEqual(helper["parent"], "codex:one")
         self.assertEqual(codex.Scanner(lambda: [self.process(10, [child])]).scan(), [])
 
+    def test_internal_guardian_is_excluded_even_when_a_child_hook_reports_it(self):
+        parent, guardian, worker = [self.root/('rollout-'+name+'.jsonl') for name in ('one', 'guardian', 'worker')]
+        transcript(parent)
+        transcript(guardian, 'guardian', {'subagent': {'other': 'guardian'}}, parent='one', done=True)
+        transcript(worker, 'worker', {'subagent': {'thread_spawn': {'parent_thread_id': 'one'}}}, parent='one', done=True)
+        # Ordinary project work may also produce JSON; contents are not a filter.
+        with worker.open('a') as f:
+            f.write(json.dumps(record('response_item', {'type': 'message', 'role': 'assistant',
+                'content': [{'type': 'output_text', 'text': '{"risk_level":"low","outcome":"allow"}'}]}))+'\n')
+        process = self.process(10, [parent, guardian, worker])
+        child = dict(id='guardian', parent='one', owner={'pid': 10, 'created': 100},
+                     updated=200, status='completed', transcript=str(guardian))
+        with patch('smith_agents.codex_hooks.child_snapshots', return_value=[child]):
+            rows = codex.Scanner(lambda: [process]).scan()
+        self.assertEqual({r['id'] for r in rows}, {'codex:one', 'codex:worker'})
+        self.assertIn('risk_level', next(r for r in rows if r['sub'])['latest_message'])
+
     def test_lock_index_is_read_only_and_schema_change_falls_back(self):
         folder = self.root/"sessions/2026/09/10"; folder.mkdir(parents=True)
         path = folder/"rollout-t-one.jsonl"; transcript(path)

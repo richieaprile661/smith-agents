@@ -23,24 +23,21 @@ class HeaderReadingTests(unittest.TestCase):
         self.assertEqual(core.header_reading_value(metric, "remaining"), "29%")
         self.assertEqual(core.header_reading_value(metric, "reset"), core.reset_stamp(metric['resets_at']))
 
-    def test_clicking_gap_cycles_visible_data_without_folding_or_changing_provider(self):
+    def test_account_strip_opens_usage_without_changing_reading_or_provider(self):
         metrics = core.build_metrics(demo_payload())
         widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
-        widget.config = dict(core.DEFAULTS)
+        widget.config = dict(core.DEFAULTS, console_tab='agents', console_open=True)
         widget._save_config = Mock()
         widget._repaint = Mock()
-        for expanded in (True, False):
-            widget.config['console_open'] = expanded
-            for expected in ('remaining', 'reset', 'used'):
-                _, widget.agent_rows = core.render_console(metrics, None, {}, [], 0,
-                    provider='claude', expanded=expanded, reading_view=widget.config['reading_view'])
-                # The whitespace between the first two columns is also interactive.
-                widget._on_console_click(SimpleNamespace(x=core.px(51), y=core.px(62)))
-                self.assertEqual(widget.config['reading_view'], expected)
-                self.assertEqual(widget.config['usage_provider'], 'claude')
-                self.assertEqual(widget.config['console_open'], expanded)
-        self.assertEqual(widget._save_config.call_count, 6)
-        self.assertEqual(widget._repaint.call_count, 6)
+        _, widget.agent_rows = core.render_console(metrics, None, {}, [], 0, provider='claude')
+        box = next(b for b in widget.agent_rows if b[0] == 'account')
+        widget._on_console_click(SimpleNamespace(x=(box[1]+box[3])/2, y=(box[2]+box[4])/2))
+        self.assertEqual(widget.config['console_tab'], 'usage')
+        self.assertEqual(widget.config['reading_view'], 'used')
+        self.assertEqual(widget.config['usage_provider'], 'claude')
+        self.assertTrue(widget.config['console_open'])
+        widget._save_config.assert_called_once()
+        widget._repaint.assert_called_once()
 
     def test_tucked_reading_still_cycles_individual_limits(self):
         widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
@@ -53,29 +50,49 @@ class HeaderReadingTests(unittest.TestCase):
         self.assertEqual(widget.config['bar_mode'], 'session')
         self.assertEqual(widget.config['reading_view'], 'used')
 
-    def test_header_text_stays_below_provider_buttons_and_inside_columns(self):
+    def test_header_has_only_bare_provider_lamps_and_no_usage(self):
         metrics = core.build_metrics(demo_payload())
-        metrics[0].update(pct=100, resets_at='2026-09-10T14:00:00Z')
-        for view in core.READING_VIEWS:
+        for provider in ('claude', 'codex'):
             chip = core.console_base((core.CONSOLE_W, core.BAR_H))
-            draw = ImageDraw.Draw(chip)
-            texts = []
+            pen = Mock(wraps=ImageDraw.Draw(chip))
+            boxes = core.render_console_bar(chip, pen, metrics, metrics[0], None, {}, 0,
+                                            False, provider=provider)
+            self.assertEqual([call.args[1] for call in pen.text.call_args_list], ['Smith'])
+            pen.rounded_rectangle.assert_not_called()
+            self.assertNotIn('reading', [box[0] for box in boxes])
+            self.assertEqual([box[0] for box in boxes[:2]], ['provider:claude', 'provider:codex'])
+            widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
+            widget.agent_rows = boxes
+            widget.set_usage_provider, widget._repaint = Mock(), Mock()
+            for box in boxes[:2]:
+                widget._on_console_click(SimpleNamespace(x=(box[1]+box[3])/2, y=(box[2]+box[4])/2))
+                widget.set_usage_provider.assert_called_with(box[0].partition(':')[2])
+            active, inactive = core.provider_lamp(provider, True), core.provider_lamp(provider, False)
+            self.assertGreater(sum(active.getchannel('A').tobytes()), sum(inactive.getchannel('A').tobytes()))
 
-            class RecordingPen:
-                def __getattr__(self, name):
-                    return getattr(draw, name)
+    def test_smith_and_agents_are_live_text_with_the_same_font_and_size(self):
+        chip = core.console_base((core.CONSOLE_W, core.BAR_H + core.TAB_H))
+        pen = Mock(wraps=ImageDraw.Draw(chip))
+        with patch.object(chip, 'alpha_composite', wraps=chip.alpha_composite) as composite:
+            core.render_console_bar(chip, pen, [], None, None, {'done': 4}, 0, True,
+                                    provider='claude', header_frame=0)
+            core.render_tabs(chip, pen, 'agents', 0)
+        labels = {call.args[1]: call for call in pen.text.call_args_list}
+        smith, agents = labels['Smith'], labels['Agents']
+        self.assertIs(smith.kwargs['font'], agents.kwargs['font'])
+        self.assertEqual(smith.kwargs['font'].size, core.px(16))
+        self.assertEqual(smith.args[0][0], agents.args[0][0])
+        self.assertAlmostEqual(smith.args[0][0], core.CONSOLE_W/6, delta=core.px(1))
+        self.assertEqual(smith.kwargs['anchor'], 'ms')
+        self.assertEqual(agents.kwargs['anchor'], 'ms')
+        self.assertNotIn('Ready', labels)
+        pen.ellipse.assert_not_called()
+        bounds = pen.textbbox(smith.args[0], 'Smith', font=smith.kwargs['font'], anchor='ms')
+        self.assertLess(bounds[3], core.BAR_H)
+        figure, (figure_x, figure_y) = composite.call_args_list[0].args
+        self.assertLessEqual(figure_y+figure.height, bounds[1])
+        self.assertAlmostEqual(figure_x+figure.width/2, smith.args[0][0], delta=1)
 
-                def text(self, xy, text, **kwargs):
-                    texts.append((text, draw.textbbox(xy, text, font=kwargs['font'])))
-                    return draw.text(xy, text, **kwargs)
-
-            pen = RecordingPen()
-            core.render_header_numbers(pen, metrics, metrics[0], {}, 'worst', None, view)
-            buttons = core.render_provider_switch(chip, pen, 'claude')
-            for text, bounds in texts[:7]:
-                self.assertGreater(bounds[1], buttons[0][4], text)
-                self.assertLessEqual(bounds[2], core.px(138), text)
-                self.assertLess(bounds[3], core.BAR_H, text)
 
 
 if __name__ == '__main__':

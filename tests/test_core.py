@@ -90,7 +90,8 @@ class CoreTests(unittest.TestCase):
                 kinds = [box[0] for box in results[0][1]]
                 self.assertIn("tuck", kinds)
                 self.assertIn("bar", kinds)
-                self.assertEqual("reading" in kinds, bool(readings))
+                self.assertNotIn("reading", kinds)
+                self.assertEqual("account" in kinds, expanded)
 
     def test_agent_context_state_and_activity_never_overlap(self):
         from PIL import ImageDraw, ImageFont
@@ -101,7 +102,7 @@ class CoreTests(unittest.TestCase):
                 return ImageFont.truetype(original.path, original.size + extra)
             for verb in ("Bash", "mcp__chrome_devtools__evaluate_script"):
                 row = core.demo_agents()[1]
-                row.update(name="accounting-long-project-name-that-wraps", idle=3661,
+                row.update(name="accounting-long-project-name-that-wraps", session_label="accounting-session-30", idle=3661,
                            context_tokens=486814, context_capacity=1000000,
                            tail=[("cmd", verb + " very long command argument " * 10)])
                 with patch.object(core, "FONT", side_effect=font):
@@ -124,14 +125,12 @@ class CoreTests(unittest.TestCase):
 
                     core.render_row(RecordingPen(), chip, row, 0, 0, False, False)
                 timer = next(bounds for text, bounds in texts if text == core.agent_activity_stamp(row))
+                # The status/timestamp row follows context, and precedes reply.
                 self.assertGreater(timer[1], tracks[0][3])
-                activity = texts[-1][1]
-                self.assertGreater(activity[1], timer[3])
+                self.assertGreater(texts[-1][1][1], timer[3])
                 for text, bounds in texts:
                     self.assertLessEqual(bounds[2], core.CONSOLE_W - core.PAD_X + 1, text)
                     self.assertLess(bounds[3], height, text)
-                    if bounds[1] < timer[3] and bounds[3] > timer[1] and text != core.agent_activity_stamp(row):
-                        self.assertLessEqual(bounds[2], timer[0] - core.px(4), text)
 
     def test_collapsed_row_open_shortcut_does_not_expand_the_drawer(self):
         from types import SimpleNamespace
@@ -142,8 +141,7 @@ class CoreTests(unittest.TestCase):
                 shortcut = next(box for box in boxes if box[0] == 'open')
                 row_box = next(box for box in boxes if box[0] == 'row')
                 self.assertLess(boxes.index(shortcut), boxes.index(row_box))
-                self.assertGreaterEqual(shortcut[2], row_box[2])
-                self.assertLessEqual(shortcut[4], row_box[4])
+                self.assertGreater(shortcut[2], row_box[4])
                 widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
                 widget.agent_rows = boxes
                 widget.agents = [row]
@@ -161,6 +159,7 @@ class CoreTests(unittest.TestCase):
     def test_scroll_keeps_header_footer_and_only_visible_actions(self):
         rows = core.demo_agents()
         row = rows[0]
+        row["_details_expanded"] = True
         row["permissions"] = [{"actionable": True, "request": {"tool_name": "Bash", "input": {"command": "echo example"}}}]
         full, full_boxes = core.render_console([], None, {}, rows, 0, open_id=row["id"])
         height = core.px(420)

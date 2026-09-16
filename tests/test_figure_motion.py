@@ -88,7 +88,7 @@ class FigureMotionTests(unittest.TestCase):
         self.assertGreater(len(initial), 0)
         self.assertLess(len(initial), len(rows))
         now = 110
-        core.render_console([], None, {}, rows, 0, max_height=height, scroll=100000,
+        core.render_console([], None, {}, rows, 0, max_height=height, scroll=sum(core.agent_row_height(row) for row in core.sort_agents(rows)[:-1]),
                             figure_elapsed=elapsed)
         newly_visible = set(timeline.starts) - initial
         self.assertTrue(newly_visible)
@@ -98,7 +98,7 @@ class FigureMotionTests(unittest.TestCase):
         # A row's text can be visible after its figure has scrolled away.
         timeline.replay()
         core.render_console([], None, {}, rows, 0, max_height=height,
-                            scroll=core.px(8) + core.ROW_FIGURE_H,
+                            scroll=core.px(12) + core.ROW_FIGURE_H,
                             figure_elapsed=elapsed)
         self.assertNotIn(core.sort_agents(rows)[0]['id'], timeline.starts)
 

@@ -106,7 +106,7 @@ class SmithAgentsWidget:
         self._peek_open_id = None
         self._peek_scroll = 0
         self._peek_panel_scroll = 0
-        self._peek_details = True
+        self._peek_details = False
         self._peek_layout = None
 
         # Warm start from the last good response, so a restart shows numbers
@@ -782,7 +782,12 @@ class SmithAgentsWidget:
         if dismissed != (self.config.get("dismissed") or []):
             self.config["dismissed"] = dismissed
             self._save_config()
+        expanded_replies = {a.get("id") for a in self.agents if a.get("_reply_expanded")}
+        expanded_details = {a.get("id") for a in self.agents if a.get("_details_expanded")}
         self.agents = [a for a in found if a.get("id") not in dismissed]
+        for agent in self.agents:
+            agent['_reply_expanded'] = agent.get('id') in expanded_replies
+            agent['_details_expanded'] = agent.get('id') in expanded_details
         self._figure_assignments.assign(self.agents)
         self._sync_agent_windows()
         self._agents_scan = now
@@ -830,7 +835,7 @@ class SmithAgentsWidget:
                 self.set_tuck(False)
             elif kind == 'peek-agent':
                 self._peek_open_id = None if self._peek_open_id == agent['id'] else agent['id']
-                self._peek_details = True
+                self._peek_details = False
                 self._peek_panel_scroll = 0
                 self._confirm_kill = None
             elif kind == 'peek-close':
@@ -843,7 +848,7 @@ class SmithAgentsWidget:
                 if attribute == '_peek_panel_scroll':
                     panel = self._peek_layout.panel
                     viewport = panel[3]-panel[1]-px(26)-core.FOOT_H
-                    step = min(step, max(1, viewport//2))
+                    step = min(step, max(1, viewport//2), max(1, viewport-px(36)))
                 movement = -step if kind.endswith('up') else step
                 setattr(self, attribute, max(0, min(maximum, getattr(self, attribute)+movement)))
             else:
@@ -890,7 +895,7 @@ class SmithAgentsWidget:
             if row.get("id") == agent.get("id"):
                 self._agent_scroll = top
                 break
-            top += core.agent_row_height(row)
+            top += core.agent_row_height(row, row.get("id") == self.agent_open)
             if row.get("id") == self.agent_open:
                 top += core.agent_drawer_height(row)
 
@@ -919,6 +924,15 @@ class SmithAgentsWidget:
                 if provider == "toggle":
                     provider = "claude" if self.config.get("usage_provider") == "codex" else "codex"
                 self.set_usage_provider(provider)
+            elif kind == "account":
+                self.config["console_tab"] = "usage"
+                self.config["console_open"] = True
+                self._confirm_kill = None
+                self._save_config()
+            elif kind == "reply":
+                agent['_reply_expanded'] = not agent.get('_reply_expanded', False)
+            elif kind == "details":
+                agent['_details_expanded'] = not agent.get('_details_expanded', False)
             elif kind == "tuck":
                 self.set_tuck(True)
             elif kind == "bar":
@@ -1064,15 +1078,17 @@ def main(argv=None):
                                 box = next(box for box in widget.agent_rows if box[0] == kind)
                                 widget._on_console_click(SimpleNamespace(x=(box[1] + box[3]) / 2,
                                                                         y=(box[2] + box[4]) / 2))
+                            click("details")
+                            assert widget.agents[0]["_details_expanded"]
+                            widget._scroll_agents(widget._agent_scroll_max)
                             click("kill")
                             assert widget._confirm_kill == widget.agents[0]["id"]
                             click("no")
                             assert widget._confirm_kill is None
                             click("provider:codex")
                             assert widget._snapshot()[0][0]['key'].startswith('codex:')
-                            for expected_view in ("remaining", "reset", "used"):
-                                click("reading")
-                                assert widget.config['reading_view'] == expected_view
+                            click("account")
+                            assert widget.config['console_tab'] == 'usage'
                             click("tab:usage")
                             click("tab:stats")
                             assert widget._snapshot()[-1]['provider'] == 'codex'
@@ -1096,6 +1112,9 @@ def main(argv=None):
                             assert widget._peek_layout.panel is not None
                             peek_click('peek-agent', 'smoke-2')
                             assert widget._peek_open_id == 'smoke-2'
+                            while widget._peek_panel_scroll < widget._peek_layout.panel_scroll_max:
+                                peek_click('peek-panel-down')
+                            peek_click('row')
                             while widget._peek_panel_scroll < widget._peek_layout.panel_scroll_max:
                                 peek_click('peek-panel-down')
                             peek_click('kill')

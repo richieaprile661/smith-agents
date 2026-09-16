@@ -41,7 +41,7 @@ def main():
         info = plistlib.load(handle)
     info.update(LSUIElement=True, NSHighResolutionCapable=True,
                 CFBundleDisplayName="Smith Agents", CFBundleName="Smith Agents",
-                CFBundleShortVersionString="1.1.1", CFBundleVersion="1.1.1",
+                CFBundleShortVersionString="1.1.2", CFBundleVersion="1.1.2",
                 NSHumanReadableCopyright="MIT — richieaprile661")
     with plist.open("wb") as handle:
         plistlib.dump(info, handle)

@@ -19,7 +19,7 @@ from smith_agents.session_windows import WindowTargets, window_agent
 class SessionWindowTests(unittest.TestCase):
     def test_subagents_share_verified_parent_state_and_actions(self):
         main = dict(core.demo_agents()[1], id='main', provider='claude')
-        sub = dict(main, id='child', sub=True, parent='main')
+        sub = dict(main, id='child', sub=True, parent='main', _details_expanded=True)
         nested = dict(sub, id='nested', parent='child')
         orphan = dict(sub, id='orphan', parent='missing')
         other_provider = dict(main, provider='codex', _window_state='hidden')
@@ -40,7 +40,7 @@ class SessionWindowTests(unittest.TestCase):
                 self.assertEqual(core.agent_window_action(row), ('hide', 'Hide parent window'))
             self.assertEqual(orphan['_window_state'], 'unknown')
             self.assertFalse(orphan['_window_open'])
-            _, widget.agent_rows = core.render_console([], None, {}, [main, sub], 0)
+            _, widget.agent_rows = core.render_console([], None, {}, [main, sub], 0, open_id=sub["id"])
             box = next(box for box in widget.agent_rows if box[0] == 'hide' and box[-1]['id'] == 'child')
             with patch.object(widget, '_sync_agent_windows'):
                 widget._on_console_click(SimpleNamespace(x=(box[1]+box[3])/2, y=(box[2]+box[4])/2))
@@ -95,24 +95,24 @@ class SessionWindowTests(unittest.TestCase):
             user32.ShowWindow.assert_not_called()
             user32.SetForegroundWindow.assert_not_called()
 
-    def test_role_and_window_labels_fit_before_context_without_hiding_activity(self):
+    def test_role_and_window_labels_are_in_details_without_hiding_activity(self):
         from PIL import ImageDraw
         for scale in (1, 2):
             with patch.object(core, 'SCALE', scale):
                 for sub in (False, True):
                     for state in ('front', 'background', 'hidden', 'unknown'):
-                        row = dict(core.demo_agents()[1], sub=sub, _window_state=state)
-                        chip = core.console_base((core.CONSOLE_W, core.agent_row_height(row)))
+                        row = dict(core.demo_agents()[1], sub=sub, _window_state=state, _details_expanded=True)
+                        chip = core.console_base((core.CONSOLE_W, core.agent_drawer_height(row)))
                         draw = ImageDraw.Draw(chip)
                         pen = Mock(wraps=draw)
-                        core.render_row(pen, chip, row, 0, 0, False, False)
+                        core.render_drawer(pen, row, 0, 0)
                         label = core.agent_window_label(row)
                         calls = [call for call in pen.text.call_args_list if call.args[1] == label]
                         self.assertEqual(len(calls), 1, label)
                         call = calls[0]
                         bounds = draw.textbbox(call.args[0], label, font=call.kwargs['font'])
                         self.assertLessEqual(bounds[2], core.CONSOLE_W - core.PAD_X)
-                        self.assertLess(bounds[3], core.agent_row_layout(row)[2])
+                        self.assertLess(bounds[3], core.agent_drawer_height(row))
                         self.assertIn('Parent window' if sub else 'Main agent', label)
                         self.assertEqual(core.agent_status(row), 'Working')
 
@@ -127,10 +127,10 @@ class SessionWindowTests(unittest.TestCase):
         self.assertEqual(len(targets.targets), 2)
         self.assertIsNone(targets.get(row))
 
-    def test_row_and_drawer_toggle_open_hide_open_without_ending_session(self):
+    def test_primary_stays_open_and_hide_is_in_details_without_ending_session(self):
         for entrypoint, noun in (('claude-cli', 'terminal'), ('claude-vscode', 'chat')):
-            with self.subTest(entrypoint=entrypoint):
-                row = dict(core.demo_agents()[1], entrypoint=entrypoint)
+            with self.subTest(entrypoint=entrypoint, _details_expanded=True):
+                row = dict(core.demo_agents()[1], entrypoint=entrypoint, _details_expanded=True)
                 widget = app.SmithAgentsWidget.__new__(app.SmithAgentsWidget)
                 widget.agents = [row]
                 widget.agent_open = None
@@ -150,7 +150,8 @@ class SessionWindowTests(unittest.TestCase):
                      patch.object(app, 'terminate_agent') as terminate, \
                      patch.object(widget, '_repaint'):
                     for kind in ('open', 'hide', 'open'):
-                        _, boxes = core.render_console([], None, {}, widget.agents, 0)
+                        _, boxes = core.render_console([], None, {}, widget.agents, 0, open_id=row["id"] if kind == "hide" else None)
+                        self.assertEqual(sum(b[0] == "open" for b in boxes), 1)
                         widget.agent_rows = boxes
                         box = next(box for box in boxes if box[0] == kind)
                         self.assertEqual(core.agent_window_action(widget.agents[0]), (kind, kind.title()+' '+noun))
@@ -165,13 +166,14 @@ class SessionWindowTests(unittest.TestCase):
                     hide_window.assert_called_once()
                     terminate.assert_not_called()
                     _, boxes = core.render_console([], None, {}, widget.agents, 0, open_id=row['id'])
-                    self.assertEqual(sum(box[0]=='hide' for box in boxes), 2)
+                    self.assertEqual(sum(box[0]=='hide' for box in boxes), 1)
+                    self.assertEqual(sum(box[0]=='open' for box in boxes), 1)
                     visible = False  # A user can minimize/hide outside the widget.
                     widget._sync_agent_windows()
                     self.assertEqual(core.agent_window_action(widget.agents[0])[0], 'open')
 
     def test_delayed_hide_is_checked_after_the_native_event_loop_updates(self):
-        row = dict(core.demo_agents()[1], _window_open=True)
+        row = dict(core.demo_agents()[1], _window_open=True, _details_expanded=True)
         widget = app.SmithAgentsWidget.__new__(app.SmithAgentsWidget)
         widget.agents = [row]
         widget.root = Mock()
@@ -192,11 +194,11 @@ class SessionWindowTests(unittest.TestCase):
             terminate.assert_not_called()
 
     def test_failed_hide_keeps_action_and_never_falls_back_to_termination(self):
-        row = dict(core.demo_agents()[1], _window_open=True)
+        row = dict(core.demo_agents()[1], _window_open=True, _details_expanded=True)
         widget = app.SmithAgentsWidget.__new__(app.SmithAgentsWidget)
         widget.agents = [row]
         widget.agent_open = None
-        _, widget.agent_rows = core.render_console([], None, {}, [row], 0)
+        _, widget.agent_rows = core.render_console([], None, {}, [row], 0, open_id=row["id"])
         box = next(box for box in widget.agent_rows if box[0]=='hide')
         with patch.object(app, 'hide_agent_window', return_value=False), \
              patch.object(app.platform, 'agent_window_is_visible', return_value=True), \
