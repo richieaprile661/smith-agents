@@ -50,14 +50,15 @@ class HeaderReadingTests(unittest.TestCase):
         self.assertEqual(widget.config['bar_mode'], 'session')
         self.assertEqual(widget.config['reading_view'], 'used')
 
-    def test_header_has_only_bare_provider_lamps_and_no_usage(self):
+    def test_header_has_signal_fields_and_independent_provider_lamps(self):
         metrics = core.build_metrics(demo_payload())
         for provider in ('claude', 'codex'):
             chip = core.console_base((core.CONSOLE_W, core.BAR_H))
             pen = Mock(wraps=ImageDraw.Draw(chip))
             boxes = core.render_console_bar(chip, pen, metrics, metrics[0], None, {}, 0,
                                             False, provider=provider)
-            self.assertEqual([call.args[1] for call in pen.text.call_args_list], ['Smith'])
+            texts = [call.args[1] for call in pen.text.call_args_list]
+            self.assertTrue({'Smith', '5h', 'week', 'used'} <= set(texts))
             pen.rounded_rectangle.assert_not_called()
             self.assertNotIn('reading', [box[0] for box in boxes])
             self.assertEqual([box[0] for box in boxes[:2]], ['provider:claude', 'provider:codex'])
@@ -69,6 +70,28 @@ class HeaderReadingTests(unittest.TestCase):
                 widget.set_usage_provider.assert_called_with(box[0].partition(':')[2])
             active, inactive = core.provider_lamp(provider, True), core.provider_lamp(provider, False)
             self.assertGreater(sum(active.getchannel('A').tobytes()), sum(inactive.getchannel('A').tobytes()))
+
+    def test_header_matches_windows_not_primary_secondary_order_or_scoped_models(self):
+        from smith_agents import codex_usage
+        metrics = codex_usage.build_metrics({'rateLimitsByLimitId': {
+            'extra': {'primary': {'usedPercent': 99, 'windowDurationMins': 300}},
+            'codex': {'primary': {'usedPercent': 31, 'windowDurationMins': 10080},
+                      'secondary': {'usedPercent': 71, 'windowDurationMins': 300}}}})
+        five, week = core.header_usage_metrics(metrics, 'codex')
+        self.assertEqual((five['pct'], week['pct']), (71, 31))
+        self.assertEqual(core.header_usage_metrics(metrics[:1], 'codex'), [None, week])
+        self.assertEqual(core.header_usage_metrics([], 'codex'), [None, None])
+
+    def test_signal_fields_count_used_cells_in_provider_colour(self):
+        from PIL import Image
+        for provider in ('codex', 'claude'):
+            for used, expected in ((0, 0), (71, 71), (100, 100), (None, 0)):
+                chip = Image.new('RGBA', (core.px(29), core.px(29)))
+                core.draw_signal_field(ImageDraw.Draw(chip), {'pct': used} if used is not None else None,
+                                       provider, 0, 0)
+                lit = sum(chip.getpixel((core.px(x*3), core.px(y*3))) == core.provider_accent(provider)
+                          for y in range(10) for x in range(10))
+                self.assertEqual(lit, expected)
 
     def test_smith_and_agents_are_live_text_with_the_same_font_and_size(self):
         chip = core.console_base((core.CONSOLE_W, core.BAR_H + core.TAB_H))

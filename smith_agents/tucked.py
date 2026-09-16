@@ -9,11 +9,11 @@ EDGES = ('left', 'right', 'top', 'bottom')
 RAIL_W = c.px(88)
 TILE_W = c.px(108)
 TOP_RAIL_H = c.px(64)
-TOP_BRAND_W = c.px(156)
+TOP_BRAND_W = c.px(88)
 FIGURE_W, FIGURE_H = c.px(80), c.px(40)
 NAME_SIZE = 9
 LAMP_RISE = c.px(18 * 0.2)
-SIDE_HEAD_H = c.px(96)
+SIDE_HEAD_H = c.px(64)
 PANEL_HEAD_H = c.px(26)
 PANEL_SCROLL_H = c.px(24)
 
@@ -64,6 +64,72 @@ def _translated(boxes, x, y):
             for kind, x0, y0, x1, y1, agent in boxes]
 
 
+def _usage_height(horizontal, notice):
+    return c.px((66 if horizontal else 144) + (14 if notice else 0))
+
+
+def _usage_drawer(metrics, front, mode, provider, notice, width=RAIL_W, horizontal=False):
+    """Drawer content; the strip supplies its shared border and shadow."""
+    height = _usage_height(horizontal, notice)
+    card = Image.new('RGBA', (width, height), c._tok('paper'))
+    pen = ImageDraw.Draw(card)
+    metric = c.bar_reading(metrics, front, mode)
+    name = 'Codex' if provider == 'codex' else 'Claude'
+    label = metric.get('label', '') if metric else ''
+    title = name + (' · '+label if label else '')
+    title_width = min(width//3-c.px(16), c.px(62)) if horizontal else width-c.px(30)
+    title_font = c.FONT('bold', 9)
+    pen.text((c.px(8), c.px(8 if not horizontal else 25)),
+             c.elide(title, title_font, title_width), font=title_font, fill=c._ink(100))
+    x, y = width-c.px(12), c.px(12)
+    for sign in (-1, 1):
+        pen.line((x-c.px(3), y-sign*c.px(3), x+c.px(3), y+sign*c.px(3)),
+                 fill=c._ink(62), width=max(1, c.px(1)))
+    if horizontal:
+        columns, cell, gap = (25, 3, 3) if width >= c.px(300) else (20, 2, 2)
+        field_w = c.px(columns*cell+(columns-1)*gap)
+        c.draw_signal_field(pen, metric, provider, (width-field_w)//2, c.px(24), cell, gap, columns)
+        center, value_y, caption_y = width-c.px(34), 20, 45
+    else:
+        c.draw_signal_field(pen, metric, provider, (width-c.px(67))//2, c.px(27), 4, 3)
+        center, value_y, caption_y = width//2, 105, 130
+    value = c.header_reading_value(metric, 'used') if metric else '—'
+    font = c.MONO('bold', 22)
+    pen.text((center-c.text_w(value, font)//2, c.px(value_y)), value,
+             font=font, fill=c.provider_accent(provider) if metric else c._ink(62))
+    caption = 'used' if metric else 'Unavailable'
+    font = c.FONT('book', 9)
+    pen.text((center-c.text_w(caption, font)//2, c.px(caption_y)), caption, font=font, fill=c._ink(62))
+    if notice:
+        text = 'Last reading' if metric else 'Try again later'
+        pen.text(((width-c.text_w(text, font))//2, height-c.px(15)), text, font=font, fill=c._ink(62))
+    boxes = [('peek-usage-close', width-c.px(24), 0, width, c.px(24)-1, None)]
+    if len(metrics) > 1:
+        boxes.append(('peek-usage-cycle', 0, c.px(24), width, height, None))
+        boxes.append(('peek-usage-cycle', 0, 0, width-c.px(24)-1, c.px(24)-1, None))
+    return card, boxes
+
+
+def _with_usage(image, boxes, layout, metrics, front, mode, provider, notice,
+                side, max_height):
+    pad = c.SHADOW_PAD
+    width, height = image.width-2*pad, image.height-2*pad
+    card, controls = _usage_drawer(metrics, front, mode, provider, notice,
+                                 width, layout.horizontal)
+    above = side == 'bottom' or (not layout.horizontal
+                                and layout.rail_y+height+card.height > max_height)
+    ry, cy = (card.height, 0) if above else (0, height)
+    shell = Image.new('RGBA', (width, height+card.height), c._tok('paper'))
+    shell.paste(image.crop((pad, pad, pad+width, pad+height)), (0, ry))
+    shell.paste(card, (0, cy))
+    seam = card.height if above else height
+    ImageDraw.Draw(shell).line((c.EDGE, seam, width-c.EDGE-1, seam), fill=c._ink(20))
+    return c.with_shadow(_finish_shell(shell)), _translated(boxes, 0, ry)+_translated(controls, 0, cy), Layout(
+        (pad, ry+pad, pad+width, ry+pad+height),
+        (pad, cy+pad, pad+width, cy+pad+card.height),
+        layout.rail_scroll_max, 0, layout.rail_y, layout.rail_x, layout.horizontal)
+
+
 def _finish_shell(chip):
     """Keep scrolling content inside the same rounded border as the widget."""
     shell = c.console_base(chip.size)
@@ -87,37 +153,25 @@ def _name_lines(agent, width=None):
     return lines
 
 
-def _brand(chip, horizontal, provider, smith_icon=False):
-    """Reuse the full widget's live lettering, optical icon and bare lamps."""
-    pen = ImageDraw.Draw(chip)
+def _brand(chip, side, provider):
+    """Only the Smith icon and bare provider lamps are shown while tucked."""
+    horizontal = side in ('top', 'bottom')
+    top_edge = side == 'top'
     boxes = []
+    icon = c.smith_header_icon(c.px(64), c.px(32), c._tok('fg'))
     if horizontal:
-        dy = (chip.height-c.px(86))//2
-        text_top = (chip.height-c.px(36))//2 if smith_icon else dy+c.px(21)
-        center_x = c.px(76) if smith_icon else TILE_W//2
-        for index, text in enumerate(('Smith', 'Agents')):
-            c.draw_brand_text(chip, pen, text, center_x, text_top+index*c.px(18), c.px(18))
-        if smith_icon:
-            icon = c.smith_header_icon(c.px(64), c.px(32), c._tok('fg'))
-            # Align the visible icon with the two lines of live lettering.
-            font = c.brand_font()
-            baseline = c.brand_baseline(font, c.px(18))
-            top = text_top+baseline+font.getbbox('Smith', anchor='ms')[1]
-            bottom = text_top+c.px(18)+baseline+font.getbbox('Agents', anchor='ms')[3]
-            ink = icon.getchannel('A').getbbox()
-            icon_y = round((top+bottom-ink[1]-ink[3])/2)
-            chip.alpha_composite(icon, (0, icon_y))
-            # Keep the bare lamps stacked to the right of the branding.
+        icon_x = 0 if top_edge else (TILE_W-icon.width)//2
+        chip.alpha_composite(icon, (icon_x, (chip.height-icon.height)//2))
+        if top_edge:
             lamp_y = (chip.height-c.px(58))//2-LAMP_RISE
             lamp_x = TOP_BRAND_W-c.px(42)
             positions = ((lamp_x, lamp_y), (lamp_x, lamp_y+c.px(24)))
         else:
+            dy = (chip.height-c.px(86))//2
             positions = ((TILE_W, dy+c.px(7)), (TILE_W, dy+c.px(43)))
+            boxes.append(('peek-expand', 0, 0, TILE_W, chip.height, None))
     else:
-        icon = c.smith_header_icon(c.px(64), c.px(32), c._tok('fg'))
         chip.alpha_composite(icon, ((RAIL_W-icon.width)//2, c.px(28)))
-        for text, y in (('Smith', 60), ('Agents', 76)):
-            c.draw_brand_text(chip, pen, text, RAIL_W//2, c.px(y), c.px(18))
         lamp_x = (RAIL_W-c.px(58))//2
         positions = ((lamp_x, -LAMP_RISE), (lamp_x+c.px(24), -LAMP_RISE))
         boxes.append(('peek-expand', 0, c.px(28), RAIL_W, SIDE_HEAD_H, None))
@@ -125,7 +179,7 @@ def _brand(chip, horizontal, provider, smith_icon=False):
         lamp = c.provider_lamp(name, name == (provider or 'claude'))
         chip.alpha_composite(lamp, (x, y))
         x0, x1, y0, y1 = x, x+lamp.width, max(0, y), y+lamp.height
-        if horizontal and smith_icon:
+        if top_edge:
             # The glow canvases overlap; the two click targets must not.
             middle = (positions[0][1]+positions[1][1]+lamp.height)//2
             if name == 'claude':
@@ -140,6 +194,9 @@ def _brand(chip, horizontal, provider, smith_icon=False):
             else:
                 x0 = max(x0, RAIL_W//2)
         boxes.append(('provider:'+name, x0, y0, x1, y1, None))
+    if not horizontal:
+        ImageDraw.Draw(chip).line((c.px(10), c.px(27), RAIL_W-c.px(10)-1, c.px(27)),
+                                 fill=c._ink(13), width=max(1, c.px(1)))
     return boxes
 
 
@@ -173,7 +230,7 @@ def _agent_cell(agent, width, height, lines, selected, side, now, elapsed, visib
     return cell
 
 
-def _strip(agents, now, selected, side, max_height, scroll, elapsed, provider):
+def _strip(agents, now, selected, side, max_height, scroll, elapsed, provider, finish=True):
     width, head = RAIL_W, SIDE_HEAD_H
     rows = []
     content = 0
@@ -189,9 +246,9 @@ def _strip(agents, now, selected, side, max_height, scroll, elapsed, provider):
     top, bottom = head+arrow_h, height-arrow_h
     scroll_max = max(0, content-(bottom-top))
     offset = max(0, min(int(scroll), scroll_max))
-    chip = c.console_base((width, height))
+    chip = c.console_base((width, height)) if finish else Image.new('RGBA', (width, height), c._tok('paper'))
     pen = ImageDraw.Draw(chip)
-    boxes = _brand(chip, False, provider)
+    boxes = _brand(chip, side, provider)
     pen.line((0, head, width, head), fill=c._ink(20))
     if not agents:
         font = c.FONT('book', NAME_SIZE)
@@ -218,7 +275,7 @@ def _strip(agents, now, selected, side, max_height, scroll, elapsed, provider):
                      fill=c._ink(78 if enabled else 25), width=max(1, c.px(1)))
             if enabled:
                 boxes.append((kind, 0, y, width, y+arrow_h, None))
-    return _finish_shell(chip), boxes, scroll_max, selected_y
+    return (_finish_shell(chip) if finish else chip), boxes, scroll_max, selected_y
 
 
 def _panel(agent, now, details, confirm, max_height, scroll, elapsed):
@@ -268,7 +325,7 @@ def _panel(agent, now, details, confirm, max_height, scroll, elapsed):
     return _finish_shell(chip), visible, scroll_max, viewport
 
 
-def _horizontal_strip(agents, now, selected, side, max_width, scroll, elapsed, provider):
+def _horizontal_strip(agents, now, selected, side, max_width, scroll, elapsed, provider, finish=True):
     top_edge = side == 'top'
     tile_w = TILE_W
     cap_w = c.px(8) if top_edge else TILE_W+c.px(36)
@@ -283,18 +340,18 @@ def _horizontal_strip(agents, now, selected, side, max_width, scroll, elapsed, p
     start, end = cap_w+(arrow if overflow else 0), width-foot-(arrow if overflow else 0)
     maximum = max(0, content-(end-start))
     offset = max(0, min(int(scroll), maximum))
-    chip = c.console_base((width, height))
+    chip = c.console_base((width, height)) if finish else Image.new('RGBA', (width, height), c._tok('paper'))
     pen = ImageDraw.Draw(chip)
     if top_edge:
         brand = Image.new('RGBA', (foot, height), c._tok('paper'))
-        brand_boxes = _brand(brand, True, provider, smith_icon=True)
+        brand_boxes = _brand(brand, side, provider)
         chip.alpha_composite(brand, (width-foot, 0))
         boxes = _translated(brand_boxes, width-foot, 0)
-        # The Smith icon and lettering open the widget; lamps stay separate.
+        # The Smith icon opens the widget; lamps stay separate.
         boxes.append(('peek-expand', width-foot, 0,
                       width-foot+min(box[1] for box in brand_boxes), height, None))
     else:
-        boxes = _brand(chip, True, provider)
+        boxes = _brand(chip, side, provider)
         pen.line((cap_w, 0, cap_w, height), fill=c._ink(20))
     selected_x = start-offset
     if not agents:
@@ -333,13 +390,13 @@ def _horizontal_strip(agents, now, selected, side, max_width, scroll, elapsed, p
         pen.line((width-foot, 0, width-foot, height), fill=c._ink(20))
         c._arrow(pen, width-foot//2-c.px(3), height//2-c.px(3), c._ink(78))
         boxes.append(('peek-expand', width-foot, 0, width, height, None))
-    return _finish_shell(chip), boxes, maximum, selected_x
+    return (_finish_shell(chip) if finish else chip), boxes, maximum, selected_x
 
 
 def _render_horizontal(agents, now, side, max_height, max_width, selected,
-                       scroll, panel_scroll, details, confirm_id, elapsed, rail_x, provider):
+                       scroll, panel_scroll, details, confirm_id, elapsed, rail_x, provider, finish=True):
     rail, boxes, maximum, selected_x = _horizontal_strip(
-        agents, now, selected, side, max_width, scroll, elapsed, provider)
+        agents, now, selected, side, max_width, scroll, elapsed, provider, finish)
     rail_x = max(0, min(int(rail_x), max_width-rail.width))
     pad, gap = c.SHADOW_PAD, c.px(12)
     chosen = next((a for a in agents if a['id'] == selected), None)
@@ -365,19 +422,33 @@ def _render_horizontal(agents, now, side, max_height, max_width, selected,
 
 def render(agents, metrics, front, now, side='right', mode='worst', max_height=None,
            selected=None, scroll=0, panel_scroll=0, details=True, confirm_id=None,
-           figure_elapsed=None, rail_y=0, rail_x=0, max_width=None, provider=None):
+           figure_elapsed=None, rail_y=0, rail_x=0, max_width=None, provider=None,
+           usage_open=False, usage_notice=None):
     max_height = max(c.px(140), int(max_height or c.px(580)))
+    max_width = max_width or c.px(920)
+    if usage_open:
+        selected = None
     if side in ('top', 'bottom'):
-        return _render_horizontal(agents, now, side, max_height,
-                           max_width or c.px(920), selected, scroll, panel_scroll,
-                           details, confirm_id, figure_elapsed, rail_x, provider)
+        result = _render_horizontal(agents, now, side, max_height,
+                           max_width, selected, scroll, panel_scroll,
+                           details, confirm_id, figure_elapsed, rail_x, provider, finish=not usage_open)
+        return (_with_usage(*result, metrics, front, mode, provider, usage_notice,
+                            side, max_height) if usage_open else result)
     rail, boxes, scroll_max, selected_y = _strip(
-        agents, now, selected, side, max_height, scroll, figure_elapsed, provider)
+        agents, now, selected, side,
+        max_height-(_usage_height(False, usage_notice) if usage_open else 0),
+        scroll, figure_elapsed, provider, finish=not usage_open)
     rail_y = max(0, min(int(rail_y), max_height-rail.height))
+    if usage_open:
+        drawer_h = _usage_height(False, usage_notice)
+        if rail_y < drawer_h and rail_y+rail.height+drawer_h > max_height:
+            rail_y = max(0, max_height-rail.height-drawer_h)
     selected_agent = next((a for a in agents if a.get('id') == selected), None)
     if selected_agent is None:
         pad = c.SHADOW_PAD
-        return c.with_shadow(rail), boxes, Layout((pad, pad, pad+rail.width, pad+rail.height), None, scroll_max, 0, rail_y)
+        result = c.with_shadow(rail), boxes, Layout((pad, pad, pad+rail.width, pad+rail.height), None, scroll_max, 0, rail_y)
+        return (_with_usage(*result, metrics, front, mode, provider, usage_notice,
+                            side, max_height) if usage_open else result)
     panel, panel_boxes, panel_max, viewport = _panel(selected_agent, now, details, selected == confirm_id,
                                           max_height, panel_scroll, figure_elapsed)
     panel_y = max(0, min(rail_y+selected_y, max_height-panel.height))

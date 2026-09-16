@@ -2293,10 +2293,47 @@ def smith_header_icon(width, height, ink):
     return cell
 
 
+def provider_accent(provider):
+    return _rgb('648cfb' if provider == 'codex' else 'dc6f4d')
+
+
+def draw_signal_field(pen, metric, provider, left, top, cell=2, gap=1, columns=10):
+    """One hundred cells: each lit cell is one percent used."""
+    used = round(max(0, min(100, metric['pct']))) if metric else 0
+    size, step = px(cell), px(cell+gap)
+    active, inactive = provider_accent(provider), _ink(16)
+    for i in range(100):
+        x, y = left+(i % columns)*step, top+(i // columns)*step
+        pen.rectangle((x, y, x+size-1, y+size-1),
+                      fill=active if i < used else inactive)
+
+
+def header_usage_metrics(metrics, provider):
+    if provider == 'codex':
+        account = [m for m in metrics if str(m.get('key', '')).startswith('codex:codex:')]
+        return [next((m for m in account if m.get('label') == label), None) for label in ('5h', '1w')]
+    return [next((m for m in metrics if m.get('key') == key), None) for key in ('session', 'weekly')]
+
+
+def render_header_signal(pen, metrics, provider, stale=False):
+    for index, (label, metric) in enumerate(zip(('5h', 'week'), header_usage_metrics(metrics, provider))):
+        center = px(116+42*index)
+        font = FONT('bold', 9)
+        pen.text((center-text_w(label, font)//2, px(8)), label, font=font, fill=_ink(100))
+        draw_signal_field(pen, metric, provider, center-px(29)//2, px(24))
+        value = header_reading_value(metric, 'used') if metric else '—'
+        font = MONO('book', 13)
+        pen.text((center-text_w(value, font)//2, px(58)), value, font=font,
+                 fill=provider_accent(provider) if metric else _ink(52))
+    label = 'Last reading · used' if stale else 'used'
+    font = FONT('book', 7)
+    pen.text((px(137)-text_w(label, font)//2, px(77)), label, font=font, fill=_ink(55))
+
+
 def render_console_bar(chip, pen, metrics, front, spend, counts, now,
                        expanded, mode="worst", notice=None, header_frame=None, provider=None,
-                       reading_view="used"):
-    """Provider lamps, Smith icon, and fold/tuck controls."""
+                       reading_view="used", data_notice=None):
+    """Smith icon, quota fields, provider lamps, and fold/tuck controls."""
     boxes = []
     if expanded:
         band(pen, EDGE, BAR_H, _ink(5), corners=(True, True, False, False))
@@ -2321,6 +2358,7 @@ def render_console_bar(chip, pen, metrics, front, spend, counts, now,
              fill=_ink(52), width=max(1, px(1)))
 
     if provider:
+        render_header_signal(pen, metrics, provider, stale=bool(data_notice and metrics))
         boxes += render_provider_switch(chip, pen, provider)
     boxes.append(("tuck", tuck_x - px(9), 0, tuck_x + px(9), tuck_y + px(8), None))
     boxes.append(("bar", 0, 0, CONSOLE_W, BAR_H, None))
@@ -3027,7 +3065,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
     chip = console_base((CONSOLE_W, height))
     pen = ImageDraw.Draw(chip)
     boxes = render_console_bar(chip, pen, metrics, front, spend, counts, now,
-                               expanded, bar_mode, notice, header_frame, provider, reading_view)
+                               expanded, bar_mode, notice, header_frame, provider, reading_view, data_notice)
     if not expanded:
         return with_shadow(chip), boxes
 

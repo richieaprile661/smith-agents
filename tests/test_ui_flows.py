@@ -51,6 +51,7 @@ class UserFlowTests(unittest.TestCase):
                 side=side, provider=w.config['usage_provider'], mode=w.config['bar_mode'],
                 selected=w._peek_open_id, scroll=w._peek_scroll, panel_scroll=w._peek_panel_scroll,
                 details=w._peek_details, confirm_id=w._confirm_kill,
+                usage_open=getattr(w, '_peek_usage_open', False),
                 max_width=c.px(900), max_height=c.px(height))
             w.agent_rows = [(kind, x0+c.SHADOW_PAD, y0+c.SHADOW_PAD,
                             x1+c.SHADOW_PAD, y1+c.SHADOW_PAD, agent)
@@ -108,18 +109,38 @@ class UserFlowTests(unittest.TestCase):
                 self.assertTrue(w.config['tucked'])
                 self.assertEqual(len(w.agents), 20)
 
-    def test_provider_lamps_scrolling_switching_and_expand_on_every_edge(self):
+    def test_provider_lamps_toggle_usage_drawer_and_cycle_without_untucking(self):
+        for side in tucked.EDGES:
+            for provider in ('codex', 'claude'):
+                with self.subTest(side=side, provider=provider):
+                    w = self.widget(side)
+                    w.config.update(console_open=False, console_tab='stats', reading_view='used')
+                    self.click(w, 'peek-agent', '0')
+                    self.click(w, 'provider:'+provider)
+                    self.assertEqual(w.config['usage_provider'], provider)
+                    self.assertTrue(w.config['tucked'])
+                    self.assertTrue(w._peek_usage_open)
+                    self.assertFalse(w.config['console_open'])
+                    self.assertEqual(w.config['console_tab'], 'stats')
+                    self.assertIsNone(w._peek_open_id)
+                    self.assertIsNone(w._confirm_kill)
+                    first = c.bar_reading(w.metrics, w.metrics[0], w.config['bar_mode'])
+                    self.click(w, 'peek-usage-cycle')
+                    second = c.bar_reading(w.metrics, w.metrics[0], w.config['bar_mode'])
+                    self.assertNotEqual(first['key'], second['key'])
+                    self.click(w, 'provider:'+provider)
+                    self.assertFalse(w._peek_usage_open)
+                    self.click(w, 'provider:'+provider)
+                    self.assertTrue(w._peek_usage_open)
+                    self.click(w, 'peek-usage-close')
+                    self.assertFalse(w._peek_usage_open)
+                    self.assertTrue(w.config['tucked'])
+
+    def test_scrolling_and_expand_on_every_edge(self):
         for side in tucked.EDGES:
             with self.subTest(side=side):
                 w = self.widget(side)
                 self.click(w, 'peek-agent', '0')
-                self.click(w, 'provider:codex')
-                self.assertEqual(w.config['usage_provider'], 'codex')
-                self.assertEqual(w._peek_open_id, '0')
-                self.assertNotIn('reading', [b[0] for b in w.agent_rows])
-                self.click(w, 'provider:claude')
-                self.assertEqual(w.config['usage_provider'], 'claude')
-                self.assertEqual(w._peek_open_id, '0')
                 panel_scroll = w._peek_panel_scroll
                 rail = w._peek_layout.rail
                 w._on_agent_wheel(SimpleNamespace(x=(rail[0]+rail[2])/2, y=(rail[1]+rail[3])/2, delta=-120))
@@ -153,23 +174,20 @@ class UserFlowTests(unittest.TestCase):
                     self.click(w, 'permission-deny')
                     self.assertEqual(answer.call_args.args[1:], (item, 'deny'))
 
-    def test_strip_has_live_branding_and_no_quota_numbers_on_every_edge(self):
+    def test_strip_has_icon_only_branding_and_independent_lamps_on_every_edge(self):
         original = ImageDraw.ImageDraw.text
         for side in tucked.EDGES:
             with self.subTest(side=side):
-                texts, branding = [], []
+                texts = []
                 metric = {'key': 'codex:spark', 'pct': 100,
                           'label': 'GPT-5.3-Codex-Spark · 1w', 'header_label': 'Spark'}
                 def record(pen, xy, text, *args, **kwargs):
                     texts.append(text)
-                    if text in ('Smith', 'Agents') and kwargs.get('fill') != 255:
-                        branding.append((xy[0], kwargs['font'].size))
                     return original(pen, xy, text, *args, **kwargs)
                 with patch.object(ImageDraw.ImageDraw, 'text', record):
                     _, boxes, _ = tucked.render([], [metric], metric, 0, side=side, provider='codex')
-                self.assertTrue({'Smith', 'Agents'} <= set(texts))
+                self.assertFalse({'Smith', 'Agents'} & set(texts))
                 self.assertNotIn('Open widget', texts)
-                self.assertEqual(len(set(branding)), 1)
                 self.assertFalse(any('100' in text or 'Spark' in text or 'used' in text for text in texts))
                 for provider in ('claude', 'codex'):
                     box = next(b for b in boxes if b[0] == 'provider:'+provider)

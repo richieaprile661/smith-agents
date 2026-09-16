@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from smith_agents import core, tucked, figure_actions as motion
+from smith_agents import core, tucked, codex_usage, figure_actions as motion
 from smith_agents.app import SmithAgentsWidget
 
 
@@ -13,6 +13,63 @@ def agents(count):
 
 
 class TuckedTests(unittest.TestCase):
+    def test_usage_drawer_shares_strip_width_and_stays_on_screen(self):
+        metrics = codex_usage.build_metrics({'rateLimits': {
+            'primary': {'usedPercent': 71, 'windowDurationMins': 300},
+            'secondary': {'usedPercent': 31, 'windowDurationMins': 10080}}})
+        bounds = (-core.px(900), core.px(30), core.px(900), core.px(700))
+        for side in tucked.EDGES:
+            for count in (0, 3, 20):
+                for anchor in (0, core.px(2000)):
+                    with self.subTest(side=side, count=count, anchor=anchor):
+                        widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
+                        widget.config = {'tuck_side': side}
+                        widget._screen_bounds = lambda: bounds
+                        origins = []
+                        for opened in (False, True):
+                            im, boxes, layout = tucked.render(agents(count), metrics, metrics[0], 0,
+                                side=side, max_width=bounds[2], max_height=bounds[3]-core.px(28),
+                                rail_y=anchor, rail_x=anchor, usage_open=opened, provider='codex')
+                            widget._peek_layout = layout
+                            x, y = widget._peek_position(im.size)
+                            origins.append((x+layout.rail[0], y+layout.rail[1]))
+                            for rect in (layout.rail, layout.panel):
+                                if rect:
+                                    self.assertGreaterEqual(x+rect[0], bounds[0])
+                                    self.assertGreaterEqual(y+rect[1], bounds[1])
+                                    self.assertLessEqual(x+rect[2], bounds[0]+bounds[2])
+                                    self.assertLessEqual(y+rect[3], bounds[1]+bounds[3])
+                            if opened:
+                                self.assertIn('peek-usage-cycle', [b[0] for b in boxes])
+                                rail, panel = layout.rail, layout.panel
+                                self.assertEqual((panel[0], panel[2]), (rail[0], rail[2]))
+                                self.assertTrue(panel[3] == rail[1] or panel[1] == rail[3])
+                                seam = panel[3] if panel[3] == rail[1] else rail[3]
+                                self.assertEqual(im.getpixel(((rail[0]+rail[2])//2, seam))[3], 255)
+                        # Long strips reserve room for the attached drawer.
+                        if count < 20:
+                            self.assertEqual(*origins)
+
+    def test_usage_drawer_used_missing_and_stale_readings(self):
+        from PIL import ImageDraw
+        metrics = codex_usage.build_metrics({'rateLimits': {
+            'primary': {'usedPercent': 71, 'windowDurationMins': 300},
+            'secondary': {'usedPercent': 31, 'windowDurationMins': 10080}}})
+        original = ImageDraw.ImageDraw.text
+        for rows, mode, notice, expected in (
+                (metrics, 'worst', None, ['Codex · 5h', '71%', 'used']),
+                (metrics, core.next_bar_mode(metrics, 'worst'), None, ['Codex · 1w', '31%']),
+                (metrics, 'worst', 'Offline', ['71%', 'Last reading']),
+                ([], 'worst', 'Offline', ['—', 'Unavailable'])):
+            texts = []
+            def record(pen, xy, text, *args, **kwargs):
+                texts.append(text)
+                return original(pen, xy, text, *args, **kwargs)
+            with patch.object(ImageDraw.ImageDraw, 'text', record):
+                tucked._usage_drawer(rows, rows[0] if rows else None, mode, 'codex', notice)
+            for text in expected:
+                self.assertIn(text, texts)
+
     def render(self, rows, **kwargs):
         return tucked.render(rows, [], None, 0, figure_elapsed=lambda a: 4, **kwargs)
 

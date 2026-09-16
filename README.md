@@ -54,8 +54,12 @@ The agents keep running either way. Each tile has a centered figure, a small
 name underneath, and its provider logo in the upper-left corner. The side
 strip is 88 px wide; tiles across the top and bottom remain 108 px wide.
 Panels open inward and keep extra details under **Read more**. Click a glowing
-provider logo to switch providers. Click the Smith icon on the side or top strip
-to return to the full view.
+provider logo to unfold the attached usage drawer; click its reading to switch
+between available limits, such as 5 hours and a week. Each lit cell in the
+Signal Field represents 1% used, in Codex blue or Claude orange.
+The open widget's header shows separate square fields for 5 hours and a week.
+Tucked branding keeps only the Smith icon and provider lamps; click the Smith
+icon to return to the full view.
 
 ## Pick a theme
 

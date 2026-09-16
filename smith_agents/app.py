@@ -103,6 +103,7 @@ class SmithAgentsWidget:
         self._figure_assignments = artwork.FigureAssignments()
         self._peek_order = tucked.AgentOrder()
         self._peek_open_id = None
+        self._peek_usage_open = False
         self._peek_scroll = 0
         self._peek_panel_scroll = 0
         self._peek_details = True
@@ -393,7 +394,9 @@ class SmithAgentsWidget:
                 panel_scroll=self._peek_panel_scroll, details=self._peek_details,
                 confirm_id=self._confirm_kill,
                 figure_elapsed=lambda agent: figure_actions.periodic_elapsed(figure_elapsed(agent)),
-                provider=self.config.get("usage_provider", "claude"))
+                provider=self.config.get("usage_provider", "claude"),
+                usage_open=getattr(self, '_peek_usage_open', False),
+                usage_notice=error[1] if error else None)
             self._peek_scroll = min(self._peek_scroll, self._peek_layout.rail_scroll_max)
             self._peek_panel_scroll = min(self._peek_panel_scroll, self._peek_layout.panel_scroll_max)
             x, y = self._peek_position(image.size)
@@ -544,6 +547,7 @@ class SmithAgentsWidget:
 
     def set_tuck(self, tucked, side=None):
         self._peek_open_id = None
+        self._peek_usage_open = False
         self._peek_panel_scroll = 0
         self._confirm_kill = None
         if tucked:
@@ -739,6 +743,7 @@ class SmithAgentsWidget:
                 self._peek_scroll = 0
             self.config['tuck_side'] = edge
             self._peek_open_id = None
+            self._peek_usage_open = False
             self._confirm_kill = None
             self._repaint()
             return
@@ -832,13 +837,27 @@ class SmithAgentsWidget:
         self.agents = [a for a in self.agents if a.get("id") not in ids]
 
     def _on_peek_click(self, event):
-        """The strip stays tucked while its selected panel uses normal actions."""
+        """Open compact agent and usage panels while keeping the strip tucked."""
         for kind, x0, y0, x1, y1, agent in self.agent_rows:
             if not (x0 <= event.x <= x1 and y0 <= event.y <= y1):
                 continue
             if kind == 'peek-expand':
                 self.set_tuck(False)
+            elif kind in ('provider:claude', 'provider:codex'):
+                provider = kind.partition(':')[2]
+                self._peek_usage_open = not (getattr(self, '_peek_usage_open', False)
+                                             and self.config['usage_provider'] == provider)
+                self._peek_open_id = None
+                self._confirm_kill = None
+                self.set_usage_provider(provider)
+            elif kind == 'peek-usage-cycle':
+                metrics = self._snapshot()[0]
+                self.config['bar_mode'] = next_bar_mode(metrics, self.config['bar_mode'])
+                self._save_config()
+            elif kind == 'peek-usage-close':
+                self._peek_usage_open = False
             elif kind == 'peek-agent':
+                self._peek_usage_open = False
                 self._peek_open_id = None if self._peek_open_id == agent['id'] else agent['id']
                 self._peek_details = True
                 self._peek_panel_scroll = 0
@@ -859,8 +878,9 @@ class SmithAgentsWidget:
                 return self._on_console_click(event)
             self._repaint()
             return True
-        if self._peek_open_id is not None:
+        if self._peek_open_id is not None or getattr(self, '_peek_usage_open', False):
             self._peek_open_id = None
+            self._peek_usage_open = False
             self._confirm_kill = None
             self._repaint()
         return False
@@ -1148,6 +1168,12 @@ def main(argv=None):
                                     previous_provider = widget.config['usage_provider']
                                     peek_click('provider:'+('codex' if previous_provider == 'claude' else 'claude'))
                                     assert widget.config['usage_provider'] != previous_provider
+                                    assert widget.config['tucked'] and widget._peek_usage_open
+                                    previous_mode = widget.config['bar_mode']
+                                    peek_click('peek-usage-cycle')
+                                    assert widget.config['bar_mode'] != previous_mode
+                                    peek_click('peek-usage-close')
+                                    assert not widget._peek_usage_open
                                     peek_click('peek-agent', 'smoke-1')
                                     assert widget._peek_open_id == 'smoke-1'
                                     if edge == 'top':
