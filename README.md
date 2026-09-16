@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/github-hero.png" alt="Smith Agents: Your agents. In view. The current widget shows Claude and Codex sessions with figures, context, activity, and separate 5-hour and weekly usage fields." width="880">
+  <img src="docs/images/github-signal-field-hero.png" alt="Smith Agents: Your agents. In view. The current widget shows Claude and Codex sessions with figures, context, activity, and separate 5-hour and weekly usage fields." width="880">
 </p>
 
 **Smith Agents** keeps your **Claude Code** and **Codex** sessions in view on
@@ -15,7 +15,7 @@ your screen.
 
 ## Your sessions at a glance
 
-<img src="docs/images/github-work.png" alt="The current session panel: project identity and provider above context, activity below, and an expanded storefront card with Go to session and folded Read more controls." width="880">
+<img src="docs/images/github-signal-field-work.png" alt="The current session panel: project identity and provider above context, activity below, and an expanded storefront card with Go to session and folded Read more controls." width="880">
 
 Click a session to open its current activity or latest reply. **Go to session**
 brings you back to its app. Extra controls and metadata stay folded under
@@ -32,7 +32,7 @@ you to the app where you can answer.
 
 ## Usage, in a field of signals
 
-<img src="docs/images/github-usage.png" alt="Codex in blue with 71% used over 5 hours and 31% used over a week; Claude in orange with 42% and 18%. Both headers show two square Signal Fields beside the glowing provider logos." width="880">
+<img src="docs/images/github-signal-field-usage.png" alt="Codex in blue with 71% used over 5 hours and 31% used over a week; Claude in orange with 42% and 18%. Both headers show two square Signal Fields beside the glowing provider logos." width="880">
 
 The header shows **5-hour and weekly usage together**. Each lit cell represents
 **1% used**: blue for Codex, orange for Claude. Click a glowing provider logo to
@@ -43,7 +43,7 @@ about every five minutes, or through **Refresh now** in the tray menu.
 
 ## Small at every edge
 
-<img src="docs/images/github-tuck.png" alt="The current horizontal and vertical tucked layouts with icon-only Smith branding, glowing provider logos, agent figures, and attached Claude and Codex usage drawers." width="880">
+<img src="docs/images/github-signal-field-tuck.png" alt="The current horizontal and vertical tucked layouts with icon-only Smith branding, glowing provider logos, agent figures, and attached Claude and Codex usage drawers." width="880">
 
 Tuck to the **top, bottom, left, or right edge of your screen**, independent of
 editor and terminal windows.
@@ -55,7 +55,7 @@ editor and terminal windows.
 
 ## Pick a theme
 
-<img src="docs/images/github-themes.png" alt="The current Smith Agents layout in Claude, The Matrix, and E-ink themes." width="880">
+<img src="docs/images/github-signal-field-themes.png" alt="The current Smith Agents layout in Claude, The Matrix, and E-ink themes." width="880">
 
 Choose **Claude**, **The Matrix**, or **E-ink** from the tray or menu-bar menu.
 

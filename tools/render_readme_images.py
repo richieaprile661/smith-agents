@@ -257,11 +257,11 @@ def main():
             render_theme(theme, 1.45, theme_parts)
             themes.append(theme_parts)
         images = {
-            "github-hero.png": compose_hero(parts),
-            "github-work.png": compose_work(parts),
-            "github-usage.png": compose_usage(parts),
-            "github-tuck.png": compose_tuck(parts),
-            "github-themes.png": compose_themes(themes),
+            "github-signal-field-hero.png": compose_hero(parts),
+            "github-signal-field-work.png": compose_work(parts),
+            "github-signal-field-usage.png": compose_usage(parts),
+            "github-signal-field-tuck.png": compose_tuck(parts),
+            "github-signal-field-themes.png": compose_themes(themes),
         }
         for name, image in images.items():
             image.convert("RGB").save(out / name, optimize=True)
