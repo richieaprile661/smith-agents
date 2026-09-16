@@ -1,4 +1,6 @@
-* text=auto
+# Keep text identical to the release wheel on every platform, including when
+# Windows enables core.autocrlf. Batch scripts below retain their required CRLF.
+* text=auto eol=lf
 
 # Batch files are parsed by cmd.exe, which is line-ending sensitive around
 # labels and goto. Pin them to CRLF so a clone does not depend on whatever
