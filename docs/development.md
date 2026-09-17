@@ -13,6 +13,7 @@ The widget is split into shared code and one backend for each platform:
 | `smith_agents/activity.py` | Bounded tool identities, output, lifecycle, and helper transcript parsing |
 | `smith_agents/claude_activity.py` | Observes Claude task events and status-line metadata |
 | `smith_agents/codex_sessions.py` | Verifies Codex ownership and reads local thread activity |
+| `smith_agents/hermes_sessions.py` | Verifies Hermes leases and reads saved activity from its local database |
 | `smith_agents/codex_hooks.py` | Optional trusted Codex lifecycle, tool, and permission snapshots |
 | `smith_agents/platform_win32.py` | Windows surface, tray, startup, and process APIs |
 | `smith_agents/platform_darwin.py` | AppKit panel and menu, Keychain, LaunchAgent, and Unix processes |
@@ -20,6 +21,12 @@ The widget is split into shared code and one backend for each platform:
 Keep theme colors, fonts, and geometry in the theme definitions in `core.py`.
 Bundled artwork lives in `smith_agents/assets/`, and fonts live in
 `smith_agents/fonts/`.
+
+Session and host-window inspection runs in a single background scan. Completed
+rows are merged on the UI thread, preserving expanded replies and dismissals.
+The paint loop never waits for transcript reads or Accessibility IPC. Explicit
+session termination still performs a fresh ownership check, serialized with
+background scans. Window-target cache access is synchronized across threads.
 
 ## Figures
 

@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -977,24 +978,35 @@ def _list_claude_agents(idle_after=AGENT_IDLE_S):
     return ordered
 
 
+_AGENT_SCAN_LOCK = threading.Lock()
+
+
 def list_agents(idle_after=AGENT_IDLE_S):
-    from . import codex_sessions
+    # Background refresh and an explicit termination recheck share stateful
+    # provider readers; never let their incremental scans overlap.
+    with _AGENT_SCAN_LOCK:
+        return _list_agents(idle_after)
+
+
+def _list_agents(idle_after=AGENT_IDLE_S):
+    from . import codex_sessions, hermes_sessions
     from .activity import visible_helpers
     agents = _list_claude_agents(idle_after)
     for agent in agents:
         agent["provider"] = "claude"
-    try:
-        codex = codex_sessions.list_agents()
-        starts = {}
-        for agent in codex:
-            pid = agent["pid"]
-            if pid not in starts:
-                starts[pid] = platform.process_started(pid)
-            agent["started_at"] = starts[pid]
-        agents.extend(codex)
-    except Exception as error:
-        # One provider must not hide the other provider's sessions.
-        log_line("Codex session scan: %s" % type(error).__name__)
+    for name, scanner in (("Codex", codex_sessions), ("Hermes", hermes_sessions)):
+        try:
+            found = scanner.list_agents()
+            starts = {}
+            for agent in found:
+                pid = agent["pid"]
+                if pid not in starts:
+                    starts[pid] = platform.process_started(pid)
+                agent["started_at"] = starts[pid]
+            agents.extend(found)
+        except Exception as error:
+            # A provider failure must not hide the other providers' sessions.
+            log_line("%s session scan: %s" % (name, type(error).__name__))
     return label_shared_sessions(visible_helpers(agents, time.time()))
 
 
@@ -1200,8 +1212,10 @@ def agent_model_source(agent, include_provider=True):
         model = match[1].title() + " " + match[2].replace("-", ".")
     source = "Subagent" if agent.get("sub") else {
         "claude-vscode": "VS Code", "cli": "Terminal", "codex-cli": "Terminal",
-        "codex-vscode": "VS Code"}.get(agent.get("entrypoint"), "Claude Code")
-    provider = {"codex": "Codex · ", "claude": "Claude · "}.get(agent.get("provider"), "")
+        "codex-vscode": "VS Code", "hermes-cli": "Terminal",
+        "hermes-tui": "Terminal", "hermes-desktop": "Desktop"}.get(
+            agent.get("entrypoint"), "Hermes" if agent.get("provider") == "hermes" else "Claude Code")
+    provider = {"codex": "Codex · ", "claude": "Claude · ", "hermes": "Hermes · "}.get(agent.get("provider"), "")
     return (provider if include_provider else "") + model + " · " + source
 
 
@@ -1312,7 +1326,7 @@ def agent_tail(agent, limit=7, records=None):
 
 def terminate_agent(agent):
     """Resolve the selected session again before stopping its own process."""
-    if agent.get("can_terminate") is False or agent.get("provider") == "codex":
+    if agent.get("can_terminate") is False or agent.get("provider") in ("codex", "hermes"):
         return False
     if agent.get("sub") or not agent.get("id") or not agent.get("started_at"):
         return False
@@ -1915,9 +1929,9 @@ def decorate_agents(agents):
     row. Rows repaint eight times a second; tailing a 15MB transcript at that
     rate is what made the whole desktop crawl."""
     for agent in agents:
-        if agent.get("provider") == "codex":
+        if agent.get("provider") in ("codex", "hermes"):
             agent["branch"] = git_branch(agent.get("cwd", ""))
-            continue  # Codex readings already came from its own parser.
+            continue  # These readings already came from their provider parser.
         path = agent.get("transcript") or _agent_transcript(agent.get("cwd", ""), agent.get("id", ""))
         records = _tail_records(path) if path else []
         agent["tail"] = agent_tail(agent, limit=DRAWER_LINES, records=records)
@@ -2294,7 +2308,7 @@ def smith_header_icon(width, height, ink):
 
 
 def provider_accent(provider):
-    return _rgb('648cfb' if provider == 'codex' else 'dc6f4d')
+    return _rgb({'codex': '648cfb', 'hermes': '8d8fff'}.get(provider, 'dc6f4d'))
 
 
 def draw_signal_field(pen, metric, provider, left, top, cell=2, gap=1, columns=10):
@@ -2309,13 +2323,19 @@ def draw_signal_field(pen, metric, provider, left, top, cell=2, gap=1, columns=1
 
 
 def header_usage_metrics(metrics, provider):
+    if provider == 'hermes':
+        return [None, None]
     if provider == 'codex':
         account = [m for m in metrics if str(m.get('key', '')).startswith('codex:codex:')]
         return [next((m for m in account if m.get('label') == label), None) for label in ('5h', '1w')]
     return [next((m for m in metrics if m.get('key') == key), None) for key in ('session', 'weekly')]
 
 
-def render_header_signal(pen, metrics, provider, stale=False):
+def render_header_signal(pen, metrics, provider, stale=False, usage_data=None):
+    if provider == 'hermes':
+        from .hermes_usage_ui import header
+        header(pen, usage_data, stale)
+        return
     for index, (label, metric) in enumerate(zip(('5h', 'week'), header_usage_metrics(metrics, provider))):
         center = px(116+42*index)
         font = FONT('bold', 9)
@@ -2325,7 +2345,7 @@ def render_header_signal(pen, metrics, provider, stale=False):
         font = MONO('book', 13)
         pen.text((center-text_w(value, font)//2, px(58)), value, font=font,
                  fill=provider_accent(provider) if metric else _ink(52))
-    label = 'Last reading · used' if stale else 'used'
+    label = 'Usage unavailable' if provider == 'hermes' else 'Last reading · used' if stale else 'used'
     font = FONT('book', 7)
     pen.text((px(137)-text_w(label, font)//2, px(77)), label, font=font, fill=_ink(55))
 
@@ -2358,7 +2378,7 @@ def render_console_bar(chip, pen, metrics, front, spend, counts, now,
              fill=_ink(52), width=max(1, px(1)))
 
     if provider:
-        render_header_signal(pen, metrics, provider, stale=bool(data_notice and metrics))
+        render_header_signal(pen, metrics, provider, stale=bool(data_notice), usage_data=spend)
         boxes += render_provider_switch(chip, pen, provider)
     boxes.append(("tuck", tuck_x - px(9), 0, tuck_x + px(9), tuck_y + px(8), None))
     boxes.append(("bar", 0, 0, CONSOLE_W, BAR_H, None))
@@ -2401,7 +2421,9 @@ USAGE_ROW_H = px(14)
 USAGE_GAP = px(7)
 
 
-def usage_height(metrics):
+def usage_height(metrics, stats=None):
+    if (stats or {}).get('provider') == 'hermes':
+        return px(306)
     rows = max(1, len(metrics))
     row_h = px(40) if any(m.get("provider") == "codex" for m in metrics) else USAGE_ROW_H
     return (px(10) + rows * row_h + (rows - 1) * USAGE_GAP
@@ -2411,6 +2433,9 @@ def usage_height(metrics):
 def render_usage(pen, metrics, spend, stats, y):
     """Session / Week / Opus: a 9px key, a 4px track, the percentage in mono
     and its reset. Fill and figure recolour at the handoff's thresholds."""
+    if stats.get('provider') == 'hermes':
+        from .hermes_usage_ui import panel
+        return panel(pen, stats, y)
     rule(pen, y, _ink(13))
     key_font = FONT("bold", 9)
     pct_font = MONO("bold", 10)
@@ -2497,6 +2522,9 @@ def render_stats(pen, stats, y):
     """A 3x2 grid of mono values over their keys, then a fortnight of turns as
     a sparkline with the peak bar in full ink."""
     rule(pen, y, _ink(13))
+    if stats.get('provider') == 'hermes':
+        from .hermes_usage_ui import panel
+        return panel(pen, stats, y, stats_only=True)
     val_font = MONO("bold", 14)
     key_font = FONT("bold", 9)
     tracking = px(9) * 0.07
@@ -2673,15 +2701,32 @@ def agent_row_height(agent, open_=False):
 
 
 def provider_name(agent):
-    return "Codex" if agent.get("provider") == "codex" else "Claude"
+    return {"codex": "Codex", "hermes": "Hermes"}.get(agent.get("provider"), "Claude")
 
 
 @lru_cache(maxsize=24)
 def _provider_logo(provider, size):
-    if provider not in ("claude", "codex"):
+    if provider not in ("claude", "codex", "hermes"):
         return None
     try:
         with Image.open(os.path.join(SCRIPT_DIR, "assets", "providers", provider + ".png")) as source:
+            if provider == 'hermes':
+                # The supplied portrait is black ink. Use its transparent mask
+                # in a light tint so it remains readable on the dark widget.
+                alpha = source.convert('RGBA').getchannel('A')
+                bounds = alpha.point(lambda a: 255 if a >= 128 else 0).getbbox()
+                if not bounds:
+                    return None
+                alpha = alpha.crop(bounds)
+                mark_size = round(size * .78)
+                scale = mark_size / max(alpha.size)
+                dimensions = (max(1, round(alpha.width * scale)), max(1, round(alpha.height * scale)))
+                alpha = alpha.resize(dimensions, Image.Resampling.LANCZOS)
+                mark = Image.new('RGBA', alpha.size, _tok('fg') if INVERT else _rgb('dce7ff'))
+                mark.putalpha(alpha)
+                logo = Image.new('RGBA', (size, size))
+                logo.alpha_composite(mark, ((size-mark.width)//2, (size-mark.height)//2))
+                return logo
             return source.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
     except OSError:
         return None
@@ -2693,26 +2738,32 @@ def draw_provider_badge(chip, agent, left, top):
     logo = _provider_logo(provider, px(16))
     if logo is None:
         return False
+    if provider == 'hermes':
+        # Retain the same 16px mark footprint; the soft halo extends outside it.
+        inset = px(8)
+        lamp = provider_lamp(provider, True, mark_size=16)
+        chip.alpha_composite(lamp, (left-inset, top-inset))
+        return True
     chip.alpha_composite(logo, (left, top))
     return True
 
 
-@lru_cache(maxsize=8)
-def provider_lamp(provider, active):
+@lru_cache(maxsize=16)
+def provider_lamp(provider, active, mark_size=18):
     """A bare logo with a coloured halo only for the selected account."""
-    size, inset = px(34), px(8)
+    size, inset = px(mark_size) + 2 * px(8), px(8)
     lamp = Image.new("RGBA", (size, size))
-    logo = _provider_logo(provider, px(18))
+    logo = _provider_logo(provider, px(mark_size))
     if logo is None:
         return lamp
     if active:
         mask = Image.new("L", lamp.size)
         mask.paste(logo.getchannel("A"), (inset, inset))
-        colour = _rgb("ef956c" if provider == "claude" else "8094ff")
+        colour = _rgb({"claude": "ef956c", "codex": "8094ff", "hermes": "8d8fff"}.get(provider, "8094ff"))
         halo = Image.new("RGBA", lamp.size, colour)
         glow = mask.filter(ImageFilter.GaussianBlur(px(3)))
-        if provider == "codex":
-            # Keep the transparent terminal mark dark; only the outer edge glows.
+        if provider in ("codex", "hermes"):
+            # Keep the badge itself crisp; only the outer edge glows.
             silhouette = mask.point(lambda alpha: 255 if alpha > 16 else 0)
             ImageDraw.floodfill(silhouette, (0, 0), 128)
             silhouette = silhouette.point(lambda value: 0 if value == 128 else 255)
@@ -2731,16 +2782,17 @@ def provider_lamp(provider, active):
 def render_provider_switch(chip, pen, provider):
     boxes = []
     top, size = px(3), px(34)
-    for index, name in enumerate(("claude", "codex")):
-        x = CONSOLE_W - px(94) + index * px(36)
-        chip.alpha_composite(provider_lamp(name, name == provider), (x, top))
-        boxes.append(("provider:"+name, x, top, x+size, top+size, None))
+    for index, name in enumerate(("claude", "codex", "hermes")):
+        x = CONSOLE_W - px(94) + (index % 2) * px(36)
+        y = top + (index // 2) * px(36)
+        chip.alpha_composite(provider_lamp(name, name == provider), (x, y))
+        boxes.append(("provider:"+name, x, y, x+size, y+size, None))
     return boxes
 
 
 def agent_window_action(agent):
     kind = 'hide' if agent.get('_window_open') else 'open'
-    target = ('window' if agent.get('provider') == 'codex' else
+    target = ('window' if agent.get('provider') in ('codex', 'hermes') else
               'chat' if agent.get('entrypoint') == 'claude-vscode' else 'terminal')
     if agent.get('sub'):
         target = 'parent window'
@@ -3017,8 +3069,14 @@ def agents_height(agents, open_id):
                for a in agents) + FOOT_H
 
 
-def account_summary(metrics, provider=None, notice=None, data_notice=None):
+def account_summary(metrics, provider=None, notice=None, data_notice=None, usage_data=None):
     """Keep the account, window, and freshness explicit in the compact strip."""
+    if provider == 'hermes':
+        from .hermes_usage_ui import tokens
+        from .hermes_usage import cost
+        session = (usage_data or {}).get('session', {})
+        return ('Last reading · ' if data_notice and session else '') + '%s tokens · %s est. · Hermes' % (
+            tokens(session.get('tokens')), cost(session.get('estimated_cost_usd')))
     weekly = next((m for m in metrics if m.get("key") == "weekly" or
                    (str(m.get("key", "")).startswith("codex:codex:") and m.get("label") == "1w")), None)
     metric = weekly or (metrics[0] if metrics else None)
@@ -3047,7 +3105,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
     if expanded:
         height += TAB_H
         if tab == "usage":
-            height += usage_height(metrics)
+            height += usage_height(metrics, stats)
         elif tab == "stats":
             height += stats_height()
         else:
@@ -3107,7 +3165,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
         live = sum(1 for a in rows if not a.get("sub"))
         foot_font = FONT("book", 11)
         account_font = FONT("book", 11)
-        account = account_summary(metrics, provider, notice, data_notice)
+        account = account_summary(metrics, provider, notice, data_notice, spend)
         pen.text((PAD_X, y+px(7)), elide(account, account_font, CONSOLE_W-2*PAD_X-px(14)), font=account_font, fill=_ink(78))
         _arrow(pen, CONSOLE_W-PAD_X-px(7), y+px(8), _ink(62))
         boxes.append(("account", PAD_X, y+px(3), CONSOLE_W-PAD_X, y+px(23), None))

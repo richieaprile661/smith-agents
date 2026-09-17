@@ -287,7 +287,7 @@ def _find_agent_window(agent):
     import psutil
     try:
         process = psutil.Process(agent['pid'])
-        if agent.get('provider') == 'codex' and process.create_time() != agent.get('process_created'):
+        if agent.get('provider') in ('codex', 'hermes') and process.create_time() != agent.get('process_created'):
             return None
         allowed_owners = {p.pid for p in [process, *process.parents()]}
     except psutil.Error:

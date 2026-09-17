@@ -1,6 +1,7 @@
 """Resolve session owners and retain bounded, verified host window targets."""
 from collections import OrderedDict
 import re
+import threading
 
 
 def window_agent(agent, agents):
@@ -26,6 +27,7 @@ def title_matches_project(title, leaf):
 class WindowTargets:
     def __init__(self, limit=128):
         self.limit = limit
+        self.lock = threading.Lock()
         self.targets = OrderedDict()
 
     @staticmethod
@@ -34,13 +36,16 @@ class WindowTargets:
 
     def remember(self, agent, target):
         key = self.key(agent)
-        self.targets[key] = target
-        self.targets.move_to_end(key)
-        while len(self.targets) > self.limit:
-            self.targets.popitem(last=False)
+        with self.lock:
+            self.targets[key] = target
+            self.targets.move_to_end(key)
+            while len(self.targets) > self.limit:
+                self.targets.popitem(last=False)
 
     def get(self, agent):
-        return self.targets.get(self.key(agent))
+        with self.lock:
+            return self.targets.get(self.key(agent))
 
     def discard(self, agent):
-        self.targets.pop(self.key(agent), None)
+        with self.lock:
+            self.targets.pop(self.key(agent), None)

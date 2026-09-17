@@ -1,4 +1,4 @@
-"""Smith Agents - a floating console for Claude and Codex usage and sessions.
+"""Smith Agents - a floating console for Claude, Codex, and Hermes sessions.
 
 The Pillow renderer and controller are shared. Each operating system provides
 its own window, tray/menu bar, credential reader, and process services.

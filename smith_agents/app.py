@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 from datetime import datetime
-from . import core, artwork, figure_actions, tucked, codex_usage
+from . import core, artwork, figure_actions, tucked, codex_usage, hermes_usage
 from .runtime import backend
 from .permissions import answer_permission
 from .core import (
@@ -75,9 +75,14 @@ class SmithAgentsWidget:
         self.stopping = threading.Event()
         self.wake = threading.Event()
         self.codex_wake = threading.Event()
+        self.hermes_wake = threading.Event()
+        self.hermes_data = {'sessions': [], 'error': 'Loading Hermes usage…'}
+        self.hermes_session_id = None
+        self.hermes_model_index = 0
         self._drag = None
         self._tray_cache = None
         self._tick_job = None
+        self._last_paint_error = None
         self._paint_xy = (0, 0)
         self._bar_size = (CONSOLE_W + SHADOW_PAD * 2, BAR_H + SHADOW_PAD * 2)
         self.stats = {}
@@ -99,6 +104,8 @@ class SmithAgentsWidget:
         self._agent_scroll_max = 0
         self._confirm_kill = None
         self._agents_scan = 0.0
+        self._agent_scan_running = False
+        self._pending_agents = None
         self._figure_timeline = figure_actions.Timeline()
         self._figure_assignments = artwork.FigureAssignments()
         self._peek_order = tucked.AgentOrder()
@@ -140,11 +147,13 @@ class SmithAgentsWidget:
                     "peakDailyTokens": 345678, "longestRunningTurnSec": 321,
                     "currentStreakDays": 3, "longestStreakDays": 8}, "dailyUsageBuckets": []}),
                 "usage_error": None, "stats_error": None}
+            self.hermes_data = hermes_usage.demo_data()
             self.plan = "Demo"
             self.updated_at = datetime.now()
         else:
             threading.Thread(target=self._poll_loop, daemon=True).start()
             threading.Thread(target=self._codex_poll_loop, daemon=True).start()
+            threading.Thread(target=self._hermes_poll_loop, daemon=True).start()
         platform.start_tray(self.tray)
         self.root.after(120, self._tick)
         if not demo and hasattr(platform, "offer_accessibility_setup"):
@@ -189,7 +198,7 @@ class SmithAgentsWidget:
             config["bar_mode"] = "worst"
         if config.get("reading_view") not in core.READING_VIEWS:
             config["reading_view"] = "used"
-        if config.get("usage_provider") not in ("claude", "codex"):
+        if config.get("usage_provider") not in ("claude", "codex", "hermes"):
             config["usage_provider"] = "claude"
         config["zoom"] = ZOOM      # already clamped, and baked into the sizes
         config["theme"] = THEME_NAME    # already validated, baked into the tokens
@@ -296,6 +305,8 @@ class SmithAgentsWidget:
     def refresh_now(self, *_args):
         self.wake.set()
         self.codex_wake.set()
+        if hasattr(self, "hermes_wake"):
+            self.hermes_wake.set()
 
     def _codex_poll_loop(self):
         from .codex_hooks import atomic_json
@@ -325,14 +336,44 @@ class SmithAgentsWidget:
             self.codex_wake.wait(max(60, self.config["interval"]))
             self.codex_wake.clear()
 
+    def _hermes_poll_loop(self):
+        while not self.stopping.is_set():
+            try:
+                result = hermes_usage.fetch()
+                with self.lock:
+                    self.hermes_data = result
+            except Exception as exc:
+                message = str(exc) if isinstance(exc, hermes_usage.Unavailable) else 'Hermes usage unavailable'
+                with self.lock:
+                    self.hermes_data['error'] = message
+            self.hermes_wake.wait(30)
+            self.hermes_wake.clear()
+
+    def _navigate_hermes(self, kind, direction):
+        data = self._snapshot()[6]
+        sessions = data.get('sessions', [])
+        if kind == 'hermes-session' and sessions:
+            index = (data['session_index'] + direction) % len(sessions)
+            self.hermes_session_id = sessions[index]['id']
+            self.hermes_model_index = 0
+        elif kind == 'hermes-model':
+            models = data.get('session', {}).get('models', [])
+            if models:
+                self.hermes_model_index = (data['model_index'] + direction) % len(models)
+
     def set_usage_provider(self, provider):
-        if provider not in ("claude", "codex"):
+        if provider not in ("claude", "codex", "hermes"):
             return
         self.config["usage_provider"] = provider
         self.config["bar_mode"] = "worst"
         self._save_config()
 
     def _data_notice(self):
+        if self.config.get("usage_provider") == "hermes":
+            with self.lock:
+                data = getattr(self, 'hermes_data', {})
+                error = data.get('error')
+                return ('Last reading · ' if data.get('updated') else '') + error if error else None
         if self.config.get("usage_provider") != "codex":
             return "Cached reading · " + self.error[1] if self.error and self.metrics else None
         with self.lock:
@@ -345,6 +386,15 @@ class SmithAgentsWidget:
     # -- rendering ---------------------------------------------------------
     def _snapshot(self):
         with self.lock:
+            if self.config.get("usage_provider") == "hermes":
+                data = hermes_usage.select(getattr(self, 'hermes_data', {}),
+                    getattr(self, 'hermes_session_id', None),
+                    [a.get('session_id') for a in getattr(self, 'agents', [])
+                     if a.get('provider') == 'hermes' and a.get('state') != 'closed'],
+                    getattr(self, 'hermes_model_index', 0))
+                error, stamp = data.get('error'), data.get('updated')
+                return ([], data, None, [], ('hermes', error) if error else None,
+                        datetime.fromtimestamp(stamp) if stamp else None, data)
             if self.config.get("usage_provider") == "codex":
                 data = self.codex_data
                 error = data.get("usage_error")
@@ -375,8 +425,7 @@ class SmithAgentsWidget:
                 ('row', agent.get('id') or agent.get('name')),
                 (core.agent_style(agent)[0], agent.get('state')), animation_now)
 
-        if now - self._agents_scan > 1.0 or not self.agents:
-            self._scan_agents(now)
+        self._scan_agents(now)
         if self.tuck_anim >= 1.0:
             rows = self._peek_order.sync(self.agents)
             if not any(a.get('id') == self._peek_open_id for a in rows):
@@ -396,7 +445,7 @@ class SmithAgentsWidget:
                 figure_elapsed=lambda agent: figure_actions.periodic_elapsed(figure_elapsed(agent)),
                 provider=self.config.get("usage_provider", "claude"),
                 usage_open=getattr(self, '_peek_usage_open', False),
-                usage_notice=error[1] if error else None)
+                usage_notice=error[1] if error else None, usage_data=spend)
             self._peek_scroll = min(self._peek_scroll, self._peek_layout.rail_scroll_max)
             self._peek_panel_scroll = min(self._peek_panel_scroll, self._peek_layout.panel_scroll_max)
             x, y = self._peek_position(image.size)
@@ -409,6 +458,7 @@ class SmithAgentsWidget:
                 kind = error[0] if error else ""
                 notice = (kind, {"auth": "Sign in to Claude",
                                  "codex": error[1] if error else "Codex usage unavailable",
+                                 "hermes": "Hermes usage unavailable",
                                  "ratelimit": "Rate limited, retrying",
                                  "cached": "No reading yet"}.get(
                                      kind, "Usage offline"))
@@ -460,8 +510,10 @@ class SmithAgentsWidget:
         widget that stopped. Now it lands in the log and the next frame runs."""
         try:
             self._paint_frame()
+            self._last_paint_error = None
         except Exception:
-            log_line("tick failed\n" + traceback.format_exc().rstrip())
+            self._last_paint_error = traceback.format_exc().rstrip()
+            log_line("tick failed\n" + self._last_paint_error)
             self._tick_job = self.root.after(IDLE_REFRESH_MS, self._tick)
 
     def _tuck_side(self):
@@ -594,7 +646,12 @@ class SmithAgentsWidget:
         metrics, spend, _plan, active, _err, _upd, _today = self._snapshot()
         for metric in metrics:
             lines.append("%-14s %3d%%" % (metric["detail"], round(metric["pct"])))
-        if spend:
+        if spend and spend.get('provider') == 'hermes':
+            session = spend.get('session', {})
+            count = session.get('tokens')
+            lines.append('Hermes tokens: ' + (core.compact_tokens(count) if count is not None else '—'))
+            lines.append('Estimated cost: ' + hermes_usage.cost(session.get('estimated_cost_usd')))
+        elif spend:
             lines.append("%-14s %s" % ("Credits", spend["text"]))
         lines.append("Active: %s" % (", ".join(active) if active else "idle"))
         # keyed on the text it will show, not on the front metric alone: the
@@ -702,6 +759,8 @@ class SmithAgentsWidget:
         self.stopping.set()
         self.wake.set()
         self.codex_wake.set()
+        if hasattr(self, "hermes_wake"):
+            self.hermes_wake.set()
         try:
             self.tray.stop()
         except Exception:
@@ -760,9 +819,9 @@ class SmithAgentsWidget:
                 self.config['tuck_y'] = y+self._peek_layout.rail[1]
                 self._peek_drag_point = None
                 self._save_config()
+                self._repaint()
             else:
                 self._on_peek_click(event)
-            self._repaint()
             return
         if not self._drag:
             return
@@ -774,19 +833,55 @@ class SmithAgentsWidget:
         else:
             self._on_console_click(event)
 
-    def _scan_agents(self, now):
-        """Read the sessions, minus the closed rows you have cleared away.
+    def _agent_scan_worker(self):
+        # Accessibility IPC and transcript reads must never block painting or
+        # clicks. Only publish completed rows; the UI owns its displayed rows.
+        from contextlib import nullcontext
+        try:
+            if sys.platform == 'darwin':
+                from objc import autorelease_pool
+                pool = autorelease_pool()
+            else:
+                pool = nullcontext()
+            with pool:
+                found = decorate_agents(list_agents())
+                self._sync_agent_windows(found)
+            with self.lock:
+                self._pending_agents = found
+        except Exception:
+            log_line('agent scan failed\n' + traceback.format_exc().rstrip())
+        finally:
+            with self.lock:
+                self._agent_scan_running = False
 
-        The dismissal list is pruned against what the scan actually saw, so an
-        id whose session file is finally gone stops being remembered rather
-        than accumulating in the config forever."""
+    def _scan_agents(self, now):
+        """Consume a finished scan without waiting; at most one scan runs."""
         if self.config["demo_figures"]:
-            # the demo rows are not sessions, so they can neither be pruned
-            # against nor dismissed - pruning against them threw the list away
+            if now - self._agents_scan <= 1.0:
+                return
             self.agents = demo_agents(all_figures=True)
+            if self.demo:
+                from .sample_data import demo_hermes_agent
+                self.agents.append(demo_hermes_agent())
             self._agents_scan = now
             return
-        found = decorate_agents(list_agents())
+        with self.lock:
+            found = self._pending_agents
+            self._pending_agents = None
+        if found is not None:
+            self._apply_agent_scan(found)
+        if self.stopping.is_set() or now - self._agents_scan <= 1.0:
+            return
+        with self.lock:
+            if self._agent_scan_running:
+                return
+            self._agent_scan_running = True
+        self._agents_scan = now
+        self._agent_scan_thread = threading.Thread(target=self._agent_scan_worker, daemon=True)
+        self._agent_scan_thread.start()
+
+    def _apply_agent_scan(self, found):
+        """Merge fresh rows on the UI thread, preserving current user choices."""
         dismissed = [d for d in self.config.get("dismissed") or []
                      if any(a.get("id") == d for a in found)]
         if dismissed != (self.config.get("dismissed") or []):
@@ -799,18 +894,17 @@ class SmithAgentsWidget:
             agent['_reply_expanded'] = agent.get('id') in expanded_replies
             agent['_details_expanded'] = agent.get('id') in expanded_details
         self._figure_assignments.assign(self.agents)
-        self._sync_agent_windows()
-        self._agents_scan = now
 
-    def _sync_agent_windows(self):
+    def _sync_agent_windows(self, agents=None):
         from .session_windows import window_agent
-        for agent in self.agents:
+        agents = self.agents if agents is None else agents
+        for agent in agents:
             if not agent.get('sub'):
                 agent['_window_state'] = platform.agent_window_state(agent)
                 agent['_window_open'] = platform.agent_window_is_visible(agent)
-        for agent in self.agents:
+        for agent in agents:
             if agent.get('sub'):
-                parent = window_agent(agent, self.agents)
+                parent = window_agent(agent, agents)
                 agent['_window_state'] = parent.get('_window_state', 'unknown') if parent else 'unknown'
                 agent['_window_open'] = bool(parent and parent.get('_window_open'))
 
@@ -841,9 +935,13 @@ class SmithAgentsWidget:
         for kind, x0, y0, x1, y1, agent in self.agent_rows:
             if not (x0 <= event.x <= x1 and y0 <= event.y <= y1):
                 continue
-            if kind == 'peek-expand':
+            if kind == 'peek-hermes-usage':
+                self.config['console_tab'] = 'usage'
+                self.config['console_open'] = True
                 self.set_tuck(False)
-            elif kind in ('provider:claude', 'provider:codex'):
+            elif kind == 'peek-expand':
+                self.set_tuck(False)
+            elif kind in ('provider:claude', 'provider:codex', 'provider:hermes'):
                 provider = kind.partition(':')[2]
                 self._peek_usage_open = not (getattr(self, '_peek_usage_open', False)
                                              and self.config['usage_provider'] == provider)
@@ -943,6 +1041,8 @@ class SmithAgentsWidget:
                     self.config["reading_view"] = core.READING_VIEWS[
                         (core.READING_VIEWS.index(view) + 1) % len(core.READING_VIEWS)]
                 self._save_config()
+            elif kind in ('hermes-session', 'hermes-model'):
+                self._navigate_hermes(kind, agent)
             elif kind.startswith("provider:"):
                 provider = kind.partition(":")[2]
                 if provider == "toggle":
@@ -1116,6 +1216,12 @@ def main(argv=None):
                             click("tab:usage")
                             click("tab:stats")
                             assert widget._snapshot()[-1]['provider'] == 'codex'
+                            click("provider:hermes")
+                            click("tab:usage")
+                            assert widget._last_paint_error is None, widget._last_paint_error
+                            assert widget._snapshot()[-1]['tokens'] == 137600
+                            click("tab:stats")
+                            assert widget._snapshot()[-1]['session']['api_call_count'] == 12
                             click("provider:claude")
                             assert widget._snapshot()[0][0]['key'] == 'session'
                             click("tab:agents")

@@ -1,5 +1,18 @@
 """Deterministic example readings; no account or local transcript access."""
 from datetime import datetime, timedelta, timezone
+import time
+
+
+def demo_hermes_agent():
+    now = time.time()
+    return dict(id="hermes:demo", session_id="demo", provider="hermes", pid=0,
+                name="Research notes", cwd="~/Projects/research", entrypoint="hermes-cli",
+                state="done", status_detail="Last reply saved", idle=12, since=now - 600,
+                model="Hermes model", last_request="Summarize the project notes.",
+                latest_message="The notes are organized and the summary is ready.",
+                last_tool="read_file", tail=[], permissions=[], sub=False,
+                context_tokens=None, context_capacity=None, can_terminate=False,
+                active=False, stale=False)
 
 
 def demo_payload():

@@ -209,7 +209,7 @@ def raise_agent_window(agent):
         return False
     try:
         process = psutil.Process(agent["pid"])
-        if agent.get("provider") == "codex" and process.create_time() != agent.get("process_created"):
+        if agent.get("provider") in ("codex", "hermes") and process.create_time() != agent.get("process_created"):
             return False
         ancestors = process.parents()
         host = _agent_host_application(process)
@@ -280,7 +280,7 @@ def agent_window_state(agent):
     if target is None:
         try:
             process = psutil.Process(agent['pid'])
-            if agent.get('provider') == 'codex' and process.create_time() != agent.get('process_created'):
+            if agent.get('provider') in ('codex', 'hermes') and process.create_time() != agent.get('process_created'):
                 return 'unknown'
             host = _agent_host_application(process)
             window = _match_agent_window(agent, host)

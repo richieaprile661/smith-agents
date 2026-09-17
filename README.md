@@ -2,12 +2,12 @@
   <img src="docs/images/github-signal-field-hero.png" alt="Smith Agents: Your agents. In view. The current widget shows Claude and Codex sessions with figures, context, activity, and separate 5-hour and weekly usage fields." width="880">
 </p>
 
-**Smith Agents** keeps your **Claude Code** and **Codex** sessions in view on
+**Smith Agents** keeps your **Claude Code**, **Codex**, and **Hermes Agent** sessions in view on
 **Windows and macOS**. See what your agents are doing, check account usage, and
 jump back to a session from a small floating widget or a strip at the edge of
 your screen.
 
-[Install](#install) · [Sessions](#your-sessions-at-a-glance) · [Usage](#usage-in-a-field-of-signals) · [Screen edges](#small-at-every-edge) · [Codex setup](docs/codex.md)
+[Install](#install) · [Sessions](#your-sessions-at-a-glance) · [Usage](#usage-in-a-field-of-signals) · [Screen edges](#small-at-every-edge) · [Codex setup](docs/codex.md) · [Hermes setup](docs/hermes.md)
 
 | Follow the work | Watch your usage | Keep your screen |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ You need the following:
 
 - Python 3.10 or later from [python.org](https://www.python.org/downloads/). On
   Windows, include the Python launcher (`py`).
-- Claude Code or Codex, installed and signed in.
+- Claude Code, Codex, or Hermes Agent, installed and configured.
 
 To install Smith Agents, run the command for your system.
 
@@ -132,7 +132,7 @@ on macOS.
 
 ## How it works
 
-1. **Start an agent.** Open Claude Code or Codex in a terminal or in VS Code.
+1. **Start an agent.** Open Claude Code, Codex, or a local Hermes chat.
    Smith Agents finds it within a few seconds.
 2. **Check in.** The **Agents** tab lists your sessions. **Usage** and **Stats**
    show readings for the selected provider. Click a session to see its details.
@@ -166,7 +166,14 @@ To start Smith Agents when you sign in, turn on **Start with Windows** or
 | Approval needed | A supported Claude Code request in VS Code is waiting. Click **Review request** to review it, or **Deny**. Requires the optional bridge. |
 | Stats | Each provider's activity data. Claude and Codex count tokens differently, so they're shown separately. |
 | Hide | Minimizes the agent's window. The agent keeps running. |
-| End session | Asks before it stops a verified, standalone Claude session. For Codex sessions, the panel shows **End in Codex**. |
+| End session | Asks before it stops a verified, standalone Claude session. Codex and Hermes sessions are ended in their own apps. |
+
+Hermes cards show locally saved requests, replies, and tool names with its
+portrait logo. Activity is best effort and may lag while Hermes streams a reply.
+Hermes Usage shows saved session tokens, estimated cost, and model breakdowns;
+Stats shows saved API calls, tool calls, and messages. Hermes context readings,
+account quotas, approvals, and delegated helpers are not yet connected.
+See [Hermes compatibility and setup](docs/hermes.md).
 
 Smith Agents supports sessions on the same Windows or macOS computer. It doesn't
 connect to agents in WSL, over SSH, in containers, or in remote VS Code sessions.
@@ -208,4 +215,4 @@ widget, artwork, and themes.
 The code is released under the [MIT License](LICENSE). The bundled Fira Code and
 Space Grotesk fonts use the included SIL Open Font License files.
 
-This project isn't affiliated with Anthropic or OpenAI.
+This project isn't affiliated with Anthropic, OpenAI, or Nous Research.

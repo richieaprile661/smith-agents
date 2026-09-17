@@ -52,20 +52,21 @@ class HeaderReadingTests(unittest.TestCase):
 
     def test_header_has_signal_fields_and_independent_provider_lamps(self):
         metrics = core.build_metrics(demo_payload())
-        for provider in ('claude', 'codex'):
+        for provider in ('claude', 'codex', 'hermes'):
             chip = core.console_base((core.CONSOLE_W, core.BAR_H))
             pen = Mock(wraps=ImageDraw.Draw(chip))
             boxes = core.render_console_bar(chip, pen, metrics, metrics[0], None, {}, 0,
                                             False, provider=provider)
             texts = [call.args[1] for call in pen.text.call_args_list]
-            self.assertTrue({'Smith', '5h', 'week', 'used'} <= set(texts))
+            expected = {'Smith', 'Tokens', 'Est. cost', 'Session · auto scale'} if provider == 'hermes' else {'Smith', '5h', 'week', 'used'}
+            self.assertTrue(expected <= set(texts))
             pen.rounded_rectangle.assert_not_called()
             self.assertNotIn('reading', [box[0] for box in boxes])
-            self.assertEqual([box[0] for box in boxes[:2]], ['provider:claude', 'provider:codex'])
+            self.assertEqual([box[0] for box in boxes[:3]], ['provider:claude', 'provider:codex', 'provider:hermes'])
             widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
             widget.agent_rows = boxes
             widget.set_usage_provider, widget._repaint = Mock(), Mock()
-            for box in boxes[:2]:
+            for box in boxes[:3]:
                 widget._on_console_click(SimpleNamespace(x=(box[1]+box[3])/2, y=(box[2]+box[4])/2))
                 widget.set_usage_provider.assert_called_with(box[0].partition(':')[2])
             active, inactive = core.provider_lamp(provider, True), core.provider_lamp(provider, False)
@@ -81,6 +82,7 @@ class HeaderReadingTests(unittest.TestCase):
         self.assertEqual((five['pct'], week['pct']), (71, 31))
         self.assertEqual(core.header_usage_metrics(metrics[:1], 'codex'), [None, week])
         self.assertEqual(core.header_usage_metrics([], 'codex'), [None, None])
+        self.assertEqual(core.header_usage_metrics(core.build_metrics(demo_payload()), 'hermes'), [None, None])
 
     def test_signal_fields_count_used_cells_in_provider_colour(self):
         from PIL import Image

@@ -118,7 +118,7 @@ class QuietCardTests(unittest.TestCase):
         fresh.pop('_details_expanded')
         with patch('smith_agents.app.list_agents', return_value=[fresh]), \
              patch('smith_agents.app.decorate_agents', side_effect=lambda rows: rows):
-            widget._scan_agents(100)
+            widget._apply_agent_scan([fresh])
         self.assertTrue(widget.agents[0]['_reply_expanded'])
         self.assertTrue(widget.agents[0]['_details_expanded'])
         fields = core.agent_drawer_layout(row)[0]
