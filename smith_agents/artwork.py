@@ -24,6 +24,7 @@ STATE_FIGURES = {
 HEADER = "group_selfie"
 SUBAGENT = "little_helper"
 HELPER_FIGURES = tuple("helper_" + state for state in ("working", "reviewing", "testing", "needs", "finished", "unknown"))
+SESSION_FIGURES = frozenset(pose for poses in STATE_FIGURES.values() for pose in poses) | frozenset(HELPER_FIGURES)
 
 
 def helper_pose(agent):
@@ -145,6 +146,24 @@ def _session_geometry(helpers=False):
     return profiles, widest, top, bottom
 
 
+def _display_alpha(name, alpha, size):
+    """Resample once, with firm stroke coverage and antialiased edges.
+
+    At 1x, a downsampled fine stroke can contain no opaque pixels. A fixed
+    coverage curve removes faint ringing and strengthens its core without
+    spatial blur, dilation, or changes to the reviewed source masks.
+    """
+    alpha = alpha.resize(size, Image.Resampling.LANCZOS)
+    if name not in SESSION_FIGURES:
+        alpha = alpha.point(lambda v: v if v > 4 else 0)
+    boost = MANIFEST['figures'][name.removeprefix('approved_')].get('coverage_boost', 0)
+    if boost:
+        alpha = alpha.point(lambda v: round(v + boost * v * (1-v/255)))
+    if name in SESSION_FIGURES:
+        return alpha.point(lambda v: max(0, min(255, round((v-16)*255/164))))
+    return alpha
+
+
 @lru_cache(maxsize=256)
 def _session_placement(name, width, height):
     from . import figure_actions
@@ -173,10 +192,52 @@ def _session_placement(name, width, height):
     return size, round(height - visible_height * bottom) - bounds[3]
 
 
+def session_ink_height(width, height):
+    """Equal full-drawing height in both layouts, scaled to device pixels.
+
+    The widest measured animation frame sets the largest whole logical-pixel
+    height fitting a 56px row cell with 1px clearance at each side: 23px.
+    The 80x40 tucked cell uses that same height, rather than enlarging it.
+    """
+    widest = MANIFEST['session_drawing_geometry']['widest_frame']
+    logical_height = (56-2)*widest['height']//widest['width']
+    density = min(width/56, height/40)
+    return max(1, round(logical_height*density))
+
+
+def _session_alpha(name, alpha, width, height):
+    cutoff = MANIFEST['session_drawing_geometry']['alpha_cutoff']
+    alpha = alpha.point(lambda v: v if v > cutoff else 0)
+    alpha = alpha.crop(alpha.getbbox())
+    target = session_ink_height(width, height)
+    # Resampling and contrast can remove a boundary row. Re-render from the
+    # original mask, not an already resized image, until visible ink matches.
+    raster_height = target
+    for _ in range(8):
+        size = (max(1, round(alpha.width*raster_height/alpha.height)), raster_height)
+        result = _display_alpha(name, alpha, size)
+        bounds = result.getbbox()
+        ink_height = bounds[3]-bounds[1]
+        if ink_height == target:
+            return result.crop(bounds)
+        raster_height += target-ink_height
+    raise ValueError('Could not normalize figure ink height: '+name)
+
+
 def render(name, ink, width, height, fade=False, frame=0):
     # Actions use the shared source masks; defer the import to avoid a cycle.
     from . import figure_actions
     alpha = figure_actions.alpha_frame(name, figure_actions.canonical_frame(frame))
+    if name in SESSION_FIGURES:
+        alpha = _session_alpha(name, alpha, width, height)
+        if fade:
+            alpha = alpha.point(lambda v: round(v * .78))
+        drawing = Image.new('RGBA', alpha.size, ink)
+        drawing.putalpha(alpha)
+        cell = Image.new('RGBA', (width, height))
+        padding = max(1, round(min(width / 56, height / 42)))
+        cell.paste(drawing, ((width-alpha.width)//2, height-padding-alpha.height))
+        return cell
     if name == HEADER:
         scale = min(width / alpha.width, height / alpha.height)
         size = (max(1, min(width, round(alpha.width * scale))),
@@ -184,14 +245,7 @@ def render(name, ink, width, height, fade=False, frame=0):
         y = height - size[1]
     else:
         size, y = _session_placement(name, width, height)
-    alpha = alpha.resize(size, Image.Resampling.LANCZOS)
-    # Drop faint resampling halos, whose width otherwise differs at 1x/2x.
-    alpha = alpha.point(lambda value: value if value > 4 else 0)
-    boost = MANIFEST['figures'][name.removeprefix('approved_')].get('coverage_boost', 0)
-    if boost:
-        # Increase coverage inside existing strokes, without widening their
-        # contours or adding a glow that would make the pair look blurred.
-        alpha = alpha.point(lambda value: round(value + boost * value * (1-value/255)))
+    alpha = _display_alpha(name, alpha, size)
     if fade:
         alpha = alpha.point(lambda v: round(v * 0.78))
     drawing = Image.new("RGBA", size, ink)

@@ -1715,7 +1715,7 @@ def agent_figure(strip, frame, ink, cell_w=None, cell_h=None, fade=False):
         return hit
     if approved:
         cell = artwork.render(strip, ink, cell_w, cell_h, fade=fade, frame=frame)
-        if T.get("glow"):
+        if T.get("glow") and strip not in artwork.SESSION_FIGURES:
             if ink == state_colour("working"):
                 # Orange's fine strokes need more coverage beside neon green.
                 # Lift partial coverage without spreading the contour, changing

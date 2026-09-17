@@ -43,6 +43,25 @@ figure numbers and their states are listed in
 
 Ready sessions can show cooking, cycling, pumping, watering, or showering.
 
+All 19 current session drawings (13 main poses and six helpers) have the same
+full visible height, including props: 23 logical pixels at 100% widget size,
+in both expanded and tucked views. Device pixels are rounded for fractional
+Windows scaling and widget zoom. The common height is derived from the widest
+measured animation frame and the available width of a standard row cell.
+`session_drawing_geometry` in the manifest records that measurement.
+
+The renderer measures each frame's visible ink, crops transparent margins,
+and resamples from the original mask to the exact target height. Figures share
+a baseline within each layout. This deliberately normalizes the complete
+scene rather than the person's head or body; props and pose changes can affect
+the character's apparent size. Every current animation frame is checked for
+exact height and clipping at 100%, 125%, 150%, and 200% display scale.
+
+A fixed alpha-coverage curve removes faint resampling halos and strengthens
+stroke centers while keeping antialiased edges. Current session figures do not
+receive theme blur. Original source images, provider-logo glow, and legacy
+figure rendering are preserved.
+
 The widget follows these rules when it assigns and animates figures:
 
 - Sessions in the same state get different figures, and every figure is used

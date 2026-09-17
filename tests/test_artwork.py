@@ -163,32 +163,56 @@ class ApprovedArtworkTests(unittest.TestCase):
                 # same density and enforces a tighter one-pixel difference.
                 self.assertLessEqual(abs(one - two), 2)
 
-    def test_character_body_scale_excludes_raised_hands_and_props(self):
+    def test_every_current_drawing_has_exact_height_in_every_animation_frame(self):
         from smith_agents import figure_actions as motion
-        names = {name for variants in artwork.STATE_FIGURES.values() for name in variants}
-        names.add(artwork.SUBAGENT)
-        for width, height in ((80, 40), (57, 44)):
-            for density in (1, 2):
-                w, h = width*density, height*density
-                bounds = [artwork.render(name, "black", w, h).getchannel("A").getbbox()
-                          for name in names]
-                self.assertEqual(len({box[3] for box in bounds}), 1)
-                body_heights = []
-                # Vertical slices through each person's crown and torso. These
-                # reviewed source coordinates exclude the cloth's raised hand
-                # and the watering can/plant. Whole-image fitting fails here.
-                for name, left, right in (("approved_17", 110, 159),
-                                           ("approved_28", 40, 110)):
-                    reference = motion.alpha_frame(name, 0)
-                    size, _y = artwork._session_placement(name, w, h)
-                    scale_x = size[0] / reference.width
-                    x = (w-size[0])//2
-                    rect = (round(x+(left+motion.PAD)*scale_x), 0,
-                            round(x+(right+motion.PAD)*scale_x), h)
-                    body = artwork.render(name, "black", w, h).getchannel("A").crop(rect)
-                    box = body.point(lambda v: 255 if v > 32 else 0).getbbox()
-                    body_heights.append(box[3]-box[1])
-                self.assertLessEqual(abs(body_heights[0]-body_heights[1]), density)
+        geometry = artwork.MANIFEST['session_drawing_geometry']
+        widest = geometry['widest_frame']
+        checked = 0
+        for name in sorted(artwork.SESSION_FIGURES):
+            for frame in range(motion.ACTION_FRAMES + motion.IDLE_FRAMES):
+                source = motion.alpha_frame(name, frame)
+                box = source.point(lambda v: v if v > geometry['alpha_cutoff'] else 0).getbbox()
+                self.assertLessEqual((box[2]-box[0])*widest['height'],
+                                     (box[3]-box[1])*widest['width'])
+                for density in (1, 1.25, 1.5, 2):
+                    heights = []
+                    for width, height in ((56, 42), (80, 40)):
+                        w, h = round(width*density), round(height*density)
+                        image = artwork.render(name, 'white', w, h, frame=frame)
+                        box = image.getchannel('A').getbbox()
+                        ink_height = box[3]-box[1]
+                        with self.subTest(name=name, frame=frame, density=density, cell=(w,h)):
+                            self.assertEqual(ink_height, round(23*density))
+                            self.assertGreater(box[0], 0)
+                            self.assertGreater(box[1], 0)
+                            self.assertLess(box[2], w)
+                            self.assertLess(box[3], h)
+                        heights.append(ink_height)
+                        checked += 1
+                    self.assertEqual(*heights)
+        self.assertEqual(checked, 19 * 128 * 4 * 2)
+
+    def test_current_figures_have_firm_strokes_at_each_display_scale(self):
+        for density in (1, 1.25, 1.5, 2):
+            for name in artwork.SESSION_FIGURES:
+                for width, height in ((56, 42), (80, 40)):
+                    with self.subTest(name=name, density=density, cell=(width, height)):
+                        alpha = artwork.render(name, 'white', round(width*density),
+                                               round(height*density)).getchannel('A')
+                        histogram = alpha.histogram()
+                        self.assertGreater(sum(histogram[220:]) / sum(histogram[32:]), .05)
+                        self.assertGreater(sum(histogram[1:220]), 0)  # Smooth edges remain.
+
+    def test_current_session_figures_do_not_acquire_theme_blur(self):
+        name = 'approved_23'
+        core._FIGURE_CACHE.clear()
+        try:
+            with patch.dict(core.T, glow=True):
+                actual = core.agent_figure(name, 0, (255, 255, 255, 255), 56, 42)
+            expected = artwork.render(name, (255, 255, 255, 255), 56, 42)
+            self.assertEqual(actual.tobytes(), expected.tobytes())
+        finally:
+            core._FIGURE_CACHE.clear()
 
     def test_tray_has_transparent_padding_smooth_edges_and_alarm_tint(self):
         for size in (16, 20, 22, 24, 32, 44):

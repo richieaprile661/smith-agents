@@ -291,5 +291,14 @@
     "little-helper.png": "425529462a8970a149a5010a87783c79cb129d1ba94df98d8ff8bdb25230c51b",
     "smith-helper-states.png": "b93ea3c391204d6dcb33b98575c9cbc10854001e6b0f714ea2afa4383cf7f959"
   },
-  "tray": "tray.png"
+  "tray": "tray.png",
+  "session_drawing_geometry": {
+    "alpha_cutoff": 16,
+    "widest_frame": {
+      "figure": "approved_20",
+      "frame": 16,
+      "width": 294,
+      "height": 130
+    }
+  }
 }
