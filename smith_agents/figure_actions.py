@@ -201,6 +201,9 @@ def _joint_warp(alpha, fields):
 
 def alpha_frame(name, frame):
     """Render a bounded entrance/idle frame; shared source masks stay immutable."""
+    if name in artwork.SESSION_FIGURES and 'calibration' in artwork.MANIFEST['figures'][name.removeprefix('approved_')]:
+        from . import matched_motion
+        return matched_motion.alpha_frame(name, canonical_frame(frame))
     if name in artwork.HELPER_FIGURES:
         from . import helper_motion
         return helper_motion.alpha_frame(name, canonical_frame(frame))

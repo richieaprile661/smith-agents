@@ -6,6 +6,8 @@ The widget is split into shared code and one backend for each platform:
 
 | File | Responsibility |
 | --- | --- |
+| `smith_agents/matched_artwork.py` | Fixed head, torso, and scene calibration of the current atlas |
+| `smith_agents/matched_motion.py` | Local action patches with an immutable body and scene envelope |
 | `smith_agents/core.py` | Shared Claude data, themes, Pillow drawing, and layout |
 | `smith_agents/tucked.py` | Screen-edge strips, agent panels, and attached usage drawers |
 | `smith_agents/app.py` | Shared controller, polling, interactions, and configuration |
@@ -43,19 +45,37 @@ figure numbers and their states are listed in
 
 Ready sessions can show cooking, cycling, pumping, watering, or showering.
 
-All 17 current session drawings (13 main poses and four helpers) use a fixed
-calibrated body height of 23 logical pixels at 100% widget size in both layouts.
-The manifest's `character_height` defines the body measurement for each pose.
-Props never determine the character scale. Final raster sizes are rounded to
-device pixels for display scaling and widget zoom.
+All 17 current session drawings (13 main poses and four helpers) share one
+calibrated scene of 46 × 26 logical pixels in expanded and tucked layouts.
+This is visible ink, including props, rather than merely an equal cell size.
+The source atlas is `matched-figures.png`, revised using the explicitly selected
+`gpt-image-2.5-sunburst` API model. Source images are preserved byte for byte.
 
-Each figure uses one crop, scale, and position for its entire animation.
-`session_drawing_geometry` records the union of visible bounds across all 128
-frames and a fixed reference baseline. Moving a hand or prop can change the
-visible outline naturally, but cannot rescale or recenter the drawing.
-Per-frame tight fitting is deliberately avoided: it makes the whole character
-grow and shrink as its pose changes. Tests cover every frame at four display
-scales and verify that moving a prop cannot alter the stationary body pixels.
+A single overall-height multiplier is insufficient: it makes a full-body scooter
+rider's head and torso smaller than a seated laptop user's. Each atlas entry now
+records separate head and torso contour landmarks. `matched_artwork.py` maps them
+into a shared 276 × 156 coordinate system before animation:
+
+| Measurement | Atlas units | Logical pixels |
+| --- | --- | --- |
+| Full drawing | 276 × 156 | 46 × 26 |
+| Head landmark box | 72 × 42 | 12 × 7 |
+| Torso width | 66 | 11 |
+| Neck-to-waist span | 48 | 8 |
+
+Landmarks describe corresponding anatomical regions; different arm/leg poses
+retain different silhouettes. Head and torso geometry is fixed independently
+of props. The remaining scene space accommodates the props, and ground endpoints
+are registered to the shared width. Geometry is cached once per pose. Never crop,
+fit, or recalibrate against the current animation frame: that causes growing and
+shrinking as props move.
+
+`matched_motion.py` confines actions to explicit prop/limb rectangles and the
+laptop screen. Every pixel outside those regions, including the head, torso and
+ground, stays unchanged. Tests check all 128 frames of all 17 poses in both layouts
+at 100%, 125%, 150%, and 200% scaling, including exact visible drawing bounds,
+common anatomical landmark dimensions, clipping, stroke coverage, and stationary
+pixels. Device-pixel rounding still applies to antialiased contour edges.
 
 A fixed alpha-coverage curve removes faint resampling halos and strengthens
 stroke centers while keeping antialiased edges. Current session figures do not
@@ -79,10 +99,9 @@ The widget follows these rules when it assigns and animates figures:
 The renderer uses the approved images as theme-colored masks and resamples them
 for the display density. The source images stay unchanged.
 
-Helpers use only the four approved poses from `helper-poses.png`: carrying a
+Helpers use only the four selected activities, now in `matched-figures.png`: carrying a
 baby, stroller, sweeping, and carrying a watering can (review figures 14, 15,
-18, and 19). The source sheet is preserved byte for byte; manifest rectangles
-exclude its captions and the two rejected scenes. The six previous helper
+18, and 19). Manifest rectangles exclude the sheet captions; rejected scenes 16 and 17 are absent. The six previous helper
 poses are no longer registered or selected.
 
 `artwork.helper_pose` uses current tool evidence and lifecycle state, never the
@@ -91,9 +110,8 @@ and testing or completion uses the watering can. Permission requests and unknown
 activity use the baby pose. Artwork is decorative; the actual activity, status,
 and permission controls remain authoritative. A pose change restarts its entrance.
 
-`helper_motion.py` animates only small rectangles inside the props. Body and ground
-pixels outside those regions remain unchanged through every frame. All four use
-the same fixed calibrated body scale as the 13 main figures in both layouts.
+`helper_motion.py` forwards to the same calibrated animation path as the 13 main
+figures. Helpers retain their four activity mappings and the common body geometry.
 
 Export all four animations with pause, replay, and compact-size previews:
 
@@ -106,7 +124,13 @@ same renderer used in the native widget, and it uses no account or session data.
 
 ## Preview the figures
 
-To review all 13 poses and the selfie with sample data, run the preview:
+Render all 17 current figures as one numbered comparison at a common scale:
+
+```sh
+python tools/render_figure_review.py --out /tmp/smith-figure-review.png
+```
+
+To review all 13 main poses and the legacy selfie with sample data, run the preview:
 
 ```sh
 .venv/bin/python -m smith_agents.animation_preview

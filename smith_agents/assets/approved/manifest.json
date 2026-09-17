@@ -29,134 +29,485 @@
   },
   "figures": {
     "3": {
-      "source": "set-1.png",
+      "source": "matched-figures.png",
       "rect": [
-        650,
         0,
-        971,
-        244
+        0,
+        307,
+        220
       ],
-      "character_height": 165
+      "character_height": 156,
+      "legacy": {
+        "source": "set-1.png",
+        "rect": [
+          650,
+          0,
+          971,
+          244
+        ],
+        "character_height": 165
+      },
+      "calibration": {
+        "origin": [
+          40,
+          63
+        ],
+        "head": [
+          78,
+          0,
+          149,
+          48
+        ],
+        "torso": [
+          119,
+          185,
+          83
+        ]
+      }
     },
     "7": {
-      "source": "set-1.png",
+      "source": "matched-figures.png",
       "rect": [
+        307,
         0,
-        461,
-        324,
-        674
+        614,
+        220
       ],
-      "character_height": 155
+      "character_height": 156,
+      "legacy": {
+        "source": "set-1.png",
+        "rect": [
+          0,
+          461,
+          324,
+          674
+        ],
+        "character_height": 155
+      },
+      "calibration": {
+        "origin": [
+          340,
+          62
+        ],
+        "head": [
+          85,
+          1,
+          160,
+          51
+        ],
+        "torso": [
+          127,
+          193,
+          84
+        ]
+      }
     },
     "8": {
-      "source": "set-1.png",
+      "source": "matched-figures.png",
       "rect": [
-        324,
-        461,
-        650,
-        674
+        614,
+        0,
+        922,
+        220
       ],
-      "character_height": 166
+      "character_height": 156,
+      "legacy": {
+        "source": "set-1.png",
+        "rect": [
+          324,
+          461,
+          650,
+          674
+        ],
+        "character_height": 166
+      },
+      "calibration": {
+        "origin": [
+          647,
+          62
+        ],
+        "head": [
+          76,
+          0,
+          150,
+          49
+        ],
+        "torso": [
+          110,
+          177,
+          84
+        ]
+      }
     },
     "14": {
-      "source": "set-1.png",
+      "source": "matched-figures.png",
       "rect": [
-        324,
-        890,
-        650,
-        1113
+        1229,
+        0,
+        1536,
+        220
       ],
-      "character_height": 174
+      "character_height": 156,
+      "legacy": {
+        "source": "set-1.png",
+        "rect": [
+          324,
+          890,
+          650,
+          1113
+        ],
+        "character_height": 174
+      },
+      "calibration": {
+        "origin": [
+          1258,
+          61
+        ],
+        "head": [
+          81,
+          1,
+          153,
+          51
+        ],
+        "torso": [
+          108,
+          172,
+          84
+        ]
+      }
     },
     "12": {
-      "source": "set-1.png",
+      "source": "matched-figures.png",
       "rect": [
-        650,
-        674,
-        971,
-        890
+        922,
+        0,
+        1229,
+        220
       ],
-      "character_height": 162
+      "character_height": 156,
+      "legacy": {
+        "source": "set-1.png",
+        "rect": [
+          650,
+          674,
+          971,
+          890
+        ],
+        "character_height": 162
+      },
+      "calibration": {
+        "origin": [
+          951,
+          62
+        ],
+        "head": [
+          98,
+          0,
+          170,
+          50
+        ],
+        "torso": [
+          124,
+          196,
+          87
+        ]
+      }
     },
     "20": {
-      "source": "set-1.png",
+      "source": "matched-figures.png",
       "rect": [
-        324,
-        1382,
-        650,
-        1620
+        307,
+        260,
+        614,
+        464
       ],
-      "character_height": 153
+      "character_height": 156,
+      "legacy": {
+        "source": "set-1.png",
+        "rect": [
+          324,
+          1382,
+          650,
+          1620
+        ],
+        "character_height": 153
+      },
+      "calibration": {
+        "origin": [
+          340,
+          307
+        ],
+        "head": [
+          53,
+          0,
+          125,
+          47
+        ],
+        "torso": [
+          103,
+          157,
+          84
+        ]
+      }
     },
     "17": {
-      "source": "set-1.png",
+      "source": "matched-figures.png",
       "rect": [
-        324,
-        1113,
-        650,
-        1382
+        0,
+        260,
+        307,
+        464
       ],
-      "character_height": 163
+      "character_height": 156,
+      "legacy": {
+        "source": "set-1.png",
+        "rect": [
+          324,
+          1113,
+          650,
+          1382
+        ],
+        "character_height": 163
+      },
+      "calibration": {
+        "origin": [
+          40,
+          307
+        ],
+        "head": [
+          83,
+          0,
+          152,
+          42
+        ],
+        "torso": [
+          61,
+          123,
+          81
+        ]
+      }
     },
     "23": {
-      "source": "set-2.png",
+      "source": "matched-figures.png",
       "rect": [
-        320,
-        0,
-        654,
-        228
+        614,
+        260,
+        922,
+        464
       ],
-      "character_height": 154
+      "character_height": 156,
+      "legacy": {
+        "source": "set-2.png",
+        "rect": [
+          320,
+          0,
+          654,
+          228
+        ],
+        "character_height": 154
+      },
+      "calibration": {
+        "origin": [
+          646,
+          310
+        ],
+        "head": [
+          76,
+          0,
+          143,
+          43
+        ],
+        "torso": [
+          46,
+          119,
+          80
+        ]
+      }
     },
     "30": {
-      "source": "set-2.png",
+      "source": "matched-figures.png",
       "rect": [
-        661,
-        467,
-        971,
-        696
+        0,
+        505,
+        307,
+        704
       ],
-      "character_height": 144
+      "character_height": 156,
+      "legacy": {
+        "source": "set-2.png",
+        "rect": [
+          661,
+          467,
+          971,
+          696
+        ],
+        "character_height": 144
+      },
+      "calibration": {
+        "origin": [
+          40,
+          557
+        ],
+        "head": [
+          68,
+          1,
+          136,
+          44
+        ],
+        "torso": [
+          46,
+          101,
+          79
+        ]
+      }
     },
     "28": {
-      "source": "set-2.png",
+      "source": "matched-figures.png",
       "rect": [
-        0,
-        467,
-        312,
-        696
+        922,
+        260,
+        1229,
+        464
       ],
-      "character_height": 171
+      "character_height": 156,
+      "legacy": {
+        "source": "set-2.png",
+        "rect": [
+          0,
+          467,
+          312,
+          696
+        ],
+        "character_height": 171
+      },
+      "calibration": {
+        "origin": [
+          951,
+          307
+        ],
+        "head": [
+          53,
+          0,
+          124,
+          44
+        ],
+        "torso": [
+          33,
+          95,
+          83
+        ]
+      }
     },
     "29": {
-      "source": "set-2.png",
+      "source": "matched-figures.png",
       "rect": [
-        320,
-        467,
-        654,
-        696
+        1229,
+        260,
+        1536,
+        464
       ],
-      "character_height": 160
+      "character_height": 156,
+      "legacy": {
+        "source": "set-2.png",
+        "rect": [
+          320,
+          467,
+          654,
+          696
+        ],
+        "character_height": 160
+      },
+      "calibration": {
+        "origin": [
+          1258,
+          307
+        ],
+        "head": [
+          72,
+          0,
+          144,
+          45
+        ],
+        "torso": [
+          54,
+          111,
+          84
+        ]
+      }
     },
     "34": {
-      "source": "set-2.png",
+      "source": "matched-figures.png",
       "rect": [
-        0,
-        938,
-        312,
-        1213
+        307,
+        505,
+        614,
+        704
       ],
-      "character_height": 158
+      "character_height": 156,
+      "legacy": {
+        "source": "set-2.png",
+        "rect": [
+          0,
+          938,
+          312,
+          1213
+        ],
+        "character_height": 158
+      },
+      "calibration": {
+        "origin": [
+          340,
+          557
+        ],
+        "head": [
+          58,
+          0,
+          131,
+          45
+        ],
+        "torso": [
+          39,
+          97,
+          81
+        ]
+      }
     },
     "35": {
-      "source": "set-2.png",
+      "source": "matched-figures.png",
       "rect": [
-        320,
-        938,
-        654,
-        1213
+        614,
+        505,
+        922,
+        704
       ],
-      "character_height": 213
+      "character_height": 156,
+      "legacy": {
+        "source": "set-2.png",
+        "rect": [
+          320,
+          938,
+          654,
+          1213
+        ],
+        "character_height": 213
+      },
+      "calibration": {
+        "origin": [
+          647,
+          557
+        ],
+        "head": [
+          83,
+          0,
+          155,
+          45
+        ],
+        "torso": [
+          66,
+          121,
+          80
+        ]
+      }
     },
     "group_selfie": {
       "source": "group-selfie.png",
@@ -181,60 +532,168 @@
       "coverage_boost": 0.6
     },
     "helper_baby": {
-      "source": "helper-poses.png",
+      "source": "matched-figures.png",
       "rect": [
-        30,
-        95,
-        465,
-        423
+        0,
+        752,
+        307,
+        945
       ],
-      "character_height": 291,
-      "motion_origin": [
-        54,
-        119
-      ]
+      "character_height": 156,
+      "legacy": {
+        "source": "helper-poses.png",
+        "rect": [
+          30,
+          95,
+          465,
+          423
+        ],
+        "character_height": 291,
+        "motion_origin": [
+          54,
+          119
+        ]
+      },
+      "calibration": {
+        "origin": [
+          40,
+          787
+        ],
+        "head": [
+          72,
+          0,
+          144,
+          45
+        ],
+        "torso": [
+          53,
+          121,
+          83
+        ]
+      }
     },
     "helper_stroller": {
-      "source": "helper-poses.png",
+      "source": "matched-figures.png",
       "rect": [
-        489,
-        94,
-        913,
-        423
+        307,
+        752,
+        614,
+        945
       ],
-      "character_height": 293,
-      "motion_origin": [
-        496,
-        117
-      ]
+      "character_height": 156,
+      "legacy": {
+        "source": "helper-poses.png",
+        "rect": [
+          489,
+          94,
+          913,
+          423
+        ],
+        "character_height": 293,
+        "motion_origin": [
+          496,
+          117
+        ]
+      },
+      "calibration": {
+        "origin": [
+          340,
+          786
+        ],
+        "head": [
+          60,
+          1,
+          132,
+          46
+        ],
+        "torso": [
+          39,
+          101,
+          84
+        ]
+      }
     },
     "helper_sweeping": {
-      "source": "helper-poses.png",
+      "source": "matched-figures.png",
       "rect": [
-        495,
-        542,
-        996,
-        870
+        614,
+        752,
+        922,
+        945
       ],
-      "character_height": 290,
-      "motion_origin": [
-        513,
-        565
-      ]
+      "character_height": 156,
+      "legacy": {
+        "source": "helper-poses.png",
+        "rect": [
+          495,
+          542,
+          996,
+          870
+        ],
+        "character_height": 290,
+        "motion_origin": [
+          513,
+          565
+        ]
+      },
+      "calibration": {
+        "origin": [
+          645,
+          786
+        ],
+        "head": [
+          82,
+          0,
+          154,
+          47
+        ],
+        "torso": [
+          63,
+          124,
+          84
+        ]
+      }
     },
     "helper_watering_can": {
-      "source": "helper-poses.png",
+      "source": "matched-figures.png",
       "rect": [
-        1015,
-        546,
-        1500,
-        870
+        922,
+        752,
+        1229,
+        945
       ],
-      "character_height": 287,
-      "motion_origin": [
-        1035,
-        569
-      ]
+      "character_height": 156,
+      "legacy": {
+        "source": "helper-poses.png",
+        "rect": [
+          1015,
+          546,
+          1500,
+          870
+        ],
+        "character_height": 287,
+        "motion_origin": [
+          1035,
+          569
+        ]
+      },
+      "calibration": {
+        "origin": [
+          951,
+          786
+        ],
+        "head": [
+          84,
+          0,
+          158,
+          47
+        ],
+        "torso": [
+          66,
+          129,
+          84
+        ]
+      }
     }
   },
   "sources": {
@@ -244,7 +703,8 @@
     "tray.png": "efeb4a76c5e08777bd1ad15110275804e8626e4025efeaddff8da57b41fe5c89",
     "little-helper.png": "425529462a8970a149a5010a87783c79cb129d1ba94df98d8ff8bdb25230c51b",
     "smith-helper-states.png": "b93ea3c391204d6dcb33b98575c9cbc10854001e6b0f714ea2afa4383cf7f959",
-    "helper-poses.png": "cfa5565a523f2475af0f6dd36ca72b3d6790f42abfd7deb9e07a87bc9aea3198"
+    "helper-poses.png": "cfa5565a523f2475af0f6dd36ca72b3d6790f42abfd7deb9e07a87bc9aea3198",
+    "matched-figures.png": "6bc39789d439f78c6e5d309008eec43b3c0accfaeda6717df99120b0fdf748ca"
   },
   "tray": "tray.png",
   "session_drawing_geometry": {
@@ -252,125 +712,135 @@
     "animation_bounds": {
       "approved_12": [
         24,
-        26,
-        302,
-        190
+        24,
+        300,
+        180
       ],
       "approved_14": [
-        22,
-        27,
-        318,
-        216
+        24,
+        24,
+        300,
+        180
       ],
       "approved_17": [
         24,
-        26,
-        336,
-        241
+        24,
+        300,
+        180
       ],
       "approved_20": [
         24,
-        26,
-        318,
-        178
+        24,
+        300,
+        180
       ],
       "approved_23": [
         24,
-        26,
-        356,
-        182
+        24,
+        300,
+        180
       ],
       "approved_28": [
         24,
-        26,
-        335,
-        198
+        24,
+        300,
+        180
       ],
       "approved_29": [
         24,
-        27,
-        356,
-        219
+        24,
+        300,
+        180
       ],
       "approved_3": [
         24,
-        26,
-        302,
-        191
+        24,
+        300,
+        180
       ],
       "approved_30": [
         24,
-        9,
-        334,
-        181
+        24,
+        300,
+        180
       ],
       "approved_34": [
         24,
-        7,
-        335,
-        218
+        24,
+        300,
+        180
       ],
       "approved_35": [
-        0,
-        2,
-        332,
-        223
+        24,
+        24,
+        300,
+        180
       ],
       "approved_7": [
         24,
-        26,
-        301,
-        182
+        24,
+        300,
+        180
       ],
       "approved_8": [
         24,
-        2,
-        320,
-        192
+        24,
+        300,
+        180
       ],
       "helper_baby": [
         24,
-        25,
-        419,
-        316
+        24,
+        300,
+        180
       ],
       "helper_stroller": [
-        28,
-        25,
-        433,
-        318
+        24,
+        24,
+        300,
+        180
       ],
       "helper_sweeping": [
         24,
-        26,
-        489,
-        316
+        24,
+        300,
+        180
       ],
       "helper_watering_can": [
-        26,
-        25,
-        468,
-        312
+        24,
+        24,
+        300,
+        180
       ]
     },
     "baselines": {
-      "approved_12": 190,
-      "approved_14": 216,
-      "approved_17": 241,
-      "approved_20": 178,
-      "approved_23": 182,
-      "approved_28": 198,
-      "approved_29": 219,
-      "approved_3": 191,
-      "approved_30": 181,
-      "approved_34": 218,
-      "approved_35": 223,
-      "approved_7": 182,
-      "approved_8": 192,
-      "helper_baby": 316,
-      "helper_stroller": 318,
-      "helper_sweeping": 316,
-      "helper_watering_can": 312
+      "approved_12": 180,
+      "approved_14": 180,
+      "approved_17": 180,
+      "approved_20": 180,
+      "approved_23": 180,
+      "approved_28": 180,
+      "approved_29": 180,
+      "approved_3": 180,
+      "approved_30": 180,
+      "approved_34": 180,
+      "approved_35": 180,
+      "approved_7": 180,
+      "approved_8": 180,
+      "helper_baby": 180,
+      "helper_stroller": 180,
+      "helper_sweeping": 180,
+      "helper_watering_can": 180
     }
+  },
+  "matched_geometry": {
+    "width": 276,
+    "height": 156,
+    "head_width": 72,
+    "head_height": 42,
+    "torso_width": 66,
+    "waist_y": 90,
+    "logical_width": 46,
+    "logical_height": 26
   }
 }

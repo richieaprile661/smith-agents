@@ -182,7 +182,9 @@ class ApprovedArtworkTests(unittest.TestCase):
                         box = image.getchannel('A').getbbox()
                         ink_height = box[3]-box[1]
                         with self.subTest(name=name, frame=frame, density=density, cell=(w,h)):
-                            self.assertAlmostEqual(artwork.session_body_height(w, h), 23*density)
+                            self.assertAlmostEqual(artwork.session_body_height(w, h), 26*density)
+                            self.assertEqual((box[2]-box[0], ink_height),
+                                             (round(46*density), round(26*density)))
                             self.assertGreater(box[0], 0)
                             self.assertGreater(box[1], 0)
                             self.assertLess(box[2], w)
@@ -191,6 +193,24 @@ class ApprovedArtworkTests(unittest.TestCase):
                         checked += 1
                     self.assertEqual(*heights)
         self.assertEqual(checked, 17 * 128 * 4 * 2)
+
+    def test_every_pose_has_the_same_head_and_torso_landmark_dimensions(self):
+        from smith_agents import matched_artwork
+        for name in artwork.SESSION_FIGURES:
+            entry = artwork.MANIFEST['figures'][name.removeprefix('approved_')]
+            calibration = entry['calibration']
+            ox, oy = calibration['origin']
+            left, top, right, bottom = calibration['head']
+            head_left, head_top = matched_artwork.source_point(name, ox+left, oy+top)
+            head_right, head_bottom = matched_artwork.source_point(name, ox+right, oy+bottom)
+            left, right, waist = calibration['torso']
+            torso_left, torso_bottom = matched_artwork.source_point(name, ox+left, oy+waist)
+            torso_right, _ = matched_artwork.source_point(name, ox+right, oy+waist)
+            with self.subTest(name=name):
+                self.assertAlmostEqual(head_right-head_left, 72)
+                self.assertAlmostEqual(head_bottom-head_top, 42)
+                self.assertAlmostEqual(torso_right-torso_left, 66)
+                self.assertAlmostEqual(torso_bottom-head_bottom, 48)
 
     def test_moving_prop_does_not_resize_or_shift_stationary_body(self):
         from PIL import Image, ImageDraw, ImageChops

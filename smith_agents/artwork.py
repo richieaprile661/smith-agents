@@ -108,6 +108,9 @@ def _sheet(name):
 @lru_cache(maxsize=32)
 def alpha_mask(name):
     entry = MANIFEST["figures"][name.removeprefix("approved_")]
+    if 'calibration' in entry:
+        from . import matched_artwork
+        return matched_artwork.alpha_mask(name)
     cut = _sheet(entry["source"]).crop(entry["rect"])
     # Discard only near-white paper noise, keeping partial edge coverage.
     alpha = cut.point(lambda v: max(0, round((247 - v) * 255 / 247)))
@@ -195,7 +198,7 @@ def _session_placement(name, width, height):
 def session_body_height(width, height):
     """Fixed calibrated body scale, independent of props and animation frame."""
     density = min(width/56, height/40)
-    return 23*density
+    return MANIFEST['matched_geometry']['logical_height']*density
 
 
 def _session_alpha(name, alpha, width, height):

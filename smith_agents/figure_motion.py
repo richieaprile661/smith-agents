@@ -4,6 +4,10 @@ from PIL import Image, ImageChops, ImageDraw
 
 def laptop_screen_mask(size):
     """Interior of the approved laptop, excluding every outline stroke."""
+    from . import artwork
+    if 'calibration' in artwork.MANIFEST['figures']['23']:
+        from . import matched_motion
+        return matched_motion.screen_mask(size)
     width, height = size
     mask = Image.new('L', size)
     ImageDraw.Draw(mask).polygon([(width*x/332, height*y/161) for x,y in

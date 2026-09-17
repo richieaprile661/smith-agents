@@ -49,6 +49,9 @@ def _layers():
 
 @lru_cache(maxsize=160)
 def alpha_frame(frame):
+    if 'calibration' in artwork.MANIFEST['figures']['35']:
+        from . import matched_motion, figure_actions
+        return matched_motion.alpha_frame('approved_35', figure_actions.canonical_frame(frame))
     seconds = frame / FPS
     if seconds >= ACTION_SECONDS:
         idle = (frame-round(ACTION_SECONDS*FPS)) % 64 / 64
