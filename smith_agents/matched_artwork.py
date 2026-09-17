@@ -5,6 +5,7 @@ recorded head/torso landmarks, before any animation. Props occupy the remaining
 space; neither their shape nor their motion can choose the character's scale.
 """
 from functools import lru_cache
+import math
 
 from PIL import Image, ImageChops
 
@@ -60,6 +61,61 @@ def source_point(name, x, y):
     return _piecewise(x-ox, source_x, target_x), ty
 
 
+def head_offset(name, reference):
+    """Integer translation preserves the accepted head's exact contour pixels."""
+    target = _columns(name, 0)[1]
+    source = _columns(reference, 0)[1]
+    return round((target[1]+target[2]-source[1]-source[2])/2)
+
+
+def _neck_edges(mask, y):
+    runs = []
+    start = None
+    for x in range(mask.width):
+        ink = mask.getpixel((x, y)) > 100
+        if ink and start is None:
+            start = x
+        elif not ink and start is not None:
+            runs.append((start+x-1)/2)
+            start = None
+    if len(runs) < 2:
+        raise ValueError(f'Expected two neck contours at row {y}, found {len(runs)}')
+    # These four right-facing adults have their props to the right of the neck.
+    return runs[:2]
+
+
+def _shared_head(name, result, reference):
+    from . import artwork
+    donor = alpha_mask(reference)
+    height = artwork.MANIFEST['matched_geometry']['head_height']+14
+    offset = head_offset(name, reference)
+    source_edges = _neck_edges(result, height)
+    target_edges = [x+offset for x in _neck_edges(donor, height)]
+    left = math.floor(min(source_edges[0],target_edges[0]))-8
+    right = math.ceil(max(source_edges[1],target_edges[1]))+8
+    # Join the existing shoulders to the accepted head over a short neck band.
+    # The head is copied verbatim; torso, limbs, props and baseline stay fixed.
+    end = height+14
+
+    def inverse(x, y):
+        blend = max(0, min(1, (end-y)/(end-height)))
+        target = [a+(b-a)*blend for a,b in zip(source_edges,target_edges)]
+        return _piecewise(x, (0,left,*target,right,result.width),
+                          (0,left,*source_edges,right,result.width)), y
+
+    mesh = []
+    for y in range(height, end):
+        for x in range(0, result.width, 3):
+            right = min(result.width,x+3)
+            mesh.append(((x,y,right,y+1), inverse(x,y)+inverse(x,y+1)+
+                         inverse(right,y+1)+inverse(right,y)))
+    neck = result.transform(result.size, Image.Transform.MESH, mesh, Image.Resampling.BICUBIC)
+    result.paste(neck.crop((left,height,right,end)), (left,height))
+    result.paste(0, (0,0,result.width,height))
+    result.paste(donor.crop((0,0,donor.width,height)), (offset,0))
+    return result
+
+
 @lru_cache(maxsize=17)
 def alpha_mask(name):
     from . import artwork
@@ -81,6 +137,9 @@ def alpha_mask(name):
                          inverse(left, top)+inverse(left, bottom)+
                          inverse(right, bottom)+inverse(right, top)))
     result = alpha.transform((width, height), Image.Transform.MESH, mesh, Image.Resampling.BICUBIC)
+    entry = artwork.MANIFEST['figures'][name.removeprefix('approved_')]
+    if reference := entry.get('head_source'):
+        result = _shared_head(name, result, reference)
     # Register the ground endpoints to the common scene width. A rounded
     # endpoint can otherwise lose its last source column during interpolation.
     for edge, neighbor in ((0, 1), (width-1, width-2)):

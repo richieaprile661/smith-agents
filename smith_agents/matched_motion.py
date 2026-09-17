@@ -116,4 +116,10 @@ def alpha_frame(name, frame):
         pen.line((a,b),fill=round(230*math.sin(2*math.pi*u)**2),width=2)
         overlay = ImageChops.multiply(overlay, screen_mask(source.size, padded=True))
         result = ImageChops.lighter(result,overlay)
+    entry = artwork.MANIFEST['figures'][name.removeprefix('approved_')]
+    if entry.get('head_source'):
+        # Nearby prop interpolation must not bleed even faint coverage into
+        # the shared head/neck contour (notably the cradled baby's top edge).
+        bottom = PAD+artwork.MANIFEST['matched_geometry']['head_height']+14
+        result.paste(source.crop((0,0,source.width,bottom)), (0,0))
     return result

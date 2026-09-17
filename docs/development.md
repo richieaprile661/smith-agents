@@ -81,6 +81,13 @@ at 100%, 125%, 150%, and 200% scaling, including exact visible drawing bounds,
 common anatomical landmark dimensions, clipping, stroke coverage, and stationary
 pixels. Device-pixel rounding still applies to antialiased contour edges.
 
+The four revised poses reuse the accepted stroller's actual head and neck pixels
+through `head_source`; equal bounding boxes alone do not establish equal head
+shapes. An integer translation places this shared contour, and a short shoulder
+transition connects it to the pose. The torso below that transition, limbs and
+props retain their existing pixels. A regression test compares the shared head
+pixels against the reference in every animation frame.
+
 A fixed alpha-coverage curve removes faint resampling halos and strengthens
 stroke centers while keeping antialiased edges. Current session figures do not
 receive theme blur. Original source images, provider-logo glow, and legacy

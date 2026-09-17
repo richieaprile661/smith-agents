@@ -212,6 +212,26 @@ class ApprovedArtworkTests(unittest.TestCase):
                 self.assertAlmostEqual(torso_right-torso_left, 66)
                 self.assertAlmostEqual(torso_bottom-head_bottom, 48)
 
+    def test_revised_heads_reuse_accepted_contour_pixels_in_every_frame(self):
+        from smith_agents import matched_artwork, matched_motion, figure_actions
+        reference = 'helper_stroller'
+        height = artwork.MANIFEST['matched_geometry']['head_height']+14
+        donor = artwork.alpha_mask(reference).crop((0,0,276,height))
+        bounds = donor.getbbox()
+        expected = donor.crop(bounds).tobytes()
+        names = ('approved_8','approved_12','approved_23','helper_baby')
+        for name in names:
+            entry = artwork.MANIFEST['figures'][name.removeprefix('approved_')]
+            self.assertEqual(entry['head_source'], reference)
+            offset = matched_artwork.head_offset(name,reference)
+            pad = matched_motion.PAD
+            box = (bounds[0]+offset+pad, bounds[1]+pad,
+                   bounds[2]+offset+pad, bounds[3]+pad)
+            for frame in range(128):
+                with self.subTest(name=name,frame=frame):
+                    self.assertEqual(figure_actions.alpha_frame(name,frame).crop(box).tobytes(),
+                                     expected)
+
     def test_moving_prop_does_not_resize_or_shift_stationary_body(self):
         from PIL import Image, ImageDraw, ImageChops
         from smith_agents import figure_actions as motion
