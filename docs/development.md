@@ -43,19 +43,19 @@ figure numbers and their states are listed in
 
 Ready sessions can show cooking, cycling, pumping, watering, or showering.
 
-All 19 current session drawings (13 main poses and six helpers) have the same
-full visible height, including props: 23 logical pixels at 100% widget size,
-in both expanded and tucked views. Device pixels are rounded for fractional
-Windows scaling and widget zoom. The common height is derived from the widest
-measured animation frame and the available width of a standard row cell.
-`session_drawing_geometry` in the manifest records that measurement.
+All 19 current session drawings (13 main poses and six helpers) use a fixed
+calibrated body height of 23 logical pixels at 100% widget size in both layouts.
+The manifest's `character_height` defines the body measurement for each pose.
+Props never determine the character scale. Final raster sizes are rounded to
+device pixels for display scaling and widget zoom.
 
-The renderer measures each frame's visible ink, crops transparent margins,
-and resamples from the original mask to the exact target height. Figures share
-a baseline within each layout. This deliberately normalizes the complete
-scene rather than the person's head or body; props and pose changes can affect
-the character's apparent size. Every current animation frame is checked for
-exact height and clipping at 100%, 125%, 150%, and 200% display scale.
+Each figure uses one crop, scale, and position for its entire animation.
+`session_drawing_geometry` records the union of visible bounds across all 128
+frames and a fixed reference baseline. Moving a hand or prop can change the
+visible outline naturally, but cannot rescale or recenter the drawing.
+Per-frame tight fitting is deliberately avoided: it makes the whole character
+grow and shrink as its pose changes. Tests cover every frame at four display
+scales and verify that moving a prop cannot alter the stationary body pixels.
 
 A fixed alpha-coverage curve removes faint resampling halos and strengthens
 stroke centers while keeping antialiased edges. Current session figures do not

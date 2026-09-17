@@ -294,11 +294,142 @@
   "tray": "tray.png",
   "session_drawing_geometry": {
     "alpha_cutoff": 16,
-    "widest_frame": {
-      "figure": "approved_20",
-      "frame": 16,
-      "width": 294,
-      "height": 130
+    "animation_bounds": {
+      "approved_12": [
+        24,
+        26,
+        302,
+        190
+      ],
+      "approved_14": [
+        22,
+        27,
+        318,
+        216
+      ],
+      "approved_17": [
+        24,
+        26,
+        336,
+        241
+      ],
+      "approved_20": [
+        24,
+        26,
+        318,
+        178
+      ],
+      "approved_23": [
+        24,
+        26,
+        356,
+        182
+      ],
+      "approved_28": [
+        24,
+        26,
+        335,
+        198
+      ],
+      "approved_29": [
+        24,
+        27,
+        356,
+        219
+      ],
+      "approved_3": [
+        24,
+        26,
+        302,
+        191
+      ],
+      "approved_30": [
+        24,
+        9,
+        334,
+        181
+      ],
+      "approved_34": [
+        24,
+        7,
+        335,
+        218
+      ],
+      "approved_35": [
+        0,
+        2,
+        332,
+        223
+      ],
+      "approved_7": [
+        24,
+        26,
+        301,
+        182
+      ],
+      "approved_8": [
+        24,
+        2,
+        320,
+        192
+      ],
+      "helper_finished": [
+        26,
+        26,
+        422,
+        264
+      ],
+      "helper_needs": [
+        27,
+        25,
+        356,
+        298
+      ],
+      "helper_reviewing": [
+        26,
+        26,
+        393,
+        296
+      ],
+      "helper_testing": [
+        28,
+        26,
+        374,
+        303
+      ],
+      "helper_unknown": [
+        27,
+        26,
+        383,
+        299
+      ],
+      "helper_working": [
+        26,
+        26,
+        421,
+        282
+      ]
+    },
+    "baselines": {
+      "approved_12": 190,
+      "approved_14": 216,
+      "approved_17": 241,
+      "approved_20": 178,
+      "approved_23": 182,
+      "approved_28": 198,
+      "approved_29": 219,
+      "approved_3": 191,
+      "approved_30": 181,
+      "approved_34": 218,
+      "approved_35": 223,
+      "approved_7": 182,
+      "approved_8": 192,
+      "helper_finished": 264,
+      "helper_needs": 298,
+      "helper_reviewing": 296,
+      "helper_testing": 303,
+      "helper_unknown": 299,
+      "helper_working": 282
     }
   }
 }

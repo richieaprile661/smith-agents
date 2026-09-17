@@ -163,17 +163,17 @@ class ApprovedArtworkTests(unittest.TestCase):
                 # same density and enforces a tighter one-pixel difference.
                 self.assertLessEqual(abs(one - two), 2)
 
-    def test_every_current_drawing_has_exact_height_in_every_animation_frame(self):
+    def test_all_animation_frames_fit_fixed_envelopes_without_clipping(self):
         from smith_agents import figure_actions as motion
         geometry = artwork.MANIFEST['session_drawing_geometry']
-        widest = geometry['widest_frame']
         checked = 0
         for name in sorted(artwork.SESSION_FIGURES):
             for frame in range(motion.ACTION_FRAMES + motion.IDLE_FRAMES):
                 source = motion.alpha_frame(name, frame)
                 box = source.point(lambda v: v if v > geometry['alpha_cutoff'] else 0).getbbox()
-                self.assertLessEqual((box[2]-box[0])*widest['height'],
-                                     (box[3]-box[1])*widest['width'])
+                envelope = geometry['animation_bounds'][name]
+                self.assertTrue(envelope[0] <= box[0] < box[2] <= envelope[2])
+                self.assertTrue(envelope[1] <= box[1] < box[3] <= envelope[3])
                 for density in (1, 1.25, 1.5, 2):
                     heights = []
                     for width, height in ((56, 42), (80, 40)):
@@ -182,7 +182,7 @@ class ApprovedArtworkTests(unittest.TestCase):
                         box = image.getchannel('A').getbbox()
                         ink_height = box[3]-box[1]
                         with self.subTest(name=name, frame=frame, density=density, cell=(w,h)):
-                            self.assertEqual(ink_height, round(23*density))
+                            self.assertAlmostEqual(artwork.session_body_height(w, h), 23*density)
                             self.assertGreater(box[0], 0)
                             self.assertGreater(box[1], 0)
                             self.assertLess(box[2], w)
@@ -191,6 +191,28 @@ class ApprovedArtworkTests(unittest.TestCase):
                         checked += 1
                     self.assertEqual(*heights)
         self.assertEqual(checked, 19 * 128 * 4 * 2)
+
+    def test_moving_prop_does_not_resize_or_shift_stationary_body(self):
+        from PIL import Image, ImageDraw, ImageChops
+        from smith_agents import figure_actions as motion
+        frames = []
+        for top in (5, 30):
+            mask = Image.new('L', (100, 80))
+            pen = ImageDraw.Draw(mask)
+            pen.rectangle((40, 25, 60, 69), fill=255)
+            pen.line((5, 69, 79, 69), fill=255, width=2)
+            pen.rectangle((10, top, 20, top+9), fill=255)
+            frames.append(mask)
+        geometry = artwork.MANIFEST['session_drawing_geometry']['animation_bounds']
+        baselines = artwork.MANIFEST['session_drawing_geometry']['baselines']
+        with patch.dict(geometry, approved_3=[5, 5, 80, 70]), \
+             patch.dict(baselines, approved_3=70), \
+             patch.object(motion, 'alpha_frame', side_effect=frames):
+            first = artwork.render('approved_3', 'white', 112, 84, frame=0)
+            second = artwork.render('approved_3', 'white', 112, 84, frame=1)
+        self.assertIsNotNone(ImageChops.difference(first, second).getbbox())
+        self.assertIsNone(ImageChops.difference(first.crop((56, 0, 112, 84)),
+                                              second.crop((56, 0, 112, 84))).getbbox())
 
     def test_current_figures_have_firm_strokes_at_each_display_scale(self):
         for density in (1, 1.25, 1.5, 2):

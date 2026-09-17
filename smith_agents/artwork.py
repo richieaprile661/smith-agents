@@ -192,36 +192,24 @@ def _session_placement(name, width, height):
     return size, round(height - visible_height * bottom) - bounds[3]
 
 
-def session_ink_height(width, height):
-    """Equal full-drawing height in both layouts, scaled to device pixels.
-
-    The widest measured animation frame sets the largest whole logical-pixel
-    height fitting a 56px row cell with 1px clearance at each side: 23px.
-    The 80x40 tucked cell uses that same height, rather than enlarging it.
-    """
-    widest = MANIFEST['session_drawing_geometry']['widest_frame']
-    logical_height = (56-2)*widest['height']//widest['width']
+def session_body_height(width, height):
+    """Fixed calibrated body scale, independent of props and animation frame."""
     density = min(width/56, height/40)
-    return max(1, round(logical_height*density))
+    return 23*density
 
 
 def _session_alpha(name, alpha, width, height):
-    cutoff = MANIFEST['session_drawing_geometry']['alpha_cutoff']
-    alpha = alpha.point(lambda v: v if v > cutoff else 0)
-    alpha = alpha.crop(alpha.getbbox())
-    target = session_ink_height(width, height)
-    # Resampling and contrast can remove a boundary row. Re-render from the
-    # original mask, not an already resized image, until visible ink matches.
-    raster_height = target
-    for _ in range(8):
-        size = (max(1, round(alpha.width*raster_height/alpha.height)), raster_height)
-        result = _display_alpha(name, alpha, size)
-        bounds = result.getbbox()
-        ink_height = bounds[3]-bounds[1]
-        if ink_height == target:
-            return result.crop(bounds)
-        raster_height += target-ink_height
-    raise ValueError('Could not normalize figure ink height: '+name)
+    # One crop and one transform for the whole animation. Measuring the
+    # current frame here makes the character grow/shrink as props move.
+    geometry = MANIFEST['session_drawing_geometry']
+    crop = geometry['animation_bounds'][name]
+    alpha = alpha.point(lambda v: v if v > geometry['alpha_cutoff'] else 0)
+    alpha = alpha.crop(crop)
+    body = MANIFEST['figures'][name.removeprefix('approved_')]['character_height']
+    scale = session_body_height(width, height) / body
+    size = (max(1, round((crop[2]-crop[0])*scale)),
+            max(1, round((crop[3]-crop[1])*scale)))
+    return _display_alpha(name, alpha, size)
 
 
 def render(name, ink, width, height, fade=False, frame=0):
@@ -236,7 +224,12 @@ def render(name, ink, width, height, fade=False, frame=0):
         drawing.putalpha(alpha)
         cell = Image.new('RGBA', (width, height))
         padding = max(1, round(min(width / 56, height / 42)))
-        cell.paste(drawing, ((width-alpha.width)//2, height-padding-alpha.height))
+        crop = MANIFEST['session_drawing_geometry']['animation_bounds'][name]
+        body = MANIFEST['figures'][name.removeprefix('approved_')]['character_height']
+        scale = session_body_height(width, height) / body
+        baseline = MANIFEST['session_drawing_geometry']['baselines'][name]
+        y = height-padding-round((baseline-crop[1])*scale)
+        cell.paste(drawing, ((width-alpha.width)//2, y))
         return cell
     if name == HEADER:
         scale = min(width / alpha.width, height / alpha.height)
