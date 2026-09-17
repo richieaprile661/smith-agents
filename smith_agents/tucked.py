@@ -199,7 +199,8 @@ def _brand(chip, side, provider):
                 x1 = min(x1, (x+positions[index+1][0]+lamp.width)//2-1)
         boxes.append(('provider:'+name, x0, y0, x1, y1, None))
     if not horizontal:
-        ImageDraw.Draw(chip).line((c.px(10), c.px(27), RAIL_W-c.px(10)-1, c.px(27)),
+        separator_y = SIDE_HEAD_H-c.px(2)
+        ImageDraw.Draw(chip).line((c.px(10), separator_y, RAIL_W-c.px(10)-1, separator_y),
                                  fill=c._ink(13), width=max(1, c.px(1)))
     return boxes
 
