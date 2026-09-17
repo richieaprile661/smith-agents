@@ -103,12 +103,12 @@
       }
     },
     "8": {
-      "source": "matched-figures.png",
+      "source": "revised-four-figures.png",
       "rect": [
-        614,
+        100,
         0,
-        922,
-        220
+        750,
+        410
       ],
       "character_height": 156,
       "legacy": {
@@ -123,19 +123,19 @@
       },
       "calibration": {
         "origin": [
-          647,
-          62
+          188,
+          61
         ],
         "head": [
-          76,
+          155,
           0,
-          150,
-          49
+          280,
+          66
         ],
         "torso": [
-          110,
-          177,
-          84
+          121,
+          287,
+          209
         ]
       }
     },
@@ -177,12 +177,12 @@
       }
     },
     "12": {
-      "source": "matched-figures.png",
+      "source": "revised-four-figures.png",
       "rect": [
-        922,
+        800,
         0,
-        1229,
-        220
+        1450,
+        410
       ],
       "character_height": 156,
       "legacy": {
@@ -197,19 +197,19 @@
       },
       "calibration": {
         "origin": [
-          951,
-          62
+          846,
+          61
         ],
         "head": [
-          98,
+          150,
           0,
-          170,
-          50
+          275,
+          66
         ],
         "torso": [
-          124,
-          196,
-          87
+          115,
+          238,
+          209
         ]
       }
     },
@@ -288,12 +288,12 @@
       }
     },
     "23": {
-      "source": "matched-figures.png",
+      "source": "revised-four-figures.png",
       "rect": [
-        614,
-        260,
-        922,
-        464
+        100,
+        500,
+        750,
+        890
       ],
       "character_height": 156,
       "legacy": {
@@ -308,19 +308,19 @@
       },
       "calibration": {
         "origin": [
-          646,
-          310
+          188,
+          541
         ],
         "head": [
-          76,
+          155,
           0,
-          143,
-          43
+          280,
+          65
         ],
         "torso": [
-          46,
-          119,
-          80
+          115,
+          266,
+          204
         ]
       }
     },
@@ -532,12 +532,12 @@
       "coverage_boost": 0.6
     },
     "helper_baby": {
-      "source": "matched-figures.png",
+      "source": "revised-four-figures.png",
       "rect": [
-        0,
-        752,
-        307,
-        945
+        800,
+        500,
+        1450,
+        890
       ],
       "character_height": 156,
       "legacy": {
@@ -556,19 +556,19 @@
       },
       "calibration": {
         "origin": [
-          40,
-          787
+          846,
+          541
         ],
         "head": [
-          72,
+          186,
           0,
-          144,
-          45
+          312,
+          65
         ],
         "torso": [
-          53,
-          121,
-          83
+          152,
+          274,
+          219
         ]
       }
     },
@@ -704,7 +704,8 @@
     "little-helper.png": "425529462a8970a149a5010a87783c79cb129d1ba94df98d8ff8bdb25230c51b",
     "smith-helper-states.png": "b93ea3c391204d6dcb33b98575c9cbc10854001e6b0f714ea2afa4383cf7f959",
     "helper-poses.png": "cfa5565a523f2475af0f6dd36ca72b3d6790f42abfd7deb9e07a87bc9aea3198",
-    "matched-figures.png": "6bc39789d439f78c6e5d309008eec43b3c0accfaeda6717df99120b0fdf748ca"
+    "matched-figures.png": "6bc39789d439f78c6e5d309008eec43b3c0accfaeda6717df99120b0fdf748ca",
+    "revised-four-figures.png": "1b5ca79ea18bf3494921cec98f1029afde4fbc562aec238286ee19ef99db09cb"
   },
   "tray": "tray.png",
   "session_drawing_geometry": {

@@ -12,8 +12,8 @@ PAD = 24
 REGIONS = {
     'approved_3': (((79,165,128,209), 0, -9),),
     'approved_7': (((363,166,432,206), 5, 0),),
-    'approved_8': (((732,158,766,196), -2, -4),),
-    'approved_12': (((969,105,1037,145), 0, 5),),
+    'approved_8': (((433,294,524,353), -2, -4),),
+    'approved_12': (((1170,184,1320,297), 0, 5),),
     'approved_14': (((1335,156,1390,195), 3, -4),),
     'approved_17': (((190,385,244,444), 7, 0),),
     'approved_20': (((384,407,438,451), 0, -7),),
@@ -23,12 +23,12 @@ REGIONS = {
     'approved_30': (((199,562,235,623), 4, -3),),
     'approved_34': (((518,618,552,675), 5, -3),),
     'approved_35': (((680,640,738,680), -4, 5),),
-    'helper_baby': (((149,823,191,866), 2, -4),),
+    'helper_baby': (((1128,646,1188,744), 2, -4),),
     'helper_stroller': (((504,848,548,906), 3, -3),),
     'helper_sweeping': (((788,902,836,930), 7, 0),),
     'helper_watering_can': (((1091,880,1168,918), 4, -3),),
 }
-LAPTOP_SCREEN = ((823,381),(852,377),(837,409),(807,409))
+LAPTOP_SCREEN = ((552,658),(613,658),(591,718),(531,718))
 
 
 def point(name, x, y):
@@ -81,6 +81,14 @@ def screen_mask(size, padded=False):
     return mask
 
 
+def screen_point(u, v):
+    """Position screen content inside the revised laptop's quadrilateral."""
+    top_left, top_right, bottom_right, bottom_left = LAPTOP_SCREEN
+    left = tuple(a+(b-a)*v for a,b in zip(top_left,bottom_left))
+    right = tuple(a+(b-a)*v for a,b in zip(top_right,bottom_right))
+    return point('approved_23', *(a+(b-a)*u for a,b in zip(left,right)))
+
+
 @lru_cache(maxsize=384)
 def alpha_frame(name, frame):
     from .figure_actions import ACTION_FRAMES, IDLE_FRAMES
@@ -99,12 +107,12 @@ def alpha_frame(name, frame):
         progress = min(1, frame/32) if active else 1
         for index in range(3):
             fraction = min(1,max(0,progress*3-index))
-            a = point(name,822-index*3,386+index*7)
-            b = point(name,822-index*3+fraction*(19-index*3),384+index*7)
+            a = screen_point(.12, .18+index*.23)
+            b = screen_point(.12+fraction*(.7-index*.12), .18+index*.23)
             if fraction:
                 pen.line((a,b), fill=230,width=2)
-        a = point(name,836,396)
-        b = point(name,834,403)
+        a = screen_point(.78, .64)
+        b = screen_point(.78, .85)
         pen.line((a,b),fill=round(230*math.sin(2*math.pi*u)**2),width=2)
         overlay = ImageChops.multiply(overlay, screen_mask(source.size, padded=True))
         result = ImageChops.lighter(result,overlay)

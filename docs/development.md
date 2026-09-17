@@ -48,8 +48,12 @@ Ready sessions can show cooking, cycling, pumping, watering, or showering.
 All 17 current session drawings (13 main poses and four helpers) share one
 calibrated scene of 46 × 26 logical pixels in expanded and tucked layouts.
 This is visible ink, including props, rather than merely an equal cell size.
-The source atlas is `matched-figures.png`, revised using the explicitly selected
-`gpt-image-2.5-sunburst` API model. Source images are preserved byte for byte.
+The source atlases are `matched-figures.png` and `revised-four-figures.png`,
+created using the explicitly selected `gpt-image-2.5-sunburst` API model.
+The latter replaces only review figures 03 (step over), 04 (signpost),
+08 (laptop), and 14 (carrying a baby), with clearer limbs, furniture and
+cradling. The other 13 retain their original source pixels and calibration.
+Source images are preserved byte for byte.
 
 A single overall-height multiplier is insufficient: it makes a full-body scooter
 rider's head and torso smaller than a seated laptop user's. Each atlas entry now
@@ -99,7 +103,7 @@ The widget follows these rules when it assigns and animates figures:
 The renderer uses the approved images as theme-colored masks and resamples them
 for the display density. The source images stay unchanged.
 
-Helpers use only the four selected activities, now in `matched-figures.png`: carrying a
+Helpers use only the four selected activities in the current atlases: carrying a
 baby, stroller, sweeping, and carrying a watering can (review figures 14, 15,
 18, and 19). Manifest rectangles exclude the sheet captions; rejected scenes 16 and 17 are absent. The six previous helper
 poses are no longer registered or selected.
