@@ -213,7 +213,7 @@ class TuckedTests(unittest.TestCase):
                 if selected:
                     self.assertIn('open', [b[0] for b in actions])
                     self.assertIn('details', [b[0] for b in actions])
-                    self.assertNotIn('kill', [b[0] for b in actions])
+                    self.assertIn('kill', [b[0] for b in actions])
             self.assertEqual(origins[0], origins[1])
             self.assertEqual(origins[0], origins[2])
 
@@ -223,12 +223,15 @@ class TuckedTests(unittest.TestCase):
         _, boxes, layout = self.render(rows, selected='0', max_height=core.px(240))
         self.assertGreater(layout.panel_scroll_max, 0)
         self.assertNotIn('kill', [b[0] for b in boxes])
-        im, boxes, layout = self.render(rows, selected='0', max_height=core.px(240), panel_scroll=10**6)
-        self.assertIn('kill', [b[0] for b in boxes])
-        self.assertLessEqual(im.height-2*core.SHADOW_PAD, core.px(240))
-        for kind, x0, y0, x1, y1, agent in boxes:
-            self.assertTrue(0 <= x0 < x1 <= im.width-2*core.SHADOW_PAD, kind)
-            self.assertTrue(0 <= y0 < y1 <= im.height-2*core.SHADOW_PAD, kind)
+        seen = set()
+        for scroll in range(0, layout.panel_scroll_max + core.px(20), core.px(20)):
+            im, boxes, _ = self.render(rows, selected='0', max_height=core.px(240), panel_scroll=scroll)
+            seen.update(b[0] for b in boxes)
+            self.assertLessEqual(im.height-2*core.SHADOW_PAD, core.px(240))
+            for kind, x0, y0, x1, y1, agent in boxes:
+                self.assertTrue(0 <= x0 < x1 <= im.width-2*core.SHADOW_PAD, kind)
+                self.assertTrue(0 <= y0 < y1 <= im.height-2*core.SHADOW_PAD, kind)
+        self.assertIn('kill', seen)
 
     def test_confirmation_and_helper_controls(self):
         rows = agents(2)
@@ -310,7 +313,7 @@ class TuckedTests(unittest.TestCase):
                          tucked.PANEL_HEAD_H+core.agent_row_height(row, True)+core.agent_drawer_height(row))
         self.assertIn('open', [b[0] for b in boxes])
         self.assertIn('details', [b[0] for b in boxes])
-        self.assertNotIn('kill', [b[0] for b in boxes])
+        self.assertIn('kill', [b[0] for b in boxes])
 
     def test_controller_selects_switches_and_closes_without_untucking(self):
         rows = agents(3)

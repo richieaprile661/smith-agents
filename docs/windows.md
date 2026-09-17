@@ -62,7 +62,8 @@ permissions. **Deny** rejects it; Enter, Escape, Cancel, and closing the review
 leave it unanswered. Responses are matched to session, request, and fingerprint;
 the first answer in VS Code or the widget wins. Questions remain in VS Code.
 
-**End session…** rechecks the selected session after confirmation. It stops only
+**End session…** appears beside **Read more** in the open session card, without
+expanding the extra details. It rechecks the selected session after confirmation and stops only
 its verified `claude.exe` process, checking creation time on the same Windows
 handle used to terminate it. VS Code, terminal hosts, shared wrappers, and
 processes shared with other sessions or listed subagents are not terminated.

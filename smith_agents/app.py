@@ -1204,6 +1204,8 @@ def main(argv=None):
                                                                         y=(box[2] + box[4]) / 2))
                             click("details")
                             assert widget.agents[0]["_details_expanded"]
+                            click("details")
+                            assert not widget.agents[0]["_details_expanded"]
                             widget._scroll_agents(widget._agent_scroll_max)
                             click("kill")
                             assert widget._confirm_kill == widget.agents[0]["id"]

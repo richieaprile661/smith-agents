@@ -167,7 +167,8 @@ requests appear in the widget:
 
 ### End a session
 
-**End session** asks for confirmation, and then checks the session again before it
+Open the session card to find **End session…** beside **Read more**; expanding the
+extra details is not required. It asks for confirmation, then checks the session again before it
 stops the process. The process start time must match. The widget doesn't stop a
 process that other sessions or listed subagents share; stop those agents one at a
 time inside Claude. A subagent can't stop its parent process. Other independent

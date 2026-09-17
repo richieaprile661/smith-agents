@@ -169,7 +169,9 @@ under **Read more** below **Go to session** minimizes it while the agent keeps r
 - On Windows, the widget matches only windows owned by the agent's process or its
   parent processes, not any app with the same project title.
 
-Codex rows show **End in Codex** instead of an option to stop the process. The
+Open Codex cards show **Manage in Codex** beside **Read more**. This opens the
+matching host window; it does not stop a process or select a conversation inside
+a shared window. The
 extension can host several agents in one process, so stopping the process would
 end other sessions too. To stop one agent, close or interrupt its conversation in
 Codex.

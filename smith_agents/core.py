@@ -3005,6 +3005,18 @@ def render_drawer(pen, agent, y, now=None):
         text = "Show less" if expanded else "Read more"
         boxes.append(("details",) + _link(pen, PAD_X, y+px(8), text,
                                          FONT("book", 11), _ink(78), True) + (agent,))
+        # Session controls must not disappear behind the optional diagnostic
+        # details. Shared-host providers still open their own session controls;
+        # they must never expose process termination here.
+        if not agent.get("sub") and agent.get("state") != "closed":
+            external = (agent.get("provider") in ("codex", "hermes")
+                        or agent.get("can_terminate") is False)
+            kind = "open" if external else "kill"
+            text = "Manage in " + provider_name(agent) if external else "End session…"
+            font = FONT("book", 11)
+            right = CONSOLE_W - PAD_X
+            boxes.append((kind,) + _link(pen, right-text_w(text, font), y+px(8),
+                                         text, font, _ink(78)) + (agent,))
         if not expanded:
             return boxes
         y += px(32)
@@ -3052,13 +3064,6 @@ def render_drawer(pen, agent, y, now=None):
         text = "Hide parent window" if agent.get('sub') else "Hide window"
         box = _link(pen, PAD_X, fy+px(6), text, link_font, _ink(62), True)
         boxes.append(("hide",) + box + (agent,))
-    if not agent.get("sub") and (agent.get("state") == "closed" or agent.get("can_terminate", True)):
-        text = "Dismiss" if agent.get("state") == "closed" else "End session…"
-        box = _link(pen, right - text_w(text, link_font), fy + px(6), text, link_font, _ink(62))
-        boxes.append(("kill",) + box + (agent,))
-    elif not agent.get("sub"):
-        text = "End in " + provider_name(agent)
-        pen.text((right - text_w(text, link_font), fy + px(6)), text, font=link_font, fill=_ink(52))
     return boxes
 
 

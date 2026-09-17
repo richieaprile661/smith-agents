@@ -35,7 +35,8 @@ class QuietCardTests(unittest.TestCase):
         widget.agents, widget.agent_open = [row], row['id']
         widget._repaint = Mock()
         collapsed, widget.agent_rows = core.render_console([], None, {}, [row], 0, open_id=row['id'])
-        self.assertFalse(any(b[0] in ('kill', 'hide') for b in widget.agent_rows))
+        self.assertTrue(any(b[0] == 'kill' for b in widget.agent_rows))
+        self.assertFalse(any(b[0] == 'hide' for b in widget.agent_rows))
         action = next(b for b in widget.agent_rows if b[0] == 'open')
         for expanded in (True, False):
             box = next(b for b in widget.agent_rows if b[0] == 'details')
@@ -43,7 +44,7 @@ class QuietCardTests(unittest.TestCase):
             widget._on_console_click(SimpleNamespace(x=(box[1]+box[3])/2, y=(box[2]+box[4])/2))
             image, widget.agent_rows = core.render_console([], None, {}, [row], 0, open_id=row['id'])
             self.assertEqual(row['_details_expanded'], expanded)
-            self.assertEqual(any(b[0] == 'kill' for b in widget.agent_rows), expanded)
+            self.assertTrue(any(b[0] == 'kill' for b in widget.agent_rows))
             self.assertEqual(any(b[0] == 'hide' for b in widget.agent_rows), expanded)
             self.assertEqual(image.height > collapsed.height, expanded)
             self.assertEqual(widget.agent_open, row['id'])

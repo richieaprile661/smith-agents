@@ -15,7 +15,8 @@ uses its chat title instead. Cards also show the model, project folder, latest
 request, reply, and tool names when available.
 **Go to session** uses the existing host-window matching; it cannot select an
 individual chat inside a shared desktop window. Ambiguous windows may need to
-be opened manually. **End in Hermes** leaves ending a chat to Hermes itself.
+be opened manually. **Manage in Hermes** beside **Read more** opens that host
+window so you can end the chat in Hermes; it does not stop the session itself.
 
 ## Usage
 

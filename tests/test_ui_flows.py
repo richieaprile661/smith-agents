@@ -69,6 +69,9 @@ class UserFlowTests(unittest.TestCase):
         w._on_release(event)
 
     def reveal(self, w, kind):
+        # Actions can be above the current position after inspecting details.
+        while not any(b[0] == kind for b in w.agent_rows) and w._peek_panel_scroll:
+            self.click(w, 'peek-panel-up')
         while not any(b[0] == kind for b in w.agent_rows):
             previous = w._peek_panel_scroll
             self.click(w, 'peek-panel-down')
@@ -85,6 +88,15 @@ class UserFlowTests(unittest.TestCase):
                      patch('smith_agents.app.terminate_agent', return_value=True) as ended:
                     self.click(w, 'open')
                     opened.assert_called_once_with(w.agents[1])
+                    # Ending the session is available before opening the
+                    # optional details (the original regression).
+                    self.assertFalse(w.agents[1].get('_details_expanded', False))
+                    self.reveal(w, 'kill')
+                    self.click(w, 'kill')
+                    self.assertEqual(w._confirm_kill, '1')
+                    self.reveal(w, 'no')
+                    self.click(w, 'no')
+                    ended.assert_not_called()
                     w.agents[1]['_window_open'] = True
                     w._repaint()
                     self.reveal(w, 'details')

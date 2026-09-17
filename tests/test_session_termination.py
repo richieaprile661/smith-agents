@@ -9,6 +9,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from PIL import ImageDraw
+
 from test_session_windows import win
 from smith_agents import app, core
 
@@ -19,6 +21,32 @@ def sessions():
 
 
 class SessionTerminationTests(unittest.TestCase):
+    def test_session_end_control_is_visible_without_expanding_details(self):
+        for expanded in (False, True):
+            row = dict(core.demo_agents()[1], provider='claude', _details_expanded=expanded)
+            _, boxes = core.render_console([], None, {}, [row], 0, open_id=row['id'])
+            end = next(b for b in boxes if b[0] == 'kill')
+            details = next(b for b in boxes if b[0] == 'details')
+            self.assertEqual(end[2], details[2])
+            self.assertGreater(end[1], details[3])
+            self.assertEqual(sum(b[0] == 'kill' for b in boxes), 1)
+
+    def test_external_session_management_never_arms_process_termination(self):
+        for provider in ('codex', 'hermes'):
+            for expanded in (False, True):
+                row = dict(core.demo_agents()[1], provider=provider,
+                           _details_expanded=expanded, can_terminate=False)
+                image = core.console_base((core.CONSOLE_W, core.agent_drawer_height(row)))
+                pen = Mock(wraps=ImageDraw.Draw(image))
+                boxes = core.render_drawer(pen, row, 0)
+                self.assertNotIn('kill', [b[0] for b in boxes])
+                action = next(b for b in boxes if b[0] == 'open')
+                details = next(b for b in boxes if b[0] == 'details')
+                self.assertEqual(action[2], details[2])
+                self.assertGreater(action[1], details[3])
+                self.assertTrue(any(call.args[1] == 'Manage in ' + core.provider_name(row)
+                                    for call in pen.text.call_args_list))
+
     def test_four_chats_in_one_project_only_stop_the_selected_process(self):
         rows = sessions()
         with patch.object(core, 'list_agents', return_value=rows), \
