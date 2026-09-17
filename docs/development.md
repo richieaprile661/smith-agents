@@ -43,7 +43,7 @@ figure numbers and their states are listed in
 
 Ready sessions can show cooking, cycling, pumping, watering, or showering.
 
-All 19 current session drawings (13 main poses and six helpers) use a fixed
+All 17 current session drawings (13 main poses and four helpers) use a fixed
 calibrated body height of 23 logical pixels at 100% widget size in both layouts.
 The manifest's `character_height` defines the body measurement for each pose.
 Props never determine the character scale. Final raster sizes are rounded to
@@ -79,21 +79,23 @@ The widget follows these rules when it assigns and animates figures:
 The renderer uses the approved images as theme-colored masks and resamples them
 for the display density. The source images stay unchanged.
 
-Helpers use the selected Little Smith character in six poses: working, reviewing,
-testing, needs input, finished, and activity unknown. `artwork.helper_pose` selects
-from current tool evidence and lifecycle state; it does not classify the task
-title. Concurrent tools with different categories use the general working pose.
-Permission requests take priority, and failed/stopped helpers never get the
-successful result pose. A pose change restarts its entrance animation.
+Helpers use only the four approved poses from `helper-poses.png`: carrying a
+baby, stroller, sweeping, and carrying a watering can (review figures 14, 15,
+18, and 19). The source sheet is preserved byte for byte; manifest rectangles
+exclude its captions and the two rejected scenes. The six previous helper
+poses are no longer registered or selected.
 
-The helper uses the approved original-style study in `smith-helper-states.png`:
-a single flowing, open body contour with no legs, feet, pouch, or floor line.
-`helper_motion.py` animates hands and props using bounded local deformations while
-keeping the lower silhouette fixed. The new atlas is separate from the original helper
-pair, and helper geometry does not change the size of the main figures.
+`artwork.helper_pose` uses current tool evidence and lifecycle state, never the
+task title. General or mixed work uses sweeping, reading/review uses the stroller,
+and testing or completion uses the watering can. Permission requests and unknown
+activity use the baby pose. Artwork is decorative; the actual activity, status,
+and permission controls remain authoritative. A pose change restarts its entrance.
 
-Export a self-contained comparison of all six animations, with pause, replay,
-and compact-size previews:
+`helper_motion.py` animates only small rectangles inside the props. Body and ground
+pixels outside those regions remain unchanged through every frame. All four use
+the same fixed calibrated body scale as the 13 main figures in both layouts.
+
+Export all four animations with pause, replay, and compact-size previews:
 
 ```sh
 python tools/render_helper_preview.py

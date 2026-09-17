@@ -96,44 +96,44 @@ class ApprovedArtworkTests(unittest.TestCase):
                 row['state'] = state
             selector.assign(parents + children)
             for row in children:
-                expected = {'working': 'helper_working', 'needs': 'helper_needs',
-                            'done': 'helper_finished', 'closed': 'helper_unknown'}[state]
+                expected = {'working': 'helper_sweeping', 'needs': 'helper_baby',
+                            'done': 'helper_watering_can', 'closed': 'helper_baby'}[state]
                 self.assertEqual(core.agent_style(row)[0], expected)
                 self.assertEqual(row['_figure_pose'], expected)
                 self.assertIsNotNone(core.row_figure(row, 0, 78, 52))
-        self.assertEqual(core.agent_style({'id': 'new-child', 'sub': True, 'state': 'working'})[0], 'helper_working')
+        self.assertEqual(core.agent_style({'id': 'new-child', 'sub': True, 'state': 'working'})[0], 'helper_sweeping')
 
     def test_helper_poses_follow_current_evidence_and_restart_on_tool_change(self):
         from smith_agents.activity import Activity
         from smith_agents.figure_actions import Timeline
         row = dict(id='helper', sub=True, state='working', last_request='Run pytest then review code')
-        self.assertEqual(artwork.helper_pose(row), 'helper_working')
+        self.assertEqual(artwork.helper_pose(row), 'helper_sweeping')
         a = Activity(); a.start('read', 'Read', {'path': 'app.py'}, 10)
         row['activity'] = a.data
-        self.assertEqual(artwork.helper_pose(row), 'helper_reviewing')
+        self.assertEqual(artwork.helper_pose(row), 'helper_stroller')
         timeline = Timeline()
         timeline.elapsed(row['id'], core.agent_style(row)[0], 10)
         a.finish('read', 'contents', 11)
         a.start('tests', 'exec_command', {'cmd': 'python -m unittest discover'}, 12)
-        self.assertEqual(artwork.helper_pose(row), 'helper_testing')
+        self.assertEqual(artwork.helper_pose(row), 'helper_watering_can')
         self.assertEqual(timeline.elapsed(row['id'], core.agent_style(row)[0], 12), 0)
         a.start('other', 'Edit', {'path': 'app.py'}, 13)
-        self.assertEqual(artwork.helper_pose(row), 'helper_working')
+        self.assertEqual(artwork.helper_pose(row), 'helper_sweeping')
         row['permissions'] = [{'request': {}}]
-        self.assertEqual(artwork.helper_pose(row), 'helper_needs')
+        self.assertEqual(artwork.helper_pose(row), 'helper_baby')
         row['permissions'] = []
         for status in ('failed', 'stopped', 'unknown'):
             a.transition(status, 14)
-            self.assertEqual(artwork.helper_pose(row), 'helper_unknown')
+            self.assertEqual(artwork.helper_pose(row), 'helper_baby')
         a.transition('completed', 15)
         a.data['disconnected'] = True
-        self.assertEqual(artwork.helper_pose(row), 'helper_finished')
+        self.assertEqual(artwork.helper_pose(row), 'helper_watering_can')
         a = Activity(); row['activity'] = a.data
         a.start('edit', 'Edit', {'path': 'cat.py'}, 16)
-        self.assertEqual(artwork.helper_pose(row), 'helper_working')
+        self.assertEqual(artwork.helper_pose(row), 'helper_sweeping')
         a.finish('edit', 'ok', 17)
         a.start('echo', 'Bash', {'command': 'echo pytest'}, 18)
-        self.assertEqual(artwork.helper_pose(row), 'helper_working')
+        self.assertEqual(artwork.helper_pose(row), 'helper_sweeping')
 
     def test_packaged_sources_match_the_reviewed_artwork(self):
         for name, digest in artwork.MANIFEST["sources"].items():
@@ -190,7 +190,7 @@ class ApprovedArtworkTests(unittest.TestCase):
                         heights.append(ink_height)
                         checked += 1
                     self.assertEqual(*heights)
-        self.assertEqual(checked, 19 * 128 * 4 * 2)
+        self.assertEqual(checked, 17 * 128 * 4 * 2)
 
     def test_moving_prop_does_not_resize_or_shift_stationary_body(self):
         from PIL import Image, ImageDraw, ImageChops

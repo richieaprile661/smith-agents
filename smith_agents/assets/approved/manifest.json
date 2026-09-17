@@ -180,107 +180,61 @@
       "display_scale": 1.18,
       "coverage_boost": 0.6
     },
-    "helper_working": {
-      "source": "smith-helper-states.png",
+    "helper_baby": {
+      "source": "helper-poses.png",
       "rect": [
-        0,
-        0,
-        512,
-        512
+        30,
+        95,
+        465,
+        423
       ],
-      "render_width": 400,
-      "character_height": 254,
-      "coverage_boost": 1.0,
+      "character_height": 291,
       "motion_origin": [
-        70,
-        176
-      ],
-      "motion_scale": 0.9478672985781991
+        54,
+        119
+      ]
     },
-    "helper_reviewing": {
-      "source": "smith-helper-states.png",
+    "helper_stroller": {
+      "source": "helper-poses.png",
       "rect": [
-        512,
-        0,
-        1024,
-        512
+        489,
+        94,
+        913,
+        423
       ],
-      "render_width": 400,
-      "character_height": 268,
-      "coverage_boost": 1.0,
+      "character_height": 293,
       "motion_origin": [
-        592,
-        176
-      ],
-      "motion_scale": 1
+        496,
+        117
+      ]
     },
-    "helper_testing": {
-      "source": "smith-helper-states.png",
+    "helper_sweeping": {
+      "source": "helper-poses.png",
       "rect": [
-        1024,
-        0,
-        1536,
-        512
+        495,
+        542,
+        996,
+        870
       ],
-      "render_width": 400,
-      "character_height": 268,
-      "coverage_boost": 1.0,
+      "character_height": 290,
       "motion_origin": [
-        1100,
-        176
-      ],
-      "motion_scale": 1
+        513,
+        565
+      ]
     },
-    "helper_needs": {
-      "source": "smith-helper-states.png",
+    "helper_watering_can": {
+      "source": "helper-poses.png",
       "rect": [
-        0,
-        512,
-        512,
-        1024
+        1015,
+        546,
+        1500,
+        870
       ],
-      "render_width": 400,
-      "character_height": 272,
-      "coverage_boost": 1.0,
+      "character_height": 287,
       "motion_origin": [
-        70,
-        625
-      ],
-      "motion_scale": 1
-    },
-    "helper_finished": {
-      "source": "smith-helper-states.png",
-      "rect": [
-        512,
-        512,
-        1060,
-        1024
-      ],
-      "render_width": 400,
-      "character_height": 238,
-      "coverage_boost": 1.0,
-      "motion_origin": [
-        566,
-        625
-      ],
-      "motion_scale": 0.8733624454148472
-    },
-    "helper_unknown": {
-      "source": "smith-helper-states.png",
-      "rect": [
-        1060,
-        512,
-        1536,
-        1024
-      ],
-      "render_width": 400,
-      "character_height": 272,
-      "coverage_boost": 1.0,
-      "motion_origin": [
-        1103,
-        625
-      ],
-      "motion_scale": 1
+        1035,
+        569
+      ]
     }
   },
   "sources": {
@@ -289,7 +243,8 @@
     "group-selfie.png": "61d01931dcabf4f842f9d6cba1cf123bcde15bb932134e79e08ad0cc87bfd0dc",
     "tray.png": "efeb4a76c5e08777bd1ad15110275804e8626e4025efeaddff8da57b41fe5c89",
     "little-helper.png": "425529462a8970a149a5010a87783c79cb129d1ba94df98d8ff8bdb25230c51b",
-    "smith-helper-states.png": "b93ea3c391204d6dcb33b98575c9cbc10854001e6b0f714ea2afa4383cf7f959"
+    "smith-helper-states.png": "b93ea3c391204d6dcb33b98575c9cbc10854001e6b0f714ea2afa4383cf7f959",
+    "helper-poses.png": "cfa5565a523f2475af0f6dd36ca72b3d6790f42abfd7deb9e07a87bc9aea3198"
   },
   "tray": "tray.png",
   "session_drawing_geometry": {
@@ -373,41 +328,29 @@
         320,
         192
       ],
-      "helper_finished": [
-        26,
-        26,
-        422,
-        264
-      ],
-      "helper_needs": [
-        27,
+      "helper_baby": [
+        24,
         25,
-        356,
-        298
+        419,
+        316
       ],
-      "helper_reviewing": [
-        26,
-        26,
-        393,
-        296
-      ],
-      "helper_testing": [
+      "helper_stroller": [
         28,
-        26,
-        374,
-        303
+        25,
+        433,
+        318
       ],
-      "helper_unknown": [
-        27,
+      "helper_sweeping": [
+        24,
         26,
-        383,
-        299
+        489,
+        316
       ],
-      "helper_working": [
+      "helper_watering_can": [
         26,
-        26,
-        421,
-        282
+        25,
+        468,
+        312
       ]
     },
     "baselines": {
@@ -424,12 +367,10 @@
       "approved_35": 223,
       "approved_7": 182,
       "approved_8": 192,
-      "helper_finished": 264,
-      "helper_needs": 298,
-      "helper_reviewing": 296,
-      "helper_testing": 303,
-      "helper_unknown": 299,
-      "helper_working": 282
+      "helper_baby": 316,
+      "helper_stroller": 318,
+      "helper_sweeping": 316,
+      "helper_watering_can": 312
     }
   }
 }

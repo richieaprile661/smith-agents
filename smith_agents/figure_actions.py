@@ -28,12 +28,10 @@ LABELS = {
     'approved_35': ('Scooter', 'Two pushes, then a quiet idle'),
     'group_selfie': ('Selfie', 'A camera flash, then quiet star twinkles'),
     'little_helper': ('Little helper', 'Two gentle head taps, then quiet idle'),
-    'helper_working': ('Working', 'Type at the laptop'),
-    'helper_reviewing': ('Reviewing', 'Scan the page with a magnifying glass'),
-    'helper_testing': ('Testing', 'Mark the test checklist'),
-    'helper_needs': ('Needs you', 'Raise a hand and wave'),
-    'helper_finished': ('Finished', 'Hand over the finished page'),
-    'helper_unknown': ('Activity unknown', 'Turn an empty palm upward'),
+    'helper_baby': ('Carrying a baby', 'Gently cradle the baby'),
+    'helper_stroller': ('Stroller', 'A small movement in the stroller canopy'),
+    'helper_sweeping': ('Sweeping', 'Brush the broom along the ground'),
+    'helper_watering_can': ('Watering can', 'Gently sway the can'),
 }
 
 

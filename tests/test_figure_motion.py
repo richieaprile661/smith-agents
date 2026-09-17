@@ -138,19 +138,25 @@ class FigureMotionTests(unittest.TestCase):
         self.assertGreaterEqual(late, motion.ACTION_FRAMES)
         self.assertLessEqual(helper.alpha_frame.cache_info().currsize, 128)
 
-    def test_six_little_smith_actions_move_locally_without_moving_the_lower_contour(self):
+    def test_four_helper_actions_move_only_inside_props(self):
         from smith_agents import helper_motion
+        self.assertEqual(len(artwork.HELPER_FIGURES), 4)
         for name in artwork.HELPER_FIGURES:
             with self.subTest(name=name):
                 first = motion.alpha_frame(name, 0)
                 changed = False
                 floor = first.height-helper_motion.PAD-12
-                for frame in (8,16,24,40,63,64,80,96,127):
+                for frame in range(128):
                     current = motion.alpha_frame(name, frame)
                     self.assertEqual(current.size, first.size)
                     self.assertEqual(current.crop((0,floor,current.width,current.height)).tobytes(),
                                      first.crop((0,floor,first.width,first.height)).tobytes())
                     changed |= ImageChops.difference(first,current).getbbox() is not None
+                    stationary = current.copy()
+                    for rectangle, _, _ in helper_motion.PROP_REGIONS[name]:
+                        box = helper_motion.local_box(name, rectangle)
+                        stationary.paste(first.crop(box), box)
+                    self.assertEqual(stationary.tobytes(), first.tobytes())
                 self.assertTrue(changed)
                 self.assertEqual(motion.alpha_frame(name,128).tobytes(),motion.alpha_frame(name,64).tobytes())
         self.assertLessEqual(helper_motion.alpha_frame.cache_info().currsize,384)

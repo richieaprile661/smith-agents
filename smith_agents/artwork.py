@@ -23,7 +23,7 @@ STATE_FIGURES = {
 }
 HEADER = "group_selfie"
 SUBAGENT = "little_helper"
-HELPER_FIGURES = tuple("helper_" + state for state in ("working", "reviewing", "testing", "needs", "finished", "unknown"))
+HELPER_FIGURES = ('helper_baby', 'helper_stroller', 'helper_sweeping', 'helper_watering_can')
 SESSION_FIGURES = frozenset(pose for poses in STATE_FIGURES.values() for pose in poses) | frozenset(HELPER_FIGURES)
 
 
@@ -32,33 +32,33 @@ def helper_pose(agent):
     from .activity import current_tools
     data = agent.get('activity') or {}
     if agent.get('permissions'):
-        return 'helper_needs'
+        return 'helper_baby'
     if agent.get('state') == 'closed' or data.get('loading') or data.get('status') in ('unknown', 'failed', 'stopped'):
-        return 'helper_unknown'
+        return 'helper_baby'
     if data.get('status') == 'completed':
-        return 'helper_finished'
+        return 'helper_watering_can'
     if data.get('disconnected'):
-        return 'helper_unknown'
+        return 'helper_baby'
     if agent.get('state') == 'done':
-        return 'helper_finished'
+        return 'helper_watering_can'
     if agent.get('state') == 'needs':
-        return 'helper_needs' if not data else 'helper_unknown'
+        return 'helper_baby'
     labels = [tool.get('label', '').lower() for tool in current_tools(data)]
     # Mixed concurrent work uses the general working pose. Specialized poses
     # describe the observed commands, not whether a review or test succeeded.
     def category(label):
         if re.match(r'(?:(?:functions|tools)\.)?(read|read_file|readfile|glob|grep|search|web_search)\b', label):
-            return 'helper_reviewing'
+            return 'helper_stroller'
         command = re.sub(r'^(?:(?:functions|tools)\.)?(exec_command|bash|command|shell)\s+', '', label)
         if command == label:
-            return 'helper_working'
+            return 'helper_sweeping'
         if re.search(r'(?:^|[;&|]\s*)(?:(?:uv run|npx)\s+)?(?:python[\d.]* -m (?:pytest|unittest)|pytest|vitest|jest|cargo test|go test|npm (?:run )?test|pnpm (?:run )?test|dotnet test)\b', command):
-            return 'helper_testing'
+            return 'helper_watering_can'
         if re.search(r'(?:^|[;&|]\s*)(?:git diff|git show|rg|cat|sed)\b', command):
-            return 'helper_reviewing'
-        return 'helper_working'
+            return 'helper_stroller'
+        return 'helper_sweeping'
     categories = {category(label) for label in labels}
-    return next(iter(categories)) if len(categories) == 1 else 'helper_working'
+    return next(iter(categories)) if len(categories) == 1 else 'helper_sweeping'
 
 
 class FigureAssignments:
