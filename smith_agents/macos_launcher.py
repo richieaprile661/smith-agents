@@ -53,7 +53,9 @@ def create_launcher(python, install_dir, applications_dir):
                 # cannot load the native extensions pip installed on Apple Silicon.
                 "LSArchitecturePriority": [platform.machine()], MARKER: True}
         (contents / "Info.plist").write_bytes(plistlib.dumps(info))
-        command = shlex.join([str(python), "-m", "smith_agents"])
+        # Finder and shells can supply unrelated working directories/PYTHONPATH.
+        # Load the package belonging to this interpreter, including editable installs.
+        command = shlex.join([str(python), "-I", "-m", "smith_agents"])
         log = shlex.quote(str(install_dir / "launch.log"))
         executable.write_text('#!/bin/sh\nexec ' + command + ' "$@" >>' + log + ' 2>&1\n')
         executable.chmod(0o755)

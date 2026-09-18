@@ -11,7 +11,8 @@ else:
     import ctypes
     fake_dll = Mock()
     fake_dll.user32.GetDpiForSystem.return_value = 96
-    with patch.object(ctypes, 'windll', fake_dll, create=True):
+    with patch.object(ctypes, 'windll', fake_dll, create=True), \
+            patch.object(ctypes, 'WinDLL', return_value=fake_dll.kernel32, create=True):
         from smith_agents import platform_win32 as win
 from smith_agents.session_windows import WindowTargets, window_agent
 

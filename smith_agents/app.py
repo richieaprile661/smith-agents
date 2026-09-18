@@ -725,13 +725,11 @@ class SmithAgentsWidget:
         argv, cwd = platform.launch_argv()
         if self.demo:
             argv.append("--demo")
-        # Drop the single-instance lock first, otherwise the process we are
-        # about to start would see us and exit, taking the widget with it.
-        platform.release_single_instance()
+        # The child waits for the lock. Keep it until our event loop and old
+        # windows have closed, so a relaunch cannot briefly create two widgets.
         try:
             platform.relaunch(argv, cwd)
         except OSError:
-            platform.claim_single_instance()
             return
         self.quit()
 

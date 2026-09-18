@@ -22,7 +22,7 @@ class MacLauncherTests(unittest.TestCase):
             python.chmod(0o755)
             app = create_launcher(python, root / "Smith's data", root / "My Apps")
             subprocess.run([str(app / "Contents/MacOS/Smith Agents"), "--version"], check=True)
-            self.assertEqual(recorded.read_text().splitlines(), ["-m", "smith_agents", "--version"])
+            self.assertEqual(recorded.read_text().splitlines(), ["-I", "-m", "smith_agents", "--version"])
 
     @unittest.skipUnless(sys.platform == "darwin", "Finder launch requires macOS")
     def test_finder_preserves_installer_architecture(self):

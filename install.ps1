@@ -36,6 +36,21 @@
     if ($LASTEXITCODE -ne 0) { throw "Could not locate the app icon." }
     $smithShortcut.IconLocation = $smithIcon.Trim()
     $smithShortcut.Save()
+    # Keep existing desktop and login shortcuts on the same installation.
+    # Only touch shortcuts that actually launch our current or legacy command.
+    foreach ($smithFolder in @([Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("Startup"), $smithPrograms)) {
+        foreach ($smithName in @("Smith Agents.lnk", "Claude Usage.lnk", "ClaudeUsageWidget.lnk")) {
+            $smithPath = Join-Path $smithFolder $smithName
+            if (-not (Test-Path -LiteralPath $smithPath)) { continue }
+            $smithLink = $smithShell.CreateShortcut($smithPath)
+            if ((Split-Path $smithLink.TargetPath -Leaf) -notin @("smith-agents.exe", "claude-widget.exe")) { continue }
+            $smithLink.TargetPath = $smithLauncher
+            $smithLink.Arguments = ""
+            $smithLink.WorkingDirectory = $smithInstallDir
+            $smithLink.IconLocation = $smithIcon.Trim()
+            $smithLink.Save()
+        }
+    }
     Write-Host "Smith Agents installed. You can open it from the Start Menu."
     if ($env:SMITH_AGENTS_NO_LAUNCH -ne "1") { Start-Process -FilePath $smithLauncher }
 }

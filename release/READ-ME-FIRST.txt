@@ -13,5 +13,11 @@ Keep the smith_agents wheel and install.ps1 together. The installer creates a
 Smith Agents Start Menu shortcut, enables startup, and launches the application.
 Use -NoStartup or -NoLaunch to skip those actions.
 
+Before updating, quit every Smith Agents widget from its tray menu. Both Windows
+installers now use the same private environment in %LOCALAPPDATA%\Smith Agents
+(or SMITH_AGENTS_INSTALL_DIR when set). Existing Smith desktop and startup
+shortcuts are refreshed. If a pinned taskbar icon still opens an older copy,
+unpin it and pin the updated Smith Agents shortcut from the Start Menu.
+
 Your existing provider selection, theme, position, and usage caches are preserved.
 For the one-line installers and macOS setup, see the repository README.

@@ -77,20 +77,30 @@ Step "Python $version"
 
 # --- 2. The widget ---------------------------------------------------------
 Step "installing Smith Agents and its dependencies..."
-& py -m pip install --quiet --upgrade --disable-pip-version-check $Wheel
+# Use the same environment as the one-line installer, including on upgrades
+# from the former global-Python release installer.
+$smithInstallDir = $env:SMITH_AGENTS_INSTALL_DIR
+if (-not $smithInstallDir) { $smithInstallDir = Join-Path $env:LOCALAPPDATA "Smith Agents" }
+$smithVenv = Join-Path $smithInstallDir "venv"
+New-Item -ItemType Directory -Path $smithInstallDir -Force | Out-Null
+& py -3 -m venv $smithVenv
+if ($LASTEXITCODE -ne 0) { throw "Could not create the Smith Agents environment." }
+$smithPython = Join-Path $smithVenv "Scripts\python.exe"
+& $smithPython -m pip install --quiet --upgrade --force-reinstall --disable-pip-version-check $Wheel
 if ($LASTEXITCODE -ne 0) { throw "pip could not install $Wheel" }
 
 # where pip put the command it created for us
-$scripts = (& py -c "import sysconfig;print(sysconfig.get_path('scripts'))").Trim()
+$scripts = Join-Path $smithVenv "Scripts"
 $exe = Join-Path $scripts "smith-agents.exe"
 if (-not (Test-Path $exe)) { throw "installed, but $exe is missing" }
-$icon = (& py -c "import os,smith_agents;print(os.path.join(os.path.dirname(smith_agents.__file__),'assets','smith-agents.ico'))").Trim()
+$icon = (& $smithPython -I -c "import os,smith_agents;print(os.path.join(os.path.dirname(smith_agents.__file__),'assets','smith-agents.ico'))").Trim()
 
 # --- 3. Shortcuts ----------------------------------------------------------
 function New-Shortcut($path, $target, $iconPath) {
     $shell = New-Object -ComObject WScript.Shell
     $link = $shell.CreateShortcut($path)
     $link.TargetPath = $target
+    $link.Arguments = ""
     $link.WorkingDirectory = Split-Path $target
     $link.WindowStyle = 7
     if ($iconPath -and (Test-Path $iconPath)) { $link.IconLocation = $iconPath }
@@ -111,6 +121,19 @@ $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$AppName.l
 New-Shortcut $menu $exe $icon
 Remove-LegacyShortcut (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Claude Usage.lnk")
 Step "added to the Start Menu"
+
+# Repair existing desktop/startup links without adding new login entries when
+# -NoStartup was requested. Preserve unrelated shortcuts with similar names.
+foreach ($folder in @([Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("Startup"))) {
+    foreach ($name in @("Smith Agents.lnk", "Claude Usage.lnk", "ClaudeUsageWidget.lnk")) {
+        $path = Join-Path $folder $name
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $link = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
+        if ((Split-Path $link.TargetPath -Leaf) -in @("smith-agents.exe", "claude-widget.exe")) {
+            New-Shortcut $path $exe $icon
+        }
+    }
+}
 
 if (-not $NoStartup) {
     $startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\Smith Agents.lnk"
@@ -134,5 +157,5 @@ Say ""
 Say "Sign in through Claude Code or Codex for that provider's usage readings."
 Say "The agent list supports both providers."
 Say ""
-Say "To remove it:  py -m pip uninstall smith-agents"
+Say "To remove it:  & '$smithPython' -m pip uninstall smith-agents"
 Say ""

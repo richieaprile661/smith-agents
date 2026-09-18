@@ -128,6 +128,15 @@ To try it with sample data and without signing in, add `--demo`:
 `py -m smith_agents --demo` on Windows, or `.venv/bin/python -m smith_agents --demo`
 on macOS.
 
+On macOS, to make the app icon launch this editable checkout too, run:
+
+```sh
+.venv/bin/python -m smith_agents.macos_launcher "$HOME/Library/Application Support/Smith Agents"
+```
+
+Keep the checkout and its `.venv` in place while using that icon. Otherwise the
+icon continues to launch the separate copy created by the installer.
+
 </details>
 
 ## How it works

@@ -52,14 +52,13 @@ def _entry_exe():
 
 
 def _launch_argv():
-    """Command, and the directory to run it in, for starting a second copy.
+    """Restart the code that is running, including a source checkout.
 
-    Installed there is a shim to call. From a source tree there is not, so it
-    goes through the launcher with -m and runs from the folder above the
-    package, which is what keeps the package importable."""
-    exe = _entry_exe()
-    if exe:
-        return [exe], os.path.dirname(exe)
+    A pip shim in this interpreter can point at an older installed package.
+    Keep the current package directory first on the module search path.
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable], os.path.dirname(sys.executable)
     runner = _sibling_exe("pythonw.exe") or sys.executable
     return [runner, "-m", "smith_agents"], os.path.dirname(SCRIPT_DIR)
 
@@ -401,6 +400,11 @@ def tray_size():
 MUTEX_NAME = "Local\\ClaudeUsageWidget"
 ERROR_ALREADY_EXISTS = 183
 _INSTANCE_LOCK = None
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+_kernel32.CreateMutexW.restype = wintypes.HANDLE
+_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+_kernel32.CloseHandle.restype = wintypes.BOOL
 
 
 def claim_single_instance(wait=0.0):
@@ -409,15 +413,21 @@ def claim_single_instance(wait=0.0):
     ``wait`` covers the theme relaunch, where the outgoing process may not have
     let go of the handle yet."""
     global _INSTANCE_LOCK
-    deadline = time.time() + wait
+    if _INSTANCE_LOCK is not None:
+        return True
+    deadline = time.monotonic() + wait
     while True:
-        handle = ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX_NAME)
-        if handle and ctypes.windll.kernel32.GetLastError() != ERROR_ALREADY_EXISTS:
+        ctypes.set_last_error(0)
+        handle = _kernel32.CreateMutexW(None, False, MUTEX_NAME)
+        error = ctypes.get_last_error()
+        if not handle:
+            raise ctypes.WinError(error)
+        if error != ERROR_ALREADY_EXISTS:
             _INSTANCE_LOCK = handle       # kept alive deliberately
             return True
         if handle:
-            ctypes.windll.kernel32.CloseHandle(handle)
-        if time.time() >= deadline:
+            _kernel32.CloseHandle(handle)
+        if time.monotonic() >= deadline:
             return False
         time.sleep(0.15)
 
@@ -425,7 +435,7 @@ def claim_single_instance(wait=0.0):
 def release_single_instance():
     global _INSTANCE_LOCK
     if _INSTANCE_LOCK:
-        ctypes.windll.kernel32.CloseHandle(_INSTANCE_LOCK)
+        _kernel32.CloseHandle(_INSTANCE_LOCK)
         _INSTANCE_LOCK = None
 
 

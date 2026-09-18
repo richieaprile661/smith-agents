@@ -44,6 +44,9 @@ jobs:
           SMITH_AGENTS_NO_LAUNCH: '1'
         run: |
           & .\install.ps1
+          # The offline installer must update the same environment, even when
+          # the wheel has the same version as the package already installed.
+          & .\release\install.ps1 -NoStartup -NoLaunch
           & "$env:SMITH_AGENTS_INSTALL_DIR\venv\Scripts\python.exe" -m smith_agents --demo --smoke-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         timeout-minutes: 5
