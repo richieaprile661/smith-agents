@@ -1,5 +1,10 @@
 <p align="center">
-  <img src="docs/images/github-signal-field-hero.png" alt="Smith Agents: Your agents. In view. The current widget shows Claude and Codex sessions with figures, context, activity, and separate 5-hour and weekly usage fields." width="880">
+  <img src="docs/images/github-smith-agents-hero.png" alt="Smith Agents: Your agents. In view. The current widget shows Claude and Codex sessions with figures, context, activity, and separate 5-hour and weekly usage fields." width="880">
+</p>
+
+<p align="center">
+  <em>“We're not here because we're free. We're here because we're not free.”</em><br>
+  — Agent Smith
 </p>
 
 **Smith Agents** keeps your **Claude Code**, **Codex**, and **Hermes Agent** sessions in view on

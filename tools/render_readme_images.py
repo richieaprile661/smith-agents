@@ -104,7 +104,13 @@ def render_parts(theme, zoom, out_dir):
     image, _ = core.render_console(metrics["claude"], None, demo_stats(), agents[:2], now,
                                    provider="claude", figure_elapsed=settled)
     save("hero", image)
-    save("wordmark", core.smith_wordmark(290, 110, monochrome_ink=(39, 53, 43)))
+    # Keep the full name on one baseline, in the widget's live brand typeface.
+    # Separate Smith/AGENTS assets made the README title look disconnected.
+    from PIL import Image, ImageDraw
+    wordmark = Image.new("RGBA", (620, 110))
+    ImageDraw.Draw(wordmark).text((0, 0), "Smith Agents", font=core.brand_font(26),
+                                  anchor="lt", fill=(39, 53, 43))
+    save("wordmark", wordmark)
 
 
 def render_theme(theme, zoom, out_dir):
@@ -166,8 +172,7 @@ def compose_hero(parts):
     height = max(1050, console.height + 96)
     canvas = Image.new("RGBA", (WIDTH, height), PAPER)
     pen = ImageDraw.Draw(canvas)
-    canvas.alpha_composite(load(parts, "wordmark"), (72, 68))
-    pen.text((82, 182), "A G E N T S", font=font(23, True), fill=MUTED)
+    canvas.alpha_composite(load(parts, "wordmark"), (76, 96))
     y = max(310, (height - 420) // 2)
     pen.text((72, y), "Your agents.", font=font(88, True), fill=INK)
     pen.text((72, y + 104), "In view.", font=font(88, True), fill=INK)
@@ -257,7 +262,7 @@ def main():
             render_theme(theme, 1.45, theme_parts)
             themes.append(theme_parts)
         images = {
-            "github-signal-field-hero.png": compose_hero(parts),
+            "github-smith-agents-hero.png": compose_hero(parts),
             "github-signal-field-work.png": compose_work(parts),
             "github-signal-field-usage.png": compose_usage(parts),
             "github-signal-field-tuck.png": compose_tuck(parts),

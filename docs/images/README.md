@@ -10,7 +10,7 @@ the first two. Claude usage is 42% / 18%; Codex usage is 71% / 31% (5h / week).
 
 | Image | What it shows |
 | --- | --- |
-| `github-signal-field-hero.png` | Brand, tagline, and the current full widget. |
+| `github-smith-agents-hero.png` | Full Smith Agents name on one baseline, tagline, and the current full widget. |
 | `github-signal-field-work.png` | Session identity, context, activity, and folded Read more controls. |
 | `github-signal-field-usage.png` | Both providers' 5h and weekly Signal Fields and glowing logos. |
 | `github-signal-field-tuck.png` | Horizontal and vertical strips with attached usage drawers. |
