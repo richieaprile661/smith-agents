@@ -10,7 +10,7 @@ import zlib
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 ROOT = Path(__file__).parent / "assets" / "approved"
@@ -251,9 +251,14 @@ def render(name, ink, width, height, fade=False, frame=0):
     return cell
 
 
-@lru_cache(maxsize=1)
-def _tray_alpha():
-    with Image.open(ROOT / MANIFEST["tray"]) as image:
+# The Matrix theme's tray mark: the approved solid white Smith face
+# (output/smith-white-logos/02-solid-transparent.png).
+MATRIX_TRAY = Path(__file__).resolve().parent / "assets" / "tray-matrix.png"
+
+
+@lru_cache(maxsize=2)
+def _tray_alpha(path=None):
+    with Image.open(path or ROOT / MANIFEST["tray"]) as image:
         alpha = image.convert("RGBA").getchannel("A")
     # The approved silhouette has faint isolated pixels around its edge.
     # Ignore them when measuring its bounds, preserving the source itself.
@@ -261,8 +266,21 @@ def _tray_alpha():
     return alpha.crop(bounds) if bounds else Image.new("L", (1, 1))
 
 
-def tray_icon(size, ink="white"):
-    alpha = _tray_alpha()
+def face_icon(size, ink="white"):
+    """The Matrix face as the widget's header logo: mirrored to face right,
+    filling its square without the tray's padding."""
+    alpha = ImageOps.mirror(_tray_alpha(MATRIX_TRAY))
+    scale = min(size / alpha.width, size / alpha.height)
+    target = (max(1, round(alpha.width * scale)), max(1, round(alpha.height * scale)))
+    drawing = Image.new("RGBA", target, ink)
+    drawing.putalpha(alpha.resize(target, Image.Resampling.LANCZOS))
+    icon = Image.new("RGBA", (size, size))
+    icon.paste(drawing, ((size - target[0]) // 2, size - target[1]))
+    return icon
+
+
+def tray_icon(size, ink="white", path=None):
+    alpha = _tray_alpha(path)
     padding = max(1, round(size / 22))
     room = max(1, size - 2 * padding)
     scale = min(room / alpha.width, room / alpha.height)

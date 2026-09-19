@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 from datetime import datetime
-from . import core, artwork, figure_actions, tucked, codex_usage, hermes_usage
+from . import core, artwork, figure_actions, portraits, tucked, codex_usage, hermes_usage
 from .runtime import backend
 from .permissions import answer_permission
 from .core import (
@@ -108,6 +108,9 @@ class SmithAgentsWidget:
         self._pending_agents = None
         self._figure_timeline = figure_actions.Timeline()
         self._figure_assignments = artwork.FigureAssignments()
+        self._portrait_assignments = portraits.Assignments()
+        self._portrait_clock = portraits.Clock()
+        self._reduced_motion = (False, None)
         self._peek_order = tucked.AgentOrder()
         self._peek_open_id = None
         self._peek_usage_open = False
@@ -419,6 +422,12 @@ class SmithAgentsWidget:
             ('header',), artwork.HEADER, animation_now)) if self.config["visible"] else 0)
 
         def figure_elapsed(agent):
+            if core.PORTRAITS:
+                # Accumulated motion time; frozen while hidden or when motion is reduced.
+                identity = agent.get('id') or agent.get('name')
+                speed = portraits.rate(agent.get('state'), self._prefers_reduced_motion(animation_now))
+                return self._portrait_clock.advance(
+                    identity, speed if self.config["visible"] else 0, animation_now)
             if not self.config["visible"]:
                 return 0
             return self._figure_timeline.elapsed(
@@ -442,7 +451,8 @@ class SmithAgentsWidget:
                 selected=self._peek_open_id, scroll=self._peek_scroll,
                 panel_scroll=self._peek_panel_scroll, details=self._peek_details,
                 confirm_id=self._confirm_kill,
-                figure_elapsed=lambda agent: figure_actions.periodic_elapsed(figure_elapsed(agent)),
+                figure_elapsed=(figure_elapsed if core.PORTRAITS else
+                                lambda agent: figure_actions.periodic_elapsed(figure_elapsed(agent))),
                 provider=self.config.get("usage_provider", "claude"),
                 usage_open=getattr(self, '_peek_usage_open', False),
                 usage_notice=error[1] if error else None, usage_data=spend)
@@ -492,6 +502,8 @@ class SmithAgentsWidget:
                (core.agent_style(agent)[0], agent.get('state')) for agent in self.agents},
         })
 
+        self._portrait_clock.sync({agent.get('id') or agent.get('name') for agent in self.agents})
+
         # the tray follows the session, not the worst limit
         self._update_tray(session_metric(metrics) or front, live, error)
         if animating:
@@ -503,6 +515,17 @@ class SmithAgentsWidget:
         else:
             delay = IDLE_REFRESH_MS
         self._tick_job = self.root.after(delay, self._tick)
+
+    def _prefers_reduced_motion(self, now):
+        """The system's reduce-motion setting, asked at most once a second."""
+        value, checked = self._reduced_motion
+        if checked is None or now - checked >= 1.0:
+            try:
+                value = bool(platform.reduced_motion())
+            except Exception:
+                value = False
+            self._reduced_motion = (value, now)
+        return value
 
     def _tick(self):
         """The paint loop's guard. An exception anywhere in a frame used to end
@@ -892,6 +915,7 @@ class SmithAgentsWidget:
             agent['_reply_expanded'] = agent.get('id') in expanded_replies
             agent['_details_expanded'] = agent.get('id') in expanded_details
         self._figure_assignments.assign(self.agents)
+        self._portrait_assignments.assign(self.agents)
 
     def _sync_agent_windows(self, agents=None):
         from .session_windows import window_agent

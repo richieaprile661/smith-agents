@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -6,6 +7,9 @@ from unittest.mock import Mock, patch
 
 _config = tempfile.TemporaryDirectory(prefix="widget-header-tests-")
 os.environ["SMITH_AGENTS_CONFIG_DIR"] = _config.name
+# These layout tests measure the line-figure themes; Matrix portraits have
+# their own fresh-process coverage in test_portraits.
+Path(_config.name, "config.json").write_text('{"theme": "claude"}')
 
 from PIL import ImageDraw
 from smith_agents import core

@@ -162,7 +162,9 @@ def _brand(chip, side, provider):
     horizontal = side in ('top', 'bottom')
     top_edge = side == 'top'
     boxes = []
-    icon = c.smith_header_icon(c.px(64), c.px(32), c._tok('fg'))
+    # Beside the lamps, Matrix's lettering must stay clear of them.
+    icon = c.smith_header_icon(c.px(44) if c.PORTRAITS and top_edge else c.px(64),
+                               c.px(32), c._tok('fg'))
     if horizontal:
         icon_x = 0 if top_edge else (TILE_W-icon.width)//2
         chip.alpha_composite(icon, (icon_x, (chip.height-icon.height)//2))
@@ -226,7 +228,7 @@ def _agent_cell(agent, width, height, lines, selected, side, now, elapsed, visib
     figure = c.row_figure(agent, elapsed(agent) if elapsed else now,
                          FIGURE_W, FIGURE_H) if visible else None
     if figure:
-        cell.alpha_composite(figure, ((width-FIGURE_W)//2, c.px(4)))
+        c.paste_figure(cell, figure, ((width-FIGURE_W)//2, c.px(4)))
     c.draw_provider_badge(cell, agent, c.px(3), c.px(2))
     font = c.FONT('book', NAME_SIZE)
     for i, line in enumerate(lines):

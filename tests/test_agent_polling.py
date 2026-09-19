@@ -18,6 +18,7 @@ class AgentPollingTests(unittest.TestCase):
         w._pending_agents = None
         w.agents = [dict(core.demo_agents()[1], id='old', _reply_expanded=True)]
         w._figure_assignments = Mock()
+        w._portrait_assignments = Mock()
         w._save_config = Mock()
         w._repaint = Mock()
         w._peek_open_id = None

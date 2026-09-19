@@ -1,0 +1,32 @@
+{
+  "smith": {
+    "image": "smith.png",
+    "sha256": "01cca093384c9b8dee4bf7d29ef9d7a7f3dae25bbc0ec10676b0242f3cb32039",
+    "source": "output/imagegen/generated-pixel-code/smith-green.png"
+  },
+  "brown": {
+    "image": "brown.png",
+    "sha256": "d17511b6becfc892f0f966ad3f618c20bedc25b55a235e917bba00c13c83c09d",
+    "source": "output/imagegen/generated-pixel-code/brown/brown-green-v2.png"
+  },
+  "jones": {
+    "image": "jones.png",
+    "sha256": "ace52103cf06448c7e95537b292f8741d2be6ac8c1a6a41807c0130b8daea988",
+    "source": "output/imagegen/generated-pixel-code/jones/jones-green-v2.png"
+  },
+  "johnson": {
+    "image": "johnson.png",
+    "sha256": "064b547e91bef3631a519a78fee52ae9b61a067dca3c75cc37bc24121ebd20b2",
+    "source": "output/imagegen/generated-pixel-code/johnson/johnson-green-v2.png"
+  },
+  "jackson": {
+    "image": "jackson.png",
+    "sha256": "9e9480317e75ce8e35391fc6647ee28c1c491ec0d9c48d9f23111cc23abd6a60",
+    "source": "output/imagegen/generated-pixel-code/jackson/jackson-green-v2.png"
+  },
+  "thompson": {
+    "image": "thompson.png",
+    "sha256": "8017ef3916646aa1edb26b8c4b35d603caf9ebf7fb7d17f46736e0e6d59b0598",
+    "source": "output/imagegen/generated-pixel-code/thompson/thompson-green-v2.png"
+  }
+}

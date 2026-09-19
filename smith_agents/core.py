@@ -17,7 +17,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
-from . import artwork, figure_actions
+from . import artwork, figure_actions, portraits
 from .branding import APP_NAME, config_override
 from .runtime import backend
 from .context_bridge import read_capacity
@@ -54,7 +54,7 @@ DEFAULTS = {
     "tuck_side": "right",
     "tuck_x": None,
     "tuck_y": None,
-    "theme": "claude",
+    "theme": "matrix",
     "console_open": True,
     "console_tab": "agents",
     "bar_mode": "worst",
@@ -109,6 +109,37 @@ MAX_BACKOFF_S = 900          # ceiling when the usage endpoint rate limits us
 FONT_DIR = os.path.join(SCRIPT_DIR, "fonts")
 
 THEMES = {
+    "matrix": {
+        "label": "The Matrix",
+        # Session figures are the animated code portraits, not line figures.
+        "figures": "portraits",
+        "paper": "050f07",
+        "bg_top": "071a0c", "bg_bottom": "030a05", "border": "125a26", "track": "0a2e14",
+        "fg": "c8ffd4", "muted": "3f9a54", "dim": "2b6e3c",
+        "ok": "00ff41", "warn": "ffb000", "warn_border": "7a5200",
+        "crit": "ff2d3a", "crit_top": "ff2d3a", "crit_bottom": "ff2d3a",
+        "crit_border": "ff8a93", "crit_fg": "000000", "crit_sub": "2b0007",
+        "crit_track": "c2172a", "crit_divider": "8a0a15",
+        "stale_top": "030805", "stale_bottom": "030805",
+        "stale_border": "0b2e14", "stale_track": "071a0c",
+        "accent": "00ff41", "numeral_ok": "00ff41",
+        # Matrix names its own triad rather than reusing ok/accent, which are
+        # the same green - a working and a finished row read identically.
+        "states": {"needs": "ffe23d", "working": "ffba66", "done": "00ff41",
+                   "closed": "2b6e3c"},
+        "rule": "0b2e14", "plan_border": "125a26",
+        "radius": 0, "gap": 8, "front_w": 96,
+        "meter_h": 5, "row_gap": 5, "meter_label_w": 24,
+        "size_label": 8, "numeral_tracking": -0.02,
+        "panel_w": 296, "panel_cols": (68, 26, 94),
+        "font": {"kind": "variable", "file": "FiraCode.ttf",
+                 "book": ("Regular",), "semi": ("SemiBold", "Medium"), "bold": ("Bold",)},
+        "meter": "cells", "live": "cursor", "scanlines": True, "invert": False,
+        "upper": False, "glow": "00ff41", "tray": "squares",
+        "shadow": {"alpha": 153, "tint": (0, 0, 0), "halo": ("00ff41", 26)},
+        "crit_shadow": {"alpha": 90, "tint": (255, 45, 58), "halo": ("ff2d3a", 102)},
+        "stale_shadow": {"alpha": 153, "tint": (0, 0, 0)},
+    },
     "claude": {
         "label": "Claude",
         "paper": "16130f",
@@ -137,35 +168,6 @@ THEMES = {
         "shadow": {"alpha": 115, "tint": (0, 0, 0)},
         "crit_shadow": {"alpha": 128, "tint": (120, 20, 10)},
         "stale_shadow": {"alpha": 115, "tint": (0, 0, 0)},
-    },
-    "matrix": {
-        "label": "The Matrix",
-        "paper": "050f07",
-        "bg_top": "071a0c", "bg_bottom": "030a05", "border": "125a26", "track": "0a2e14",
-        "fg": "c8ffd4", "muted": "3f9a54", "dim": "2b6e3c",
-        "ok": "00ff41", "warn": "ffb000", "warn_border": "7a5200",
-        "crit": "ff2d3a", "crit_top": "ff2d3a", "crit_bottom": "ff2d3a",
-        "crit_border": "ff8a93", "crit_fg": "000000", "crit_sub": "2b0007",
-        "crit_track": "c2172a", "crit_divider": "8a0a15",
-        "stale_top": "030805", "stale_bottom": "030805",
-        "stale_border": "0b2e14", "stale_track": "071a0c",
-        "accent": "00ff41", "numeral_ok": "00ff41",
-        # Matrix names its own triad rather than reusing ok/accent, which are
-        # the same green - a working and a finished row read identically.
-        "states": {"needs": "ffe23d", "working": "ffba66", "done": "00ff41",
-                   "closed": "2b6e3c"},
-        "rule": "0b2e14", "plan_border": "125a26",
-        "radius": 0, "gap": 8, "front_w": 96,
-        "meter_h": 5, "row_gap": 5, "meter_label_w": 24,
-        "size_label": 8, "numeral_tracking": -0.02,
-        "panel_w": 296, "panel_cols": (68, 26, 94),
-        "font": {"kind": "variable", "file": "FiraCode.ttf",
-                 "book": ("Regular",), "semi": ("SemiBold", "Medium"), "bold": ("Bold",)},
-        "meter": "cells", "live": "cursor", "scanlines": True, "invert": False,
-        "upper": False, "glow": "00ff41", "tray": "squares",
-        "shadow": {"alpha": 153, "tint": (0, 0, 0), "halo": ("00ff41", 26)},
-        "crit_shadow": {"alpha": 90, "tint": (255, 45, 58), "halo": ("ff2d3a", 102)},
-        "stale_shadow": {"alpha": 153, "tint": (0, 0, 0)},
     },
     "eink": {
         # Four ink levels only: K100 141413 / D66 5c5b57 / L33 adaba6 / P00 efeee9
@@ -1792,11 +1794,23 @@ def agent_phase(agent, elapsed):
     return strip, int(elapsed / dur * AGENT_FRAMES) % AGENT_FRAMES
 
 
+PORTRAITS = T.get("figures") == "portraits"
+
+
 def row_figure(agent, now, cell_w=None, cell_h=None):
-    """The figure for one row: pose from the state, ink from the state."""
+    """The figure for one row: pose from the state, ink from the state.
+
+    Matrix draws the session's code portrait instead; ``now`` is then its
+    accumulated motion time. Place the result with ``paste_figure``."""
+    if PORTRAITS:
+        return portraits.cell(agent, now, CELL_W if cell_w is None else cell_w,
+                              CELL_H if cell_h is None else cell_h, SCALE * ZOOM)
     strip, frame = agent_phase(agent, now)
     return agent_figure(strip, frame, state_colour(agent.get("state")),
                         cell_w, cell_h, fade=agent.get("state") == "closed")
+
+
+paste_figure = portraits.composite
 
 
 _BRANCH_CACHE = {}
@@ -2290,6 +2304,12 @@ def smith_wordmark(width, height, monochrome_ink=None):
 
 @lru_cache(maxsize=16)
 def smith_header_icon(width, height, ink):
+    if PORTRAITS:
+        # Matrix's header mark is the Smith lettering; faces belong to sessions.
+        cell = Image.new("RGBA", (width, height))
+        mark = smith_wordmark(width, min(height, round(width * 0.55)))
+        cell.alpha_composite(mark, (0, (height - mark.height) // 2))
+        return cell
     icon = artwork.tray_icon(min(width, height), ink)
     # Center the visible ink, so the extended arm does not push the body right.
     def ink_center(alpha):
@@ -2360,8 +2380,11 @@ def render_console_bar(chip, pen, metrics, front, spend, counts, now,
 
     icon_width = px(64)
     icon_x = (CONSOLE_W // 3 - icon_width) // 2
-    icon = smith_header_icon(icon_width, CELL_H, _tok("fg"))
-    chip.alpha_composite(icon, (icon_x, (BAR_H - CELL_H) // 2 - px(4)))
+    # Matrix's panel header keeps the Smith face; only tucked strips use lettering.
+    icon = (artwork.face_icon(min(icon_width, CELL_H), _tok("fg")) if PORTRAITS
+            else smith_header_icon(icon_width, CELL_H, _tok("fg")))
+    chip.alpha_composite(icon, (icon_x + (icon_width - icon.width) // 2,
+                                (BAR_H - CELL_H) // 2 - px(4)))
 
     draw_brand_text(chip, pen, "Smith", (CONSOLE_W // 3)//2,
                     BAR_H-px(22), px(22))
@@ -2857,7 +2880,7 @@ def render_row(pen, chip, agent, y, now, open_, confirm, figure_elapsed=None, dr
     if draw_figure:
         figure = row_figure(agent, now if figure_elapsed is None else figure_elapsed, ROW_FIGURE_W, ROW_FIGURE_H)
         if figure is not None:
-            chip.alpha_composite(figure, (PAD_X, y+px(12)))
+            paste_figure(chip, figure, (PAD_X, y+px(12)))
     draw_provider_badge(chip, agent, PAD_X-px(4), y+px(4))
     text_x, ty = layout['text_x'], y+layout['title_y']
     for line in layout['titles']:
@@ -3273,7 +3296,8 @@ def render_tray(front, live, error):
     hit = _MARK_CACHE.get((size, alarm))
     if hit is not None:
         return hit.copy()
-    icon = artwork.tray_icon(size, meter_color("crit") if alarm else "white")
+    icon = artwork.tray_icon(size, meter_color("crit") if alarm else "white",
+                             artwork.MATRIX_TRAY if PORTRAITS else None)
     if len(_MARK_CACHE) > 6:
         _MARK_CACHE.clear()
     _MARK_CACHE[(size, alarm)] = icon

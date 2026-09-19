@@ -31,6 +31,12 @@ def display_scale():
     return 192, RASTER_SCALE
 
 
+def reduced_motion():
+    """System Settings > Accessibility > Display > Reduce motion."""
+    from AppKit import NSWorkspace
+    return bool(NSWorkspace.sharedWorkspace().accessibilityDisplayShouldReduceMotion())
+
+
 def config_dir():
     # Preserve settings, account caches, and the existing single-instance lock.
     return str(Path.home() / "Library/Application Support/Claude Usage Widget")

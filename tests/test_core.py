@@ -13,6 +13,9 @@ from PIL import Image
 # Never load a developer's saved settings during tests.
 _config = tempfile.TemporaryDirectory(prefix="smith-agents-tests-")
 os.environ["SMITH_AGENTS_CONFIG_DIR"] = _config.name
+# These layout tests measure the line-figure themes; Matrix portraits have
+# their own fresh-process coverage in test_portraits.
+Path(_config.name, "config.json").write_text('{"theme": "claude"}')
 
 from smith_agents import core
 from smith_agents.app import SmithAgentsWidget

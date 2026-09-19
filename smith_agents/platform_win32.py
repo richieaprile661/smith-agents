@@ -446,6 +446,14 @@ pid_alive = _pid_alive
 def display_scale():
     return _DPI, SCALE
 
+def reduced_motion():
+    """Settings > Accessibility > Visual effects > Animation effects, off."""
+    enabled = wintypes.BOOL(True)
+    SPI_GETCLIENTAREAANIMATION = 0x1042
+    if not ctypes.windll.user32.SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(enabled), 0):
+        return False
+    return not enabled.value
+
 def config_dir():
     # Retain the existing settings/cache/lock namespace on upgrade.
     return os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "claude-widget")

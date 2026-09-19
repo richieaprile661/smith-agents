@@ -107,6 +107,7 @@ class QuietCardTests(unittest.TestCase):
         widget.config = dict(core.DEFAULTS)
         widget._repaint = Mock()
         widget._figure_assignments = Mock()
+        widget._portrait_assignments = Mock()
         widget._sync_agent_windows = Mock()
         box = next(b for b in boxes if b[0] == 'reply')
         widget._on_console_click(SimpleNamespace(x=(box[1]+box[3])/2, y=(box[2]+box[4])/2))
