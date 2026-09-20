@@ -1,6 +1,7 @@
 """Shared application controller and command-line entry point."""
 import argparse
 import faulthandler
+import signal
 import json
 import os
 import random
@@ -1178,6 +1179,38 @@ class SmithAgentsWidget:
         self.root.mainloop()
 
 
+def _stop_on_signal(widget):
+    """Shut down cleanly when the process is asked to stop, and return a
+    callable that puts the old handlers back.
+
+    Default SIGTERM tears the process down where it stands, so ``main``'s
+    ``finally`` never runs: the single-instance claim is left behind and the
+    log gets no exit line, which makes a killed widget and a crashed one look
+    identical afterwards. Ask Tk to quit instead - the handler runs between
+    bytecodes, and the tick loop hands control back every frame."""
+    previous = {}
+
+    def stop(number, _frame):
+        core.log_line("stopping on signal %d" % number)
+        widget.quit()
+
+    names = (signal.SIGTERM, signal.SIGINT) + ((signal.SIGHUP,) if hasattr(signal, "SIGHUP") else ())
+    for number in names:
+        try:
+            previous[number] = signal.signal(number, stop)
+        except (OSError, ValueError):
+            pass            # not the main thread, or the platform lacks it
+
+    def restore():
+        for number, handler in previous.items():
+            try:
+                signal.signal(number, handler)
+            except (OSError, ValueError):
+                pass
+
+    return restore
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=APP_NAME + " for Windows and macOS")
     parser.add_argument("--demo", action="store_true", help="Use sample data without reading credentials or sessions")
@@ -1187,11 +1220,13 @@ def main(argv=None):
         return 0
     core.log_line("start pid=%d python=%s platform=%s" % (os.getpid(), sys.version.split()[0], sys.platform))
     fault_log = None
+    restore_signals = None
     try:
         os.makedirs(core.CONFIG_DIR, exist_ok=True)
         fault_log = open(core.LOG_PATH, "a", encoding="utf-8")
         faulthandler.enable(file=fault_log)
         widget = SmithAgentsWidget(demo=args.demo)
+        restore_signals = _stop_on_signal(widget)
         smoke_errors = []
         if args.smoke_test:
             def finish_smoke():
@@ -1337,6 +1372,8 @@ def main(argv=None):
         core.log_line("crash\n" + traceback.format_exc().rstrip())
         raise
     finally:
+        if restore_signals:
+            restore_signals()
         platform.release_single_instance()
         if fault_log:
             faulthandler.disable()

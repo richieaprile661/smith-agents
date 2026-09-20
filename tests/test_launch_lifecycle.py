@@ -60,6 +60,36 @@ class LaunchLifecycleTests(unittest.TestCase):
             widget.quit.assert_not_called()
             release.assert_not_called()
 
+    def test_a_terminated_widget_still_releases_its_lock_and_logs_its_exit(self):
+        """Default SIGTERM would kill the process mid-loop, leaving the
+        single-instance claim behind and no exit line to tell a killed widget
+        from a crashed one."""
+        import signal
+        widget = Mock()
+
+        def terminate():
+            # Only deliver the signal once a handler is installed: with the
+            # default disposition this call would take the test runner down
+            # with it instead of reporting a failure.
+            self.assertNotIn(signal.getsignal(signal.SIGTERM),
+                             (signal.SIG_DFL, signal.SIG_IGN))
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        widget.run.side_effect = terminate
+        before = signal.getsignal(signal.SIGTERM)
+        lines = []
+        with patch.object(app, "SmithAgentsWidget", return_value=widget), \
+             patch.object(app.platform, "claim_single_instance", return_value=True), \
+             patch.object(app.platform, "release_single_instance") as release, \
+             patch.object(app.core, "log_line", lines.append), \
+             patch.object(app.faulthandler, "enable"), \
+             patch.object(app.faulthandler, "disable"):
+            self.assertEqual(app.main([]), 0)
+        widget.quit.assert_called_once_with()
+        release.assert_called_once_with()
+        self.assertTrue(any(line.startswith("exit pid=") for line in lines), lines)
+        self.assertIs(signal.getsignal(signal.SIGTERM), before)
+
     def test_mutex_lifecycle_and_duplicate_rejection(self):
         handle = 2 ** 40 + 123
         kernel = types.SimpleNamespace(CreateMutexW=Mock(return_value=handle), CloseHandle=Mock())
