@@ -97,6 +97,35 @@ class PortraitTests(unittest.TestCase):
         self.assertEqual(len(portraits.columns(42)), 14)
         self.assertNotEqual(portraits.columns(40), portraits.columns(42))
 
+    def test_every_face_is_drawn_the_same_size(self):
+        """No face may read as a different man, or the same man further away."""
+        for name in portraits.NAMES:
+            with self.subTest(face=name):
+                head, crop = portraits._head(name), portraits._source(name)[1]
+                extent = crop[2] - crop[0]
+                self.assertAlmostEqual(head.width / extent, portraits.HEAD_RATIO, places=6)
+                # The eye line matches too, so the faces share a horizon. A head
+                # drawn hard against the top of its canvas - over-glasses - runs
+                # out of artwork to crop, so allow it the half pixel it misses by.
+                self.assertAlmostEqual((head.eye - crop[1]) / extent,
+                                       portraits.EYE_LINE, delta=1 / 84)
+
+    def test_every_face_measures_the_same_at_the_panel_size(self):
+        """The ratios above have to survive the render, not just the crop."""
+        sizes = {name: portraits.widest_lit_row(
+            portraits._untinted(name, 42, 84).convert("L").point(
+                lambda v: 255 if v > 40 else 0), least=3).width
+            for name in portraits.NAMES}
+        self.assertEqual(set(sizes.values()), {sizes[portraits.MAIN]}, sizes)
+
+    def test_the_declared_framing_still_describes_the_packaged_smith(self):
+        """HEAD_RATIO and EYE_LINE were measured from Smith. If his artwork is
+        ever re-exported they must be re-measured deliberately, not drift."""
+        work, crop = portraits._source(portraits.MAIN)
+        head = portraits._head(portraits.MAIN)
+        self.assertEqual((head.width, head.eye, head.centre), (457, 348, 383.5))
+        self.assertAlmostEqual(crop[2] - crop[0], 626.4, places=1)
+
     def test_cell_is_square_centred_and_screen_blended(self):
         agent = {"id": "x", "state": "needs", "sub": True, "_portrait": "jackson"}
         cell = portraits.cell(agent, 1.0, 112, 84, 2.0)

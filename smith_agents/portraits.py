@@ -20,7 +20,7 @@ used first.
 import json
 import math
 import zlib
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 from functools import lru_cache
 from pathlib import Path
 
@@ -47,6 +47,16 @@ SEED = 14731
 # The reference seeds one generator per portrait and walks its 40 and 42 pixel
 # views in that order, so the 42 pixel columns follow the 40 pixel ones.
 SEED_ORDER = (40, 42)
+# The rows that hold the eyes, as a fraction of the drawing's height.
+HEAD_BAND = (0.18, 0.62)
+# Every face is cropped so its head is HEAD_RATIO of the cell with its eyes
+# EYE_LINE down it, which is what keeps fifteen drawings that frame their heads
+# differently from reading as men at fifteen different distances. The numbers
+# were measured from the packaged Smith and are declared here rather than
+# re-measured from him, so re-exporting any one drawing cannot silently
+# re-frame the other fourteen; test_portraits checks they still describe him.
+HEAD_RATIO = 0.7295657726692208
+EYE_LINE = 0.492816091954023
 
 PALETTE = {"green": None, "yellow": (255, 224, 64), "red": (255, 64, 64),
            "white": (255, 255, 255)}
@@ -139,17 +149,64 @@ class Clock:
         self.times = {key: value for key, value in self.times.items() if key in identities}
 
 
-@lru_cache(maxsize=4)
-def _source(name):
-    """The approved image on the reference's 768 working surface, and its crop."""
+@lru_cache(maxsize=16)
+def _work(name):
+    """The approved image on the reference's 768 working surface."""
     with Image.open(ROOT / manifest()[name]["image"]) as image:
-        work = image.convert("RGB").resize((WORK, WORK), Image.Resampling.BILINEAR)
-    box = work.getchannel("G").point(lambda v: 255 if v > 40 else 0).getbbox()
-    left, top, right, bottom = box[0], box[1], box[2]-1, box[3]-1
-    extent = min(WORK, max(right-left+1, bottom-top+1) * 1.08)
-    x = max(0, min(WORK-extent, (left+right-extent) / 2))
-    y = max(0, min(WORK-extent, (top+bottom-extent) / 2))
-    return work, (x, y, x+extent, y+extent)
+        return image.convert("RGB").resize((WORK, WORK), Image.Resampling.BILINEAR)
+
+
+@lru_cache(maxsize=16)
+def _lit(name):
+    """The drawing's ink: every pixel brighter than the black it sits on."""
+    return _work(name).getchannel("G").point(lambda v: 255 if v > 40 else 0)
+
+
+Head = namedtuple("Head", "width eye centre")
+
+
+def widest_lit_row(lit, least=20):
+    """The widest run of ink across the band that holds the eyes, as a
+    ``Head``. That band is the one landmark all fifteen drawings share - a
+    bounding box is not, because art carrying more neck or hair would report a
+    bigger head than it draws. Rows with less than ``least`` lit pixels are
+    skipped as stray marks. The scan runs on the raw bytes because it is
+    reached from the paint loop the first time a face appears, and a per-pixel
+    Python loop over the 768px surface costs milliseconds there."""
+    box = lit.getbbox()
+    data, stride = lit.tobytes(), lit.width
+    top, bottom = box[1], box[3]
+    widest = Head(0, 0, 0.0)
+    for y in range(top + round(HEAD_BAND[0] * (bottom - top)),
+                   top + round(HEAD_BAND[1] * (bottom - top))):
+        row = data[y * stride + box[0]:y * stride + box[2]]
+        if row.count(255) < least:
+            continue
+        left = len(row) - len(row.lstrip(b"\0"))
+        right = len(row.rstrip(b"\0")) - 1
+        if right - left > widest.width:
+            widest = Head(right - left, y, box[0] + (left + right) / 2)
+    return widest
+
+
+@lru_cache(maxsize=16)
+def _head(name):
+    """Where this drawing's head sits on the working surface."""
+    return widest_lit_row(_lit(name))
+
+
+@lru_cache(maxsize=16)
+def _source(name):
+    """The working surface and the square to render from. The square is placed
+    on the head rather than on the drawing, so every face arrives in its cell
+    at one size and on one eye line - crop each to its own artwork instead and
+    Jones lands a tenth smaller than Smith, which you read as the subagent
+    being further away rather than as a different man."""
+    head = _head(name)
+    extent = min(WORK, head.width / HEAD_RATIO)
+    x = max(0, min(WORK - extent, head.centre - extent / 2))
+    y = max(0, min(WORK - extent, head.eye - EYE_LINE * extent))
+    return _work(name), (x, y, x + extent, y + extent)
 
 
 @lru_cache(maxsize=48)
