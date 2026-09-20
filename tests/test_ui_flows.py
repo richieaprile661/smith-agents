@@ -121,6 +121,19 @@ class UserFlowTests(unittest.TestCase):
                 self.assertTrue(w.config['tucked'])
                 self.assertEqual(len(w.agents), 20)
 
+    def test_clicking_the_face_raises_and_the_name_opens_without_untucking(self):
+        for side in tucked.EDGES:
+            with self.subTest(side=side):
+                w = self.widget(side)
+                with patch('smith_agents.app.raise_agent_window', return_value=True) as raised:
+                    self.click(w, 'peek-open', '1')
+                raised.assert_called_once_with(w.agents[1])
+                self.assertIsNone(w._peek_open_id)
+                self.assertTrue(w.config['tucked'])
+                self.click(w, 'peek-agent', '1')
+                self.assertEqual(w._peek_open_id, '1')
+                self.assertTrue(w.config['tucked'])
+
     def test_provider_lamps_toggle_usage_drawer_and_cycle_without_untucking(self):
         for side in tucked.EDGES:
             for provider in ('codex', 'claude'):

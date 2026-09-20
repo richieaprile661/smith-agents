@@ -953,6 +953,17 @@ class SmithAgentsWidget:
         self._save_config()
         self.agents = [a for a in self.agents if a.get("id") not in ids]
 
+    def _raise_agent_window(self, agent):
+        """Bring that session's window forward, leaving every other alone."""
+        from .session_windows import window_agent
+        target = window_agent(agent, getattr(self, 'agents', ()))
+        try:
+            if target is None or not raise_agent_window(target):
+                platform.show_error("Could not identify this session's window. Open it manually; other windows were left alone.")
+        except PermissionError as error:
+            platform.show_error(str(error))
+        self._sync_agent_windows()
+
     def _on_peek_click(self, event):
         """Open compact agent and usage panels while keeping the strip tucked."""
         for kind, x0, y0, x1, y1, agent in self.agent_rows:
@@ -977,6 +988,8 @@ class SmithAgentsWidget:
                 self._save_config()
             elif kind == 'peek-usage-close':
                 self._peek_usage_open = False
+            elif kind == 'peek-open':
+                self._raise_agent_window(agent)
             elif kind == 'peek-agent':
                 self._peek_usage_open = False
                 self._peek_open_id = None if self._peek_open_id == agent['id'] else agent['id']
@@ -1112,14 +1125,7 @@ class SmithAgentsWidget:
                 self._dismiss([a.get("id") for a in self.agents
                                if a.get("state") == "closed" and not a.get("sub")])
             elif kind == "open":
-                from .session_windows import window_agent
-                target = window_agent(agent, getattr(self, 'agents', ()))
-                try:
-                    if target is None or not raise_agent_window(target):
-                        platform.show_error("Could not identify this session's window. Open it manually; other windows were left alone.")
-                except PermissionError as error:
-                    platform.show_error(str(error))
-                self._sync_agent_windows()
+                self._raise_agent_window(agent)
             elif kind == "hide":
                 from .session_windows import window_agent
                 target = window_agent(agent, getattr(self, 'agents', ()))

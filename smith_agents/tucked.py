@@ -211,6 +211,11 @@ def _cell_height(lines):
     return c.px(53)+len(lines)*c.panel_line_height(c.FONT('book', NAME_SIZE))
 
 
+# The top of a cell is the portrait; below it is the name. Clicking the face
+# brings that session's window forward, clicking the name opens its panel.
+FACE_H = c.px(4) + FIGURE_H
+
+
 def _agent_cell(agent, width, height, lines, selected, side, now, elapsed, visible=True):
     """The original agent tile, shared by side and horizontal strips."""
     cell = Image.new('RGBA', (width, height), c._tok('paper'))
@@ -224,6 +229,17 @@ def _agent_cell(agent, width, height, lines, selected, side, now, elapsed, visib
         else:
             edge = 0 if side == 'right' else width-c.px(2)
             draw.rectangle((edge, c.px(3), edge+c.px(2), height-c.px(3)), fill=ink)
+    if agent.get('_window_state') == 'front':
+        # The session whose window is in front wears a bar on the cell's outer
+        # edge - the selection bar is on the inner edge, in the state colour,
+        # so the two never meet. It moves with the OS's answer on every scan.
+        fg = c._tok('fg')
+        if side in ('top', 'bottom'):
+            y = 0 if side == 'top' else height-c.px(2)
+            draw.rectangle((c.px(3), y, width-c.px(3), y+c.px(2)), fill=fg)
+        else:
+            edge = width-c.px(2) if side == 'right' else 0
+            draw.rectangle((edge, c.px(3), edge+c.px(2), height-c.px(3)), fill=fg)
     draw.line((0, height-1, width, height-1), fill=c._ink(8))
     figure = c.row_figure(agent, elapsed(agent) if elapsed else now,
                          FIGURE_W, FIGURE_H) if visible else None
@@ -272,7 +288,10 @@ def _strip(agents, now, selected, side, max_height, scroll, elapsed, provider, f
                            visible=y+c.px(4)+FIGURE_H > top)
         lo, hi = max(top, y), min(bottom, y+row_h)
         chip.paste(cell.crop((0, lo-y, width, hi-y)), (0, lo))
-        boxes.append(('peek-agent', 0, lo, width, hi, agent))
+        # face first: the click handlers take the first box containing the point
+        for kind, y0, y1 in (('peek-open', lo, min(hi, y+FACE_H)), ('peek-agent', max(lo, y+FACE_H), hi)):
+            if y0 < y1:
+                boxes.append((kind, 0, y0, width, y1, agent))
     if overflow:
         for kind, y, enabled, sign in (('peek-up', head, offset > 0, -1),
                                        ('peek-down', bottom, offset < scroll_max, 1)):
@@ -380,7 +399,8 @@ def _horizontal_strip(agents, now, selected, side, max_width, scroll, elapsed, p
                           fill=c._ink(13))
         elif not top_edge:
             pen.line((hi-1, 0, hi-1, height), fill=c._ink(8))
-        boxes.append(('peek-agent', lo, 0, hi, height, agent))
+        boxes.append(('peek-open', lo, 0, hi, FACE_H, agent))
+        boxes.append(('peek-agent', lo, FACE_H, hi, height, agent))
     if overflow:
         for kind, x, enabled, sign in (('peek-up', cap_w, offset > 0, -1),
                                        ('peek-down', end, offset < maximum, 1)):

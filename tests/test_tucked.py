@@ -73,6 +73,49 @@ class TuckedTests(unittest.TestCase):
     def render(self, rows, **kwargs):
         return tucked.render(rows, [], None, 0, figure_elapsed=lambda a: 4, **kwargs)
 
+    def test_face_raises_and_name_opens_on_every_edge(self):
+        """Each cell is two targets: the portrait on top, the name below."""
+        rows = agents(3)
+        for side in tucked.EDGES:
+            with self.subTest(side=side):
+                _im, boxes, _layout = self.render(rows, side=side, max_height=core.px(900), max_width=core.px(1400))
+                for row in rows:
+                    face = next(b for b in boxes if b[0] == 'peek-open' and b[-1]['id'] == row['id'])
+                    name = next(b for b in boxes if b[0] == 'peek-agent' and b[-1]['id'] == row['id'])
+                    self.assertLess(boxes.index(face), boxes.index(name))
+                    if side in ('left', 'right'):
+                        self.assertEqual((face[1], face[3]), (name[1], name[3]))
+                        self.assertEqual(face[4], name[2])
+                        self.assertEqual(face[4] - face[2], tucked.FACE_H)
+                    else:
+                        self.assertEqual((face[2], face[4]), (0, tucked.FACE_H))
+                        self.assertEqual(name[2], tucked.FACE_H)
+                        self.assertEqual((face[1], face[3]), (name[1], name[3]))
+
+    def test_front_window_wears_a_bar_on_the_outer_edge(self):
+        """The bar sits opposite the selection bar and only on the session whose
+        window the OS reports as frontmost."""
+        fg = tuple(core._tok('fg'))[:3]
+        for side in tucked.EDGES:
+            with self.subTest(side=side):
+                rows = agents(2)
+                rows[1]['_window_state'] = 'front'
+                lines = [tucked._name_lines(r, tucked.CELL_W if hasattr(tucked, 'CELL_W') else None) for r in rows]
+                width = tucked.RAIL_W if side in ('left', 'right') else tucked.TILE_W
+                cells = [tucked._agent_cell(r, width, core.px(70), ln, None, side, 0, None, visible=False)
+                         for r, ln in zip(rows, lines)]
+                back, front = [c.convert('RGB') for c in cells]
+                if side == 'right':
+                    probe = (width - core.px(1), core.px(35))
+                elif side == 'left':
+                    probe = (0, core.px(35))
+                elif side == 'top':
+                    probe = (width // 2, 0)
+                else:
+                    probe = (width // 2, core.px(70) - core.px(1))
+                self.assertEqual(front.getpixel(probe), fg)
+                self.assertNotEqual(back.getpixel(probe), fg)
+
     def test_action_repeats_each_minute_then_returns_to_idle(self):
         for minute in range(5):
             start = minute * 60
@@ -112,7 +155,7 @@ class TuckedTests(unittest.TestCase):
             if selected:
                 self.assertGreater(layout.panel[1], layout.rail[3])
                 self.assertLessEqual(image.height-2*core.SHADOW_PAD, core.px(620))
-                actions = [b for b in boxes if b[-1] and b[0] != 'peek-agent']
+                actions = [b for b in boxes if b[-1] and b[0] not in ('peek-agent', 'peek-open')]  # rail targets are not panel actions
                 self.assertEqual({b[-1]['id'] for b in actions}, {selected})
         self.assertEqual(len(set(origins)), 1)
         self.assertEqual(origins[0][1], core.px(30))
@@ -208,7 +251,7 @@ class TuckedTests(unittest.TestCase):
                 widget._peek_layout = layout
                 x, y = widget._peek_position(im.size)
                 origins.append((x+layout.rail[0], y+layout.rail[1]))
-                actions = [b for b in boxes if b[-1] and b[0] != 'peek-agent']
+                actions = [b for b in boxes if b[-1] and b[0] not in ('peek-agent', 'peek-open')]  # rail targets are not panel actions
                 self.assertEqual({b[-1]['id'] for b in actions}, {selected} if selected else set())
                 if selected:
                     self.assertIn('open', [b[0] for b in actions])
