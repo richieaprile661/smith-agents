@@ -1078,7 +1078,6 @@ def list_subagents(parent, idle_after=AGENT_IDLE_S):
             "transcript": path,
         }
         found.append(apply_activity(row, data, now))
-    found.sort(key=lambda a: a["idle"])
     return found
 
 
@@ -1565,7 +1564,6 @@ AGENT_FRAME_MS = round(1000 / figure_actions.FPS)
 STATE_STRIPS = artwork.STATE_FIGURES
 STATE_STRIP = {state: names[0] for state, names in STATE_STRIPS.items()}
 STATE_MOVES = ("working", "needs", "done", "closed")
-STATE_RANK = {"needs": 0, "working": 1, "done": 2, "closed": 3}
 
 CONSOLE_W = px(280)
 PAD_X = px(12)
@@ -1956,17 +1954,27 @@ def decorate_agents(agents):
     return agents
 
 
+def created_at(agent):
+    """When the row came into being. ``since`` is the session's own start
+    time, ``started_at`` its process's; both are epoch seconds. A row with
+    neither sorts last and keeps the order it arrived in, because
+    ``sorted`` is stable."""
+    return agent.get("since") or agent.get("started_at") or float("inf")
+
+
 def sort_agents(agents):
-    """Needs you, then working, then finished, then closed. Subagents stay
-    attached to the session that spawned them rather than being sorted into a
-    group of their own - they are work inside it, not a peer."""
-    tops = [a for a in agents if not a.get("sub")]
-    subs = {}
-    for agent in agents:
+    """Oldest first, by when the session was created. A row holds the slot it
+    was created in for its whole life: a card that jumps out from under the
+    pointer because a state changed or a transcript was touched is worse than
+    a card in an unhelpful place. New sessions land at the bottom. Subagents
+    stay attached to the session that spawned them rather than being sorted
+    into a group of their own - they are work inside it, not a peer."""
+    tops, subs = [], {}
+    for agent in sorted(agents, key=created_at):
         if agent.get("sub"):
             subs.setdefault(agent.get("parent"), []).append(agent)
-    tops.sort(key=lambda a: (STATE_RANK.get(a["state"], 9),
-                             a.get("idle") if a.get("idle") is not None else 1e9))
+        else:
+            tops.append(agent)
     out = []
     seen = set()
     def append(agent):

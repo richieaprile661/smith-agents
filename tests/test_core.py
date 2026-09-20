@@ -229,6 +229,46 @@ class CoreTests(unittest.TestCase):
             call.assert_called_once_with("unused", "session", {"action": "list", "task_id": None})
 
 
+class AgentOrderTests(unittest.TestCase):
+    """Rows hold the slot they were created in. A card that jumps while you
+    are reading it is worse than a card in an unhelpful place."""
+
+    @staticmethod
+    def row(name, state, since, **extra):
+        return dict({"id": name, "name": name, "state": state, "since": since,
+                     "started_at": since, "idle": 1}, **extra)
+
+    @classmethod
+    def rows(cls, *states):
+        return [cls.row("s%d" % i, state, 100 + i, idle=10 - i)
+                for i, state in enumerate(states)]
+
+    def test_state_and_idle_do_not_move_a_row(self):
+        rows = self.rows("working", "working", "working")
+        order = [a["id"] for a in core.sort_agents(rows)]
+        self.assertEqual(order, ["s0", "s1", "s2"])
+        rows[2]["state"], rows[2]["idle"] = "needs", 0
+        rows[0]["state"], rows[0]["idle"] = "closed", 9000
+        self.assertEqual([a["id"] for a in core.sort_agents(rows)], order)
+
+    def test_a_new_session_lands_at_the_bottom(self):
+        rows = self.rows("working", "working")
+        rows.insert(0, self.row("new", "needs", 500, idle=0))
+        self.assertEqual([a["id"] for a in core.sort_agents(rows)], ["s0", "s1", "new"])
+
+    def test_subagents_stay_under_their_parent_in_creation_order(self):
+        rows = self.rows("working", "working")
+        rows += [self.row("b", "working", 220, sub=True, parent="s0"),
+                 self.row("a", "working", 210, sub=True, parent="s0", idle=8)]
+        self.assertEqual([a["id"] for a in core.sort_agents(rows)],
+                         ["s0", "a", "b", "s1"])
+
+    def test_rows_without_a_creation_time_keep_the_order_they_arrived_in(self):
+        rows = [{"id": "x", "name": "x", "state": "working", "idle": 30},
+                {"id": "y", "name": "y", "state": "needs", "idle": 1}]  # no creation time
+        self.assertEqual([a["id"] for a in core.sort_agents(rows)], ["x", "y"])
+
+
 class GeometryTests(unittest.TestCase):
     def setUp(self):
         self.widget = SmithAgentsWidget.__new__(SmithAgentsWidget)
