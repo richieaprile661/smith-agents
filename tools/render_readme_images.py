@@ -17,7 +17,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "images"
-THEMES = ("claude", "matrix", "eink")
+# Matrix leads: it is the default theme, and the one the README shows first.
+THEMES = ("matrix", "claude", "eink")
 
 # One set of sessions for every image, so counts and names always agree.
 # Idle times are seconds since the session's last transcript write.
@@ -28,7 +29,8 @@ SESSIONS = [
      "last_request": "Add coupon support to checkout and cover it with tests.",
      "latest_message": "Coupons apply at checkout. Running the test suite now.",
      "context_tokens": 64200, "context_capacity": 200000,
-     "_window_state": "background", "can_terminate": False},
+     # the session being typed in: its cell wears the front bar when tucked
+     "_window_state": "front", "can_terminate": False},
     # In-widget Allow/Deny exists only for Claude Code in VS Code with the
     # optional launcher, so the session asking for approval is a VS Code one.
     {"id": "readme-api", "name": "api-service", "provider": "claude",
@@ -235,7 +237,8 @@ def compose_themes(themes):
     consoles = [load(parts, "console-claude") for parts in themes]
     canvas, pen = sheet(max(im.height for im in consoles) + 410, "04", "Choose your atmosphere.",
                         "One layout. Three themes, available from the tray menu.")
-    for x, console, label in zip((28, 548, 1068), consoles, ("Claude", "The Matrix", "E-ink")):
+    labels = {"matrix": "The Matrix", "claude": "Claude", "eink": "E-ink"}
+    for x, console, label in zip((28, 548, 1068), consoles, (labels[t] for t in THEMES)):
         pen.text((x + 25, 280), label, font=font(32, True), fill=INK)
         canvas.alpha_composite(console, (x, 350))
     return canvas
@@ -255,7 +258,7 @@ def main():
     with tempfile.TemporaryDirectory() as scratch:
         scratch = Path(scratch)
         parts = scratch / "main"
-        render_theme("claude", 2.5, parts)
+        render_theme("matrix", 2.5, parts)
         themes = []
         for theme in THEMES:
             theme_parts = scratch / theme
