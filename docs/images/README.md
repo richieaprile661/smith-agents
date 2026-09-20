@@ -10,11 +10,11 @@ the first two. Claude usage is 42% / 18%; Codex usage is 71% / 31% (5h / week).
 
 | Image | What it shows |
 | --- | --- |
-| `github-smith-agents-hero.png` | Full Smith Agents name on one baseline, tagline, and the current full widget. |
-| `github-signal-field-work.png` | Session identity, context, activity, and folded Read more controls. |
-| `github-signal-field-usage.png` | Both providers' 5h and weekly Signal Fields and glowing logos. |
-| `github-signal-field-tuck.png` | Horizontal and vertical strips with attached usage drawers. |
-| `github-signal-field-themes.png` | Claude, Matrix, and E-ink using the same layout. |
+| `github-matrix-hero.png` | Full Smith Agents name on one baseline, tagline, and the current full widget. |
+| `github-matrix-work.png` | Session identity, context, activity, and folded Read more controls. |
+| `github-matrix-usage.png` | Both providers' 5h and weekly Signal Fields and glowing logos. |
+| `github-matrix-tuck.png` | Horizontal and vertical strips with attached usage drawers. |
+| `github-matrix-themes.png` | Claude, Matrix, and E-ink using the same layout. |
 
 Canvases are 1600 pixels wide. The main UI renders at zoom 2.5; the three-theme
 comparison uses 1.45. Fonts follow the platform used to render (the current images

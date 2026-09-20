@@ -31,6 +31,23 @@ SESSIONS = [
      "context_tokens": 64200, "context_capacity": 200000,
      # the session being typed in: its cell wears the front bar when tucked
      "_window_state": "front", "can_terminate": False},
+    # Subagents wear Smith's colleagues, so the README shows more than his face.
+    {"id": "readme-storefront-tests", "name": "checkout tests", "provider": "codex",
+     "model": "gpt-5.3-codex", "entrypoint": "codex-vscode", "state": "working", "idle": 2,
+     "sub": True, "parent": "readme-storefront",
+     "tail": [("cmd", "Bash pytest -q tests/checkout")],
+     "last_request": "Run the checkout suite and report failures.",
+     "latest_message": "12 passed, 1 failing on coupon expiry.",
+     "context_tokens": 18400, "context_capacity": 200000,
+     "_window_state": "background", "can_terminate": False},
+    {"id": "readme-storefront-docs", "name": "release notes", "provider": "codex",
+     "model": "gpt-5.3-codex", "entrypoint": "codex-vscode", "state": "done", "idle": 130,
+     "sub": True, "parent": "readme-storefront",
+     "tail": [("cmd", "Write CHANGELOG.md")],
+     "last_request": "Draft release notes for the coupon feature.",
+     "latest_message": "Release notes drafted in CHANGELOG.md.",
+     "context_tokens": 9100, "context_capacity": 200000,
+     "_window_state": "background", "can_terminate": False},
     # In-widget Allow/Deny exists only for Claude Code in VS Code with the
     # optional launcher, so the session asking for approval is a VS Code one.
     {"id": "readme-api", "name": "api-service", "provider": "claude",
@@ -95,7 +112,10 @@ def render_parts(theme, zoom, out_dir):
                                               core.SHADOW_PAD + core.BAR_H)))
         for side in ("right", "top"):
             image, _, _ = tucked.render(
-                core.sort_agents(agents), readings, readings[0], now, side=side,
+                # The top strip runs along the sheet's width: main sessions only
+                # there, the colleagues ride in the side rail beneath their parent.
+                core.sort_agents(agents if side != 'top' else [a for a in agents if not a.get('sub')]),
+                readings, readings[0], now, side=side,
                 provider=provider, usage_open=True, figure_elapsed=settled,
                 max_width=core.px(900), max_height=core.px(900))
             save(side + "-" + provider, image)
@@ -265,11 +285,11 @@ def main():
             render_theme(theme, 1.45, theme_parts)
             themes.append(theme_parts)
         images = {
-            "github-smith-agents-hero.png": compose_hero(parts),
-            "github-signal-field-work.png": compose_work(parts),
-            "github-signal-field-usage.png": compose_usage(parts),
-            "github-signal-field-tuck.png": compose_tuck(parts),
-            "github-signal-field-themes.png": compose_themes(themes),
+            "github-matrix-hero.png": compose_hero(parts),
+            "github-matrix-work.png": compose_work(parts),
+            "github-matrix-usage.png": compose_usage(parts),
+            "github-matrix-tuck.png": compose_tuck(parts),
+            "github-matrix-themes.png": compose_themes(themes),
         }
         for name, image in images.items():
             image.convert("RGB").save(out / name, optimize=True)

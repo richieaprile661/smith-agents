@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/github-smith-agents-hero.png" alt="Smith Agents: Your agents. In view. The Matrix widget shows Claude and Codex sessions as code-drawn portraits with context, activity, and separate 5-hour and weekly usage fields." width="880">
+  <img src="docs/images/github-matrix-hero.png" alt="Smith Agents: Your agents. In view. The Matrix widget shows Claude and Codex sessions as code-drawn portraits with context, activity, and separate 5-hour and weekly usage fields." width="880">
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@ your screen.
 
 ## Your sessions at a glance
 
-<img src="docs/images/github-signal-field-work.png" alt="The Matrix session panel: a portrait and project identity above context, activity below, and an expanded storefront card with Go to session and folded Read more controls." width="880">
+<img src="docs/images/github-matrix-work.png" alt="The Matrix session panel: a portrait and project identity above context, activity below, and an expanded storefront card with Go to session and folded Read more controls." width="880">
 
 Click a session to open its current activity or latest reply. **Go to session**
 brings you back to its app. Extra controls and metadata stay folded under
@@ -37,7 +37,7 @@ you to the app where you can answer.
 
 ## Usage, in a field of signals
 
-<img src="docs/images/github-signal-field-usage.png" alt="Codex in blue with 71% used over 5 hours and 31% used over a week; Claude in orange with 42% and 18%. Both headers show two square Signal Fields beside the glowing provider logos." width="880">
+<img src="docs/images/github-matrix-usage.png" alt="Codex in blue with 71% used over 5 hours and 31% used over a week; Claude in orange with 42% and 18%. Both headers show two square Signal Fields beside the glowing provider logos." width="880">
 
 The header shows **5-hour and weekly usage together**. Each lit cell represents
 **1% used**: blue for Codex, orange for Claude. Click a glowing provider logo to
@@ -48,7 +48,7 @@ about every five minutes, or through **Refresh now** in the tray menu.
 
 ## Small at every edge
 
-<img src="docs/images/github-signal-field-tuck.png" alt="The Matrix tucked layouts, horizontal and vertical: icon-only Smith branding, glowing provider logos, portrait cells with a bar marking the session whose window is in front, and attached Claude and Codex usage drawers reading 5h used." width="880">
+<img src="docs/images/github-matrix-tuck.png" alt="The Matrix tucked layouts, horizontal and vertical: icon-only Smith branding, glowing provider logos, portrait cells with a bar marking the session whose window is in front, and attached Claude and Codex usage drawers reading 5h used." width="880">
 
 Tuck to the **top, bottom, left, or right edge of your screen**, independent of
 editor and terminal windows.
@@ -60,7 +60,7 @@ editor and terminal windows.
 
 ## Pick a theme
 
-<img src="docs/images/github-signal-field-themes.png" alt="The Smith Agents layout in The Matrix, Claude, and E-ink themes." width="880">
+<img src="docs/images/github-matrix-themes.png" alt="The Smith Agents layout in The Matrix, Claude, and E-ink themes." width="880">
 
 Choose **Claude**, **The Matrix**, or **E-ink** from the tray or menu-bar menu.
 
