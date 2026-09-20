@@ -31,13 +31,25 @@ class PortraitTests(unittest.TestCase):
         self.assertEqual(portraits.colour("grey"), "white")
         self.assertEqual(portraits.rate("working", reduced=True), 0.0)
 
+    def test_main_sessions_draw_expressions_and_subagents_never_do(self):
+        faces = portraits.Assignments()
+        mains = [{"id": "m%d" % i} for i in range(40)]
+        faces.assign(mains + [{"id": "h%d" % i, "sub": True} for i in range(5)])
+        drawn = {agent["_portrait"] for agent in mains}
+        self.assertTrue(drawn <= set(portraits.EXPRESSIONS))
+        # Forty sessions spread across the expressions rather than sharing one.
+        self.assertGreater(len(drawn), 1)
+        for agent in [{"id": "s", "sub": True}, {"id": "t", "sub": True, "state": "done"}]:
+            self.assertIn(portraits.default_face(agent), portraits.HELPERS)
+        self.assertIn(portraits.default_face({"id": "main"}), portraits.EXPRESSIONS)
+
     def test_faces_are_stable_across_state_rescan_and_order(self):
         main = {"id": "main", "state": "working"}
         helpers = [{"id": "h%d" % i, "sub": True, "state": "working"} for i in range(7)]
         faces = portraits.Assignments()
         faces.assign([main] + helpers)
         first = {agent["id"]: agent["_portrait"] for agent in [main] + helpers}
-        self.assertEqual(first["main"], "smith")
+        self.assertIn(first["main"], portraits.EXPRESSIONS)
         # Five helpers get five distinct faces; extras reuse the least used.
         self.assertEqual(set(first[h["id"]] for h in helpers[:7]), set(portraits.HELPERS))
         rows = [dict(agent, state="done") for agent in reversed([main] + helpers)]
@@ -123,7 +135,7 @@ class MatrixThemeTests(unittest.TestCase):
 
     def test_matrix_tray_uses_the_smith_face(self):
         code = ("from smith_agents import core as c, artwork\n"
-                "a=c.render_tray(None, False, None).getchannel('A')\n"
+                "a=c.render_tray().getchannel('A')\n"
                 "b=artwork.tray_icon(a.width, 'white', artwork.MATRIX_TRAY).getchannel('A')\n"
                 "print(a.tobytes()==b.tobytes())")
         self.assertEqual(self.run_widget(code, {"theme": "matrix"}), "True")

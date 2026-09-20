@@ -276,18 +276,19 @@ class ApprovedArtworkTests(unittest.TestCase):
         finally:
             core._FIGURE_CACHE.clear()
 
-    def test_tray_has_transparent_padding_smooth_edges_and_alarm_tint(self):
+    def test_tray_has_transparent_padding_smooth_edges_and_stays_white(self):
         for size in (16, 20, 22, 24, 32, 44):
             with self.subTest(size=size), patch.object(core, "tray_size", return_value=size):
-                normal = core.render_tray(None, False, None)
-                alert = core.render_tray(None, False, "error")
+                core._MARK_CACHE.clear()
+                normal = core.render_tray()
                 self.assertEqual(normal.size, (size, size))
                 alpha = normal.getchannel("A")
-                self.assertEqual(alpha.tobytes(), alert.getchannel("A").tobytes())
                 left, top, right, bottom = alpha.getbbox()
                 self.assertGreaterEqual(left, 1)
                 self.assertGreaterEqual(top, 1)
                 self.assertLess(right, size)
                 self.assertLess(bottom, size)
                 self.assertTrue(any(alpha.histogram()[1:255]))
-                self.assertNotEqual(normal.tobytes(), alert.tobytes())
+                # White in every theme and at every reading.
+                colours = {pixel[:3] for pixel in normal.getdata() if pixel[3] > 200}
+                self.assertEqual(colours, {(255, 255, 255)})

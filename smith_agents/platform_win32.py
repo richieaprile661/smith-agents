@@ -661,7 +661,7 @@ def build_tray(self):
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", ui(self.quit)),
     )
-    return pystray.Icon("smith-agents", render_tray(None, False, None), APP_NAME, menu)
+    return pystray.Icon("smith-agents", render_tray(), APP_NAME, menu)
 
 def build_context_menu(self):
     import tkinter as tk

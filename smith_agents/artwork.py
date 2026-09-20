@@ -10,7 +10,7 @@ import zlib
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image
 
 
 ROOT = Path(__file__).parent / "assets" / "approved"
@@ -266,10 +266,11 @@ def _tray_alpha(path=None):
     return alpha.crop(bounds) if bounds else Image.new("L", (1, 1))
 
 
+@lru_cache(maxsize=8)
 def face_icon(size, ink="white"):
-    """The Matrix face as the widget's header logo: mirrored to face right,
-    filling its square without the tray's padding."""
-    alpha = ImageOps.mirror(_tray_alpha(MATRIX_TRAY))
+    """The Matrix face as the widget's header logo, exactly as the artwork
+    draws it, filling its square without the tray's padding."""
+    alpha = _tray_alpha(MATRIX_TRAY)
     scale = min(size / alpha.width, size / alpha.height)
     target = (max(1, round(alpha.width * scale)), max(1, round(alpha.height * scale)))
     drawing = Image.new("RGBA", target, ink)

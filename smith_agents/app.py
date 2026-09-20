@@ -685,7 +685,7 @@ class SmithAgentsWidget:
             return
         self._tray_cache = key
         try:
-            self.tray.icon = render_tray(front, live, error)
+            self.tray.icon = render_tray()
             # Shell_NotifyIcon hard-caps the tooltip at 128 chars including the title.
             self.tray.title = ("%s\n%s" % (APP_NAME, "\n".join(lines)))[:127]
         except Exception:

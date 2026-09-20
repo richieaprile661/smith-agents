@@ -7,11 +7,15 @@ descending columns. Each portrait is then brightened by 1.25 and screened over
 the widget, as the mockup's CSS ``filter:brightness(1.25)`` and
 ``mix-blend-mode:screen`` do.
 
-Face assignment: every main session is Smith. Helpers draw from Brown, Jones,
-Johnson, Jackson and Thompson, least used first among the helpers currently
-listed, ties broken by a hash of the session id. A face stays with its session
-through state changes, rescans and reordering, until the session leaves the
-list. With more than five helpers the faces repeat, still least used first.
+Face assignment: every main session is Smith, wearing one of his nine session
+expressions, chosen from a hash of the session id - so it looks arbitrary, it
+never changes while the session lives, and a new session can bring a new
+expression. Subagents never get Smith: they draw from Brown,
+Jones, Johnson, Jackson and Thompson, least used first among the subagents
+currently listed, ties broken by a hash of the session id. A face stays with
+its session through state changes, rescans and reordering, until the session
+leaves the list. With more than five subagents the faces repeat, still least
+used first.
 """
 import json
 import math
@@ -23,9 +27,15 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parent / "assets" / "portraits"
+# The original approved Smith, kept packaged as the reference portrait.
 MAIN = "smith"
+# Smith's session expressions. Stern is deliberately absent: the brand mark
+# wears it (see ``artwork.MATRIX_TRAY``), so it never doubles as a session.
+EXPRESSIONS = ("smith-02-smirk", "smith-03-speaking", "smith-04-angry",
+               "smith-05-over-glasses", "smith-06-chin-up", "smith-07-turn-right",
+               "smith-08-shout", "smith-09-faint-smile", "smith-10-tilt")
 HELPERS = ("brown", "jones", "johnson", "jackson", "thompson")
-NAMES = (MAIN,) + HELPERS
+NAMES = (MAIN,) + EXPRESSIONS + HELPERS
 
 WORK = 768
 COMPACT_MAX = 104
@@ -65,10 +75,12 @@ def manifest():
 
 
 def default_face(agent):
-    if not agent.get("sub"):
-        return MAIN
+    """The face a session falls back to before any assignment has run."""
     identity = agent.get("id") or agent.get("name") or ""
-    return HELPERS[zlib.crc32(identity.encode("utf-8")) % len(HELPERS)]
+    seed = zlib.crc32(identity.encode("utf-8"))
+    if not agent.get("sub"):
+        return EXPRESSIONS[seed % len(EXPRESSIONS)]
+    return HELPERS[seed % len(HELPERS)]
 
 
 def face(agent):
@@ -89,7 +101,9 @@ class Assignments:
         for agent in agents:
             identity = agent.get("id") or agent.get("name") or ""
             if not agent.get("sub"):
-                self.choices[identity] = MAIN
+                # One picker for main sessions, the same one ``face`` falls
+                # back to, so the first paint and every later one agree.
+                self.choices[identity] = default_face(agent)
             elif self.choices.get(identity) in HELPERS:
                 counts[self.choices[identity]] += 1
             else:
@@ -125,7 +139,7 @@ class Clock:
         self.times = {key: value for key, value in self.times.items() if key in identities}
 
 
-@lru_cache(maxsize=len(NAMES))
+@lru_cache(maxsize=4)
 def _source(name):
     """The approved image on the reference's 768 working surface, and its crop."""
     with Image.open(ROOT / manifest()[name]["image"]) as image:

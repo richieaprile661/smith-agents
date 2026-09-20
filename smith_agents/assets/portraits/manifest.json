@@ -28,5 +28,50 @@
     "image": "thompson.png",
     "sha256": "8017ef3916646aa1edb26b8c4b35d603caf9ebf7fb7d17f46736e0e6d59b0598",
     "source": "output/imagegen/generated-pixel-code/thompson/thompson-green-v2.png"
+  },
+  "smith-02-smirk": {
+    "image": "smith-02-smirk.png",
+    "sha256": "59dc50843cba1bd79b63d57e07a693e3934c00273df854b77a8b31dc3d3805e1",
+    "source": "output/imagegen/expressions/02-smirk.png"
+  },
+  "smith-03-speaking": {
+    "image": "smith-03-speaking.png",
+    "sha256": "f4de10b864c05f16420a2ae18b4a46c40754e8a5c01916ac767395b0ef8f066c",
+    "source": "output/imagegen/expressions/03-speaking.png"
+  },
+  "smith-04-angry": {
+    "image": "smith-04-angry.png",
+    "sha256": "93388aa7760c2ada788bc63a7743cd7b7384549bd6c88c0f87ae4c5630be18c5",
+    "source": "output/imagegen/expressions/04-angry.png"
+  },
+  "smith-05-over-glasses": {
+    "image": "smith-05-over-glasses.png",
+    "sha256": "63d6590e1d890b6c84d3ba201a19091f9578c574db0473db33168edb7bd41908",
+    "source": "output/imagegen/expressions/05-over-glasses.png"
+  },
+  "smith-06-chin-up": {
+    "image": "smith-06-chin-up.png",
+    "sha256": "192bf1256e9f884353a395acd31103ed52736b7da256dba77db0533c235fe77c",
+    "source": "output/imagegen/expressions/06-chin-up.png"
+  },
+  "smith-07-turn-right": {
+    "image": "smith-07-turn-right.png",
+    "sha256": "9597929534d79d53e2afd4f327ca5e68c4892742b17bd19181e7c0c9b6f210eb",
+    "source": "output/imagegen/expressions/07-turn-right.png"
+  },
+  "smith-08-shout": {
+    "image": "smith-08-shout.png",
+    "sha256": "e262796788f949a3fa40ef342c0508ab0d59048fbb110642413d78b3d484d81f",
+    "source": "output/imagegen/expressions/08-shout.png"
+  },
+  "smith-09-faint-smile": {
+    "image": "smith-09-faint-smile.png",
+    "sha256": "f673c35fddb04d711aef3cee58fe9e64160e84fd9898146e46f2badc58cc3ae5",
+    "source": "output/imagegen/expressions/09-faint-smile.png"
+  },
+  "smith-10-tilt": {
+    "image": "smith-10-tilt.png",
+    "sha256": "6e00894a5bedc60c939db9316c497216484586c52ab72fcf3298106b29b1c70e",
+    "source": "output/imagegen/expressions/10-tilt.png"
   }
 }

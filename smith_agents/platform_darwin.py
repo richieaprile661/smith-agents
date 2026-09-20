@@ -764,16 +764,21 @@ class MacTray:
 
     @icon.setter
     def icon(self, image):
-        from PIL import Image
         from .core import render_tray
-        # Keep the project's figure mark. AppKit tints its alpha for light/dark
-        # mode; an explicit ! preserves the alert even in a monochrome menu bar.
+        # Matrix's mark is handed over as it is, the same static white on any
+        # menu bar. The line-figure themes stay template images, which AppKit
+        # repaints black on a light bar.
         if image is None:
-            image = render_tray(None, False, None)
-        symbol = Image.new("RGBA", image.size, "black")
-        symbol.putalpha(image.getchannel("A"))
+            image = render_tray()
         self._icon = image
-        self.item.button().setImage_(_native_image(symbol, template=True))
+        from PIL import Image
+        from .core import PORTRAITS
+        if PORTRAITS:
+            symbol = image
+        else:
+            symbol = Image.new("RGBA", image.size, "black")
+            symbol.putalpha(image.getchannel("A"))
+        self.item.button().setImage_(_native_image(symbol, template=not PORTRAITS))
         alert = self.widget.error or any(m["pct"] >= 90 for m in self.widget.metrics)
         self.item.button().setTitle_("!" if alert else "")
 

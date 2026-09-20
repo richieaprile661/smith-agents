@@ -1414,18 +1414,6 @@ def choose_front(metrics):
     return front, rest
 
 
-def severity_of(pct, severity):
-    if severity == "critical" or pct >= 90:
-        return "crit"
-    if severity == "warning" or pct >= 75:
-        return "warn"
-    return "ok"
-
-
-def meter_color(state):
-    return {"crit": CRIT, "warn": WARN}.get(state, OK)
-
-
 def _reset_parts(iso):
     if not iso:
         return None, None
@@ -2370,6 +2358,10 @@ def render_header_signal(pen, metrics, provider, stale=False, usage_data=None):
     pen.text((px(137)-text_w(label, font)//2, px(77)), label, font=font, fill=_ink(55))
 
 
+# The brand mark sits a fifth smaller than the figure cell it replaces.
+HEADER_MARK = round(CELL_H * 0.8)
+
+
 def render_console_bar(chip, pen, metrics, front, spend, counts, now,
                        expanded, mode="worst", notice=None, header_frame=None, provider=None,
                        reading_view="used", data_notice=None):
@@ -2380,11 +2372,13 @@ def render_console_bar(chip, pen, metrics, front, spend, counts, now,
 
     icon_width = px(64)
     icon_x = (CONSOLE_W // 3 - icon_width) // 2
-    # Matrix's panel header keeps the Smith face; only tucked strips use lettering.
-    icon = (artwork.face_icon(min(icon_width, CELL_H), _tok("fg")) if PORTRAITS
+    # Matrix's panel header wears the same static white mark as the tray,
+    # unglowed so its cut-out glasses and mouth stay crisp; the tucked strips
+    # use lettering instead, and the other themes keep their line figure.
+    icon = (artwork.face_icon(HEADER_MARK) if PORTRAITS
             else smith_header_icon(icon_width, CELL_H, _tok("fg")))
     chip.alpha_composite(icon, (icon_x + (icon_width - icon.width) // 2,
-                                (BAR_H - CELL_H) // 2 - px(4)))
+                                (BAR_H - icon.height) // 2 - px(4)))
 
     draw_brand_text(chip, pen, "Smith", (CONSOLE_W // 3)//2,
                     BAR_H-px(22), px(22))
@@ -3151,7 +3145,8 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
     chip = console_base((CONSOLE_W, height))
     pen = ImageDraw.Draw(chip)
     boxes = render_console_bar(chip, pen, metrics, front, spend, counts, now,
-                               expanded, bar_mode, notice, header_frame, provider, reading_view, data_notice)
+                               expanded, bar_mode, notice, header_frame, provider, reading_view,
+                               data_notice)
     if not expanded:
         return with_shadow(chip), boxes
 
@@ -3283,24 +3278,20 @@ def tray_size():
 
 
 
-def render_tray(front, live, error):
-    """Render the approved silhouette at the native tray size, with smooth edges.
+def render_tray():
+    """Render the approved mark at the native tray size, with smooth edges.
 
-    AppKit uses the alpha as a light/dark template. Windows keeps the white
-    silhouette; the existing critical-usage alert still turns it red.
+    Always white, in every theme and at every reading - critical usage is said
+    in the tooltip and the panel, not by recolouring the tray.
     """
     size = tray_size()
-    pct = front["pct"] if front else 0.0
-    alarm = bool(error and not front) or severity_of(
-        pct, front["severity"] if front else "normal") == "crit"
-    hit = _MARK_CACHE.get((size, alarm))
+    hit = _MARK_CACHE.get(size)
     if hit is not None:
         return hit.copy()
-    icon = artwork.tray_icon(size, meter_color("crit") if alarm else "white",
-                             artwork.MATRIX_TRAY if PORTRAITS else None)
+    icon = artwork.tray_icon(size, "white", artwork.MATRIX_TRAY if PORTRAITS else None)
     if len(_MARK_CACHE) > 6:
         _MARK_CACHE.clear()
-    _MARK_CACHE[(size, alarm)] = icon
+    _MARK_CACHE[size] = icon
     return icon.copy()
 
 
