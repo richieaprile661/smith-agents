@@ -57,8 +57,9 @@ class TuckedTests(unittest.TestCase):
             'secondary': {'usedPercent': 31, 'windowDurationMins': 10080}}})
         original = ImageDraw.ImageDraw.text
         for rows, mode, notice, expected in (
-                (metrics, 'worst', None, ['Codex · 5h', '71%', 'used']),
-                (metrics, core.next_bar_mode(metrics, 'worst'), None, ['Codex · 1w', '31%']),
+                # the window is the caption, where it cannot be elided away
+                (metrics, 'worst', None, ['Codex', '71%', '5h used']),
+                (metrics, core.next_bar_mode(metrics, 'worst'), None, ['Codex', '31%', '1w used']),
                 (metrics, 'worst', 'Offline', ['71%', 'Last reading']),
                 ([], 'worst', 'Offline', ['—', 'Unavailable'])):
             texts = []

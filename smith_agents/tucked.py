@@ -74,9 +74,12 @@ def _usage_drawer(metrics, front, mode, provider, notice, width=RAIL_W, horizont
     card = Image.new('RGBA', (width, height), c._tok('paper'))
     pen = ImageDraw.Draw(card)
     metric = c.bar_reading(metrics, front, mode)
-    name = c.provider_name({'provider': provider})
     label = metric.get('label', '') if metric else ''
-    title = name + (' · '+label if label else '')
+    # The title is the provider alone. Its window - 5h, week, Opus - used to
+    # ride along after a dot and was the part elided away on an 88pt rail, so
+    # the one thing the drawer exists to tell you never fit. It is the
+    # caption under the number now, where the full width is free.
+    title = c.provider_name({'provider': provider})
     title_width = min(width//3-c.px(16), c.px(62)) if horizontal else width-c.px(30)
     title_font = c.FONT('bold', 9)
     pen.text((c.px(8), c.px(8 if not horizontal else 25)),
@@ -101,7 +104,7 @@ def _usage_drawer(metrics, front, mode, provider, notice, width=RAIL_W, horizont
     font = c.MONO('bold', 22)
     pen.text((center-c.text_w(value, font)//2, c.px(value_y)), value,
              font=font, fill=c.provider_accent(provider) if metric else c._ink(62))
-    caption = 'used' if metric else 'Unavailable'
+    caption = ((label + ' used') if label else 'used') if metric else 'Unavailable'
     font = c.FONT('book', 9)
     pen.text((center-c.text_w(caption, font)//2, c.px(caption_y)), caption, font=font, fill=c._ink(62))
     if notice:
