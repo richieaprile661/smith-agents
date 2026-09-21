@@ -8,6 +8,30 @@
 
 Saved 17 September 2026. The user wants to pause and possibly build this tomorrow. Do not start implementation simply because this handoff exists.
 
+## 21 September — review pass on the trial
+
+A UI and UX review of the running trial, then all findings applied:
+
+- The headline and every chapter value are now **new tokens**, fresh input
+  plus output. Cached context is shown beside them, never added in. The
+  earlier headline was 95% cache reads and read as spend.
+- Chapter cards carry a session's own words: Claude Code's `ai-title`, a
+  Claude subagent's meta description, a Codex helper's `agent_path`, or a
+  Codex session's first request. Commit subjects moved to the receipt as
+  "Saved: …". Codex titles are the user's raw request, typos included.
+- Sessions view shows one card per main session with "+N helpers"; helper
+  tokens are included and listed in the receipt.
+- "What happened" lists counts per chapter ("513 commands · 93 file reads")
+  instead of the same three category sentences everywhere.
+- Timeline node height encodes new tokens; the chips under the selected node
+  and the zoom buttons are gone; the band is a third shorter.
+- Allowance pace is marked "not connected"; prev/next hide in All time;
+  numbers round to three significant figures; the select is styled.
+- Motion: dialog enters at 180ms and leaves at 120ms from scale .97, press
+  feedback on pressable things, hover gated to fine pointers, keyboard moves
+  instant, share rows arrive staggered once per data change, all reduced
+  under `prefers-reduced-motion`.
+
 ## 21 September — Claude Code as a second source
 
 The trial reads Claude Code transcripts from `~/.claude/projects` alongside
