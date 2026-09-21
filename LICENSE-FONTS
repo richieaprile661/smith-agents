@@ -1,0 +1,14 @@
+Bundled font licences
+=====================
+
+The bundled fonts in fonts/ are not covered by the MIT licence in LICENSE.
+
+Fira Code and Space Grotesk are both licensed under the SIL Open Font
+License 1.1. Their full licence texts are included alongside them as
+smith_agents/fonts/OFL-FiraCode.txt and
+smith_agents/fonts/OFL-SpaceGrotesk.txt.
+
+  Fira Code      Copyright (c) 2014-2020 The Fira Code Project Authors
+                 https://github.com/tonsky/FiraCode
+  Space Grotesk  Copyright (c) 2020 Florian Karsten
+                 https://github.com/floriankarsten/space-grotesk

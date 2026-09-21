@@ -199,6 +199,9 @@ py tools/render_readme_images.py
 .venv/bin/python tools/render_readme_images.py
 ```
 
+Each sheet is written twice, for GitHub's light and dark pages, plus the
+1280×640 social preview card.
+
 Fonts follow the rendering platform (for example, Segoe UI on Windows). The
 script renders each theme in a separate process with temporary settings. It
 doesn't read credentials, transcripts, or account readings. For what each image

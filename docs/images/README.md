@@ -15,6 +15,10 @@ the first two. Claude usage is 42% / 18%; Codex usage is 71% / 31% (5h / week).
 | `github-matrix-usage.png` | Both providers' 5h and weekly Signal Fields and glowing logos. |
 | `github-matrix-tuck.png` | Horizontal and vertical strips with attached usage drawers. |
 | `github-matrix-themes.png` | Claude, Matrix, and E-ink using the same layout. |
+| `github-social-preview.png` | The 1280×640 card for shared links. Upload it under Settings → Social preview; GitHub has no API for it. |
+
+Every sheet also has a `-dark.png` twin on near-black paper; the README picks it
+through `<picture>` when GitHub is in dark mode.
 
 Canvases are 1600 pixels wide. The main UI renders at zoom 2.5; the three-theme
 comparison uses 1.45. Fonts follow the platform used to render (the current images

@@ -19,16 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
---------------------------------------------------------------------------
-
-The bundled fonts in fonts/ are not covered by the licence above.
-
-Fira Code and Space Grotesk are both licensed under the SIL Open Font
-License 1.1. Their full licence texts are included alongside them as
-fonts/OFL-FiraCode.txt and fonts/OFL-SpaceGrotesk.txt.
-
-  Fira Code      Copyright (c) 2014-2020 The Fira Code Project Authors
-                 https://github.com/tonsky/FiraCode
-  Space Grotesk  Copyright (c) 2020 Florian Karsten
-                 https://github.com/floriankarsten/space-grotesk

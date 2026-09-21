@@ -1,5 +1,8 @@
 <p align="center">
+  <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/github-matrix-hero-dark.png">
   <img src="docs/images/github-matrix-hero.png" alt="Smith Agents: Your agents. In view. The Matrix widget shows Claude and Codex sessions as code-drawn portraits with context, activity, and separate 5-hour and weekly usage fields." width="880">
+</picture>
 </p>
 
 <p align="center">
@@ -12,15 +15,18 @@
 jump back to a session from a small floating widget or a strip at the edge of
 your screen.
 
-[Install](#install) · [Sessions](#your-sessions-at-a-glance) · [Usage](#usage-in-a-field-of-signals) · [Screen edges](#small-at-every-edge) · [Codex setup](docs/codex.md) · [Hermes setup](docs/hermes.md)
+[Install](#install) · [Sessions](#a-clear-view-of-every-session) · [Usage](#usage-in-a-field-of-signals) · [Screen edges](#small-at-every-edge) · [Codex setup](docs/codex.md) · [Hermes setup](docs/hermes.md)
 
-| Follow the work | Watch your usage | Keep your screen |
-| --- | --- | --- |
-| Figures, context, and current activity for each session. | Separate **5h** and **week** fields, in your provider's color. | Tuck to any screen edge, with details and usage a click away. |
+- **See the work.** Figures, context, and current activity for each session.
+- **Watch your usage.** Separate **5h** and **week** fields, in your provider's color.
+- **Keep your screen.** Tuck to any screen edge, with details and usage a click away.
 
-## Your sessions at a glance
+## A clear view of every session
 
-<img src="docs/images/github-matrix-work.png" alt="The Matrix session panel: a portrait and project identity above context, activity below, and an expanded storefront card with Go to session and folded Read more controls." width="880">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/github-matrix-work-dark.png">
+  <img src="docs/images/github-matrix-work.png" alt="The Matrix session panel: a portrait and project identity above context, activity below, and an expanded storefront card with Go to session and folded Read more controls." width="880">
+</picture>
 
 Click a session to open its current activity or latest reply. **Go to session**
 brings you back to its app. Extra controls and metadata stay folded under
@@ -37,7 +43,10 @@ you to the app where you can answer.
 
 ## Usage, in a field of signals
 
-<img src="docs/images/github-matrix-usage.png" alt="Codex in blue with 71% used over 5 hours and 31% used over a week; Claude in orange with 42% and 18%. Both headers show two square Signal Fields beside the glowing provider logos." width="880">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/github-matrix-usage-dark.png">
+  <img src="docs/images/github-matrix-usage.png" alt="Codex in blue with 71% used over 5 hours and 31% used over a week; Claude in orange with 42% and 18%. Both headers show two square Signal Fields beside the glowing provider logos." width="880">
+</picture>
 
 The header shows **5-hour and weekly usage together**. Each lit cell represents
 **1% used**: blue for Codex, orange for Claude. Click a glowing provider logo to
@@ -48,7 +57,10 @@ about every five minutes, or through **Refresh now** in the tray menu.
 
 ## Small at every edge
 
-<img src="docs/images/github-matrix-tuck.png" alt="The Matrix tucked layouts, horizontal and vertical: icon-only Smith branding, glowing provider logos, portrait cells with a bar marking the session whose window is in front, and attached Claude and Codex usage drawers reading 5h used." width="880">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/github-matrix-tuck-dark.png">
+  <img src="docs/images/github-matrix-tuck.png" alt="The Matrix tucked layouts, horizontal and vertical: icon-only Smith branding, glowing provider logos, portrait cells with a bar marking the session whose window is in front, and attached Claude and Codex usage drawers reading 5h used." width="880">
+</picture>
 
 Tuck to the **top, bottom, left, or right edge of your screen**, independent of
 editor and terminal windows.
@@ -58,9 +70,12 @@ editor and terminal windows.
 - **Click the drawer reading** to cycle through available limits, including 5h and week.
 - **Click the Smith icon** to return to the full widget.
 
-## Pick a theme
+## Choose your atmosphere
 
-<img src="docs/images/github-matrix-themes.png" alt="The Smith Agents layout in The Matrix, Claude, and E-ink themes." width="880">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/github-matrix-themes-dark.png">
+  <img src="docs/images/github-matrix-themes.png" alt="The Smith Agents layout in The Matrix, Claude, and E-ink themes." width="880">
+</picture>
 
 Choose **Claude**, **The Matrix**, or **E-ink** from the tray or menu-bar menu.
 
@@ -227,6 +242,6 @@ Inspired by [codenotch](https://github.com/vinzdg/codenotch), with its own
 widget, artwork, and themes.
 
 The code is released under the [MIT License](LICENSE). The bundled Fira Code and
-Space Grotesk fonts use the included SIL Open Font License files.
+Space Grotesk fonts are under the SIL Open Font License; see [LICENSE-FONTS](LICENSE-FONTS).
 
 This project isn't affiliated with Anthropic, OpenAI, or Nous Research.

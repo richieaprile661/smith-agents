@@ -46,4 +46,4 @@ packages = ["smith_agents", "claude_widget"]
 # are picked up with it - no force-include, which would add them twice.
 
 [tool.hatch.build.targets.sdist]
-include = ["smith_agents", "claude_widget", "README.md", "LICENSE", "run.cmd", "run.command", "install.sh", "install.ps1", "tools", "tests", "docs/macos.md", "docs/windows.md", "docs/codex.md", "docs/hermes.md", "docs/development.md", "docs/images"]
+include = ["smith_agents", "claude_widget", "README.md", "LICENSE", "LICENSE-FONTS", "run.cmd", "run.command", "install.sh", "install.ps1", "tools", "tests", "docs/macos.md", "docs/windows.md", "docs/codex.md", "docs/hermes.md", "docs/development.md", "docs/images"]

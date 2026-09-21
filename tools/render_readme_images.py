@@ -22,9 +22,12 @@ THEMES = ("matrix", "claude", "eink")
 
 # One set of sessions for every image, so counts and names always agree.
 # Idle times are seconds since the session's last transcript write.
+# Main sessions name their Smith expression: the three sample ids happen to
+# hash to the same face, and the README should show that faces differ.
 SESSIONS = [
     {"id": "readme-storefront", "name": "storefront", "provider": "codex",
      "model": "gpt-5.3-codex", "entrypoint": "codex-vscode", "state": "working", "idle": 4,
+     "_portrait": "smith-03-speaking",
      "tail": [("cmd", "Bash pytest -q tests/checkout")],
      "last_request": "Add coupon support to checkout and cover it with tests.",
      "latest_message": "Coupons apply at checkout. Running the test suite now.",
@@ -52,6 +55,7 @@ SESSIONS = [
     # optional launcher, so the session asking for approval is a VS Code one.
     {"id": "readme-api", "name": "api-service", "provider": "claude",
      "model": "claude-opus-4-6", "entrypoint": "claude-vscode", "state": "needs", "idle": 95,
+     "_portrait": "smith-05-over-glasses",
      "tail": [("cmd", "Bash npm run migrate")],
      "permissions": [{"actionable": True, "request": {
          "tool_name": "Bash", "input": {"command": "npm run migrate"},
@@ -62,6 +66,7 @@ SESSIONS = [
      "_window_state": "background"},
     {"id": "readme-design", "name": "design-system", "provider": "claude",
      "model": "claude-sonnet-4-6", "entrypoint": "cli", "state": "done", "idle": 42,
+     "_portrait": "smith-09-faint-smile",
      "tail": [("cmd", "Edit src/tokens.css")],
      "last_request": "Tighten the spacing scale and update the button tokens.",
      "latest_message": "Components are ready to review. Buttons now use the new scale.",
@@ -129,10 +134,11 @@ def render_parts(theme, zoom, out_dir):
     # Keep the full name on one baseline, in the widget's live brand typeface.
     # Separate Smith/AGENTS assets made the README title look disconnected.
     from PIL import Image, ImageDraw
-    wordmark = Image.new("RGBA", (620, 110))
-    ImageDraw.Draw(wordmark).text((0, 0), "Smith Agents", font=core.brand_font(26),
-                                  anchor="lt", fill=(39, 53, 43))
-    save("wordmark", wordmark)
+    for name, fill in (("wordmark", (39, 53, 43)), ("wordmark-dark", (228, 234, 223))):
+        wordmark = Image.new("RGBA", (620, 110))
+        ImageDraw.Draw(wordmark).text((0, 0), "Smith Agents", font=core.brand_font(26),
+                                      anchor="lt", fill=fill)
+        save(name, wordmark)
 
 
 def render_theme(theme, zoom, out_dir):
@@ -150,12 +156,23 @@ def render_theme(theme, zoom, out_dir):
 
 # Two pixels per displayed README pixel. UI is rendered natively at each zoom.
 WIDTH = 1600
-PAPER = "#eeeee7"
-INK = "#27352b"
-MUTED = "#667368"
-LINE = "#d2d8cc"
-ORANGE = "#b85739"
-BLUE = "#466de0"
+# GitHub shows the README on a light or a dark page; each sheet is rendered
+# for both so neither scheme gets a glaring block of the other.
+PALETTES = {
+    "light": {"paper": "#eeeee7", "ink": "#27352b", "muted": "#667368",
+              "line": "#d2d8cc", "frame": "#e3e6dd", "orange": "#b85739", "blue": "#466de0"},
+    "dark": {"paper": "#0d110e", "ink": "#e4eadf", "muted": "#8f9c90",
+             "line": "#26302a", "frame": "#141a15", "orange": "#e0704f", "blue": "#7f9cf0"},
+}
+PAPER = INK = MUTED = LINE = FRAME = ORANGE = BLUE = None
+WORDMARK = "wordmark"
+
+
+def use_palette(name):
+    global PAPER, INK, MUTED, LINE, FRAME, ORANGE, BLUE
+    colours = PALETTES[name]
+    PAPER, INK, MUTED, LINE = colours["paper"], colours["ink"], colours["muted"], colours["line"]
+    FRAME, ORANGE, BLUE = colours["frame"], colours["orange"], colours["blue"]
 
 
 def font(size, bold=False):
@@ -194,16 +211,38 @@ def compose_hero(parts):
     height = max(1050, console.height + 96)
     canvas = Image.new("RGBA", (WIDTH, height), PAPER)
     pen = ImageDraw.Draw(canvas)
-    canvas.alpha_composite(load(parts, "wordmark"), (76, 96))
+    canvas.alpha_composite(load(parts, WORDMARK), (76, 96))
     y = max(310, (height - 420) // 2)
     pen.text((72, y), "Your agents.", font=font(88, True), fill=INK)
     pen.text((72, y + 104), "In view.", font=font(88, True), fill=INK)
     for i, line in enumerate(("See the work. Watch your usage.", "Keep your screen.")):
         pen.text((76, y + 250 + i * 46), line, font=font(31), fill=MUTED)
     pen.line((76, height - 172, 684, height - 172), fill=LINE, width=2)
-    pen.text((76, height - 143), "CLAUDE CODE  +  CODEX", font=font(25, True), fill=INK)
+    pen.text((76, height - 143), "CLAUDE CODE  +  CODEX  +  HERMES AGENT", font=font(25, True), fill=INK)
     pen.text((76, height - 101), "Windows & macOS", font=font(25), fill=MUTED)
     canvas.alpha_composite(console, (WIDTH - console.width - 48, (height - console.height) // 2))
+    return canvas
+
+
+def compose_social(parts):
+    """The 1280x640 card GitHub shows when the repository link is shared."""
+    from PIL import Image, ImageDraw
+    console = load(parts, "hero")
+    canvas = Image.new("RGBA", (1280, 640), PAPER)
+    pen = ImageDraw.Draw(canvas)
+    wordmark = load(parts, WORDMARK)
+    canvas.alpha_composite(wordmark.resize((wordmark.width * 3 // 4, wordmark.height * 3 // 4)),
+                           (64, 64))
+    pen.text((60, 210), "Your agents.", font=font(76, True), fill=INK)
+    pen.text((60, 300), "In view.", font=font(76, True), fill=INK)
+    pen.text((64, 420), "Claude Code, Codex and Hermes sessions", font=font(26), fill=MUTED)
+    pen.text((64, 458), "on a small desktop widget.", font=font(26), fill=MUTED)
+    pen.text((64, 548), "WINDOWS  +  MACOS", font=font(21, True), fill=INK)
+    # The widget's top half, its header and first session, at card scale.
+    scale = 0.74
+    crop = console.crop((0, 0, console.width, min(console.height, int(760 / scale))))
+    crop = crop.resize((int(crop.width * scale), int(crop.height * scale)), Image.LANCZOS)
+    canvas.alpha_composite(crop, (1280 - crop.width - 24, 48))
     return canvas
 
 
@@ -243,7 +282,7 @@ def compose_tuck(parts):
                         "Dock to the screen. Keep sessions and usage within reach.")
     # A desktop frame, not an editor window: rails belong to the monitor edges.
     pen.rounded_rectangle((60, 278, WIDTH - 60, height - 60), radius=28,
-                          fill="#e3e6dd", outline=LINE, width=2)
+                          fill=FRAME, outline=LINE, width=2)
     canvas.alpha_composite(top, (90, 290))
     canvas.alpha_composite(side, (WIDTH - side.width - 64, 350))
     note(pen, 118, 760, "01", "Top or bottom", [
@@ -284,16 +323,23 @@ def main():
             theme_parts = scratch / theme
             render_theme(theme, 1.45, theme_parts)
             themes.append(theme_parts)
-        images = {
-            "github-matrix-hero.png": compose_hero(parts),
-            "github-matrix-work.png": compose_work(parts),
-            "github-matrix-usage.png": compose_usage(parts),
-            "github-matrix-tuck.png": compose_tuck(parts),
-            "github-matrix-themes.png": compose_themes(themes),
-        }
-        for name, image in images.items():
-            image.convert("RGB").save(out / name, optimize=True)
-            print("%s  %dx%d" % (out / name, *image.size))
+        global WORDMARK
+        for scheme in ("light", "dark"):
+            use_palette(scheme)
+            WORDMARK = "wordmark" if scheme == "light" else "wordmark-dark"
+            suffix = "" if scheme == "light" else "-dark"
+            images = {
+                "github-matrix-hero%s.png" % suffix: compose_hero(parts),
+                "github-matrix-work%s.png" % suffix: compose_work(parts),
+                "github-matrix-usage%s.png" % suffix: compose_usage(parts),
+                "github-matrix-tuck%s.png" % suffix: compose_tuck(parts),
+                "github-matrix-themes%s.png" % suffix: compose_themes(themes),
+            }
+            if scheme == "light":
+                images["github-social-preview.png"] = compose_social(parts)
+            for name, image in images.items():
+                image.convert("RGB").save(out / name, optimize=True)
+                print("%s  %dx%d" % (out / name, *image.size))
 
 
 if __name__ == "__main__":
