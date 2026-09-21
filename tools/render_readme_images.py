@@ -277,7 +277,8 @@ def compose_usage(parts):
 def compose_tuck(parts):
     side = load(parts, "right-codex")
     top = load(parts, "top-claude")
-    height = max(1220, side.height + 330)
+    # The rail sits 350 down; leave it 40 inside the frame, which ends 60 up.
+    height = max(1220, side.height + 450)
     canvas, pen = sheet(height, "03", "Small at every edge.",
                         "Dock to the screen. Keep sessions and usage within reach.")
     # A desktop frame, not an editor window: rails belong to the monitor edges.
