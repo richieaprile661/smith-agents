@@ -8,6 +8,25 @@
 
 Saved 17 September 2026. The user wants to pause and possibly build this tomorrow. Do not start implementation simply because this handoff exists.
 
+## 21 September — Claude Code as a second source
+
+The trial reads Claude Code transcripts from `~/.claude/projects` alongside
+Codex. A session log's workspace comes from the `cwd` in its first records;
+`<session>/subagents/agent-*.jsonl` logs become helper sessions of that
+session. A streamed message writes one assistant record per content block,
+all carrying the same usage, so a receipt is the message id and counts once.
+API-error and synthetic records are skipped. Cache reads count as cached
+input; cache writes are new material and count as fresh input, and the token
+dialog says so. Tool uses map to the existing activity labels, plus "File
+reads" and "Web lookups". Hermes is still not read.
+
+Discovery now merges both sources and reports per-source session counts.
+smith-agents went from 15 Codex sessions and 236M tokens to 26 sessions and
+495M, about half from Claude Code. Three tests cover the reader.
+
+Story chapters now show only days with recorded session activity, and All
+time ends on the last recorded day rather than today.
+
 ## 21 September — every local project in the trial
 
 The trial now discovers every workspace in the local Codex history instead of
