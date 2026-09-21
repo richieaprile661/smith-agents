@@ -191,7 +191,13 @@ def widest_lit_row(lit, least=20):
 
 @lru_cache(maxsize=16)
 def _head(name):
-    """Where this drawing's head sits on the working surface."""
+    """Where this drawing's head sits on the working surface. A drawing may
+    declare it in the manifest when the measurement misreads it: over-glasses
+    tilts his head down, so his widest row in the eye band is his hair, and
+    measuring him pins the crop to the top of the canvas and cuts his chin."""
+    declared = manifest()[name].get("head")
+    if declared:
+        return Head(declared["width"], declared["eye"], declared["centre"])
     return widest_lit_row(_lit(name))
 
 

@@ -47,7 +47,12 @@
   "smith-05-over-glasses": {
     "image": "smith-05-over-glasses.png",
     "sha256": "63d6590e1d890b6c84d3ba201a19091f9578c574db0473db33168edb7bd41908",
-    "source": "output/imagegen/expressions/05-over-glasses.png"
+    "source": "output/imagegen/expressions/05-over-glasses.png",
+    "head": {
+      "width": 450,
+      "eye": 372,
+      "centre": 382
+    }
   },
   "smith-06-chin-up": {
     "image": "smith-06-chin-up.png",
