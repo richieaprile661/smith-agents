@@ -71,9 +71,15 @@ class LaunchLifecycleTests(unittest.TestCase):
             # Only deliver the signal once a handler is installed: with the
             # default disposition this call would take the test runner down
             # with it instead of reporting a failure.
-            self.assertNotIn(signal.getsignal(signal.SIGTERM),
-                             (signal.SIG_DFL, signal.SIG_IGN))
-            os.kill(os.getpid(), signal.SIGTERM)
+            handler = signal.getsignal(signal.SIGTERM)
+            self.assertNotIn(handler, (signal.SIG_DFL, signal.SIG_IGN))
+            if os.name == "nt":
+                # os.kill with SIGTERM is TerminateProcess on Windows: no
+                # handler runs, the runner just dies. Call the handler
+                # the way the interpreter would.
+                handler(signal.SIGTERM, None)
+            else:
+                os.kill(os.getpid(), signal.SIGTERM)
 
         widget.run.side_effect = terminate
         before = signal.getsignal(signal.SIGTERM)
