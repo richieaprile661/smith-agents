@@ -8,6 +8,21 @@
 
 Saved 17 September 2026. The user wants to pause and possibly build this tomorrow. Do not start implementation simply because this handoff exists.
 
+## 21 September — every local project in the trial
+
+The trial now discovers every workspace in the local Codex history instead of
+reading only this repository. The project selector lists each one with its
+session count, the story and receipts load for the chosen project, and the
+bottom panel is the design's "Projects this period": one share row per project
+for the selected period, largest first, up to four plus an "other projects"
+row, and clicking a row opens that project. Session counts are unique log
+files, so a session indexed twice counts once. Scratch checkouts under `/tmp`
+and deleted directories are skipped. A project without a Git repository gets
+no milestone labels. Requests name a project; paths are never accepted.
+
+Verified in headless Chromium at 1440, 1200 and 390 pixels wide: no page
+errors, no horizontal overflow. Playwright is installed in `.venv` for this.
+
 ## Current selection — restore the previous build-story design
 
 The user rejected the white-figure refinement (07) and asked to go back to the previous design. The active visual reference is again [06 — Editorial graphite build story](images/usage-dashboard-build-story.png), with its original icons. Do not use 07 as the selected design or apply the white-figure treatment. Preserve both artifacts as exploration history.
