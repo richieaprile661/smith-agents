@@ -19,7 +19,8 @@ your screen.
 
 - **See the work.** Figures, context, and current activity for each session.
 - **Watch your usage.** Separate **5h** and **week** fields, in your provider's color.
-- **Keep your screen.** Tuck to any screen edge, with details and usage a click away.
+- **Keep your screen.** Tuck to any screen edge. One click on a portrait brings
+  that session's window to the front.
 
 ## A clear view of every session
 
@@ -65,7 +66,9 @@ about every five minutes, or through **Refresh now** in the tray menu.
 Tuck to the **top, bottom, left, or right edge of your screen**, independent of
 editor and terminal windows.
 
-- **Click a figure** to open its session panel inward from the edge.
+- **Click a portrait** to bring that session's window to the front. A bar on
+  the outer edge marks the one already in front.
+- **Click the name** under it to open its session panel inward from the edge.
 - **Click a provider logo** to unfold the attached usage drawer.
 - **Click the drawer reading** to cycle through available limits, including 5h and week.
 - **Click the Smith icon** to return to the full widget.
@@ -166,7 +169,7 @@ icon continues to launch the separate copy created by the installer.
 2. **Check in.** The **Agents** tab lists your sessions. **Usage** and **Stats**
    show readings for the selected provider. Click a session to see its details.
 3. **Tuck it away.** Click the tuck control, then drag the strip along any
-   of the four screen edges.
+   of the four screen edges. Click a portrait there to switch to that window.
 4. **Go to an agent.** Click **Go to session**. Open **Read more** for extra
    window controls and session metadata.
 
