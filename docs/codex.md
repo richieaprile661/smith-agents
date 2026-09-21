@@ -76,7 +76,11 @@ installation, or a VS Code extension's bundled runtime.
 ### Usage
 
 The **Usage** tab shows the windows that Codex returns, with the percentage used,
-the reset time, and any model-specific buckets. It doesn't assume that every plan
+the reset time, and any model-specific buckets. If the account holds purchased
+credits, the balance from the same read appears under the limits, in the header
+when the plan has no 5-hour window, in the tucked drawer, and in the tray tooltip.
+When the weekly window is spent and Codex continues on credits, the limit row
+says **on credits** and the balance lights up in the provider colour. It doesn't assume that every plan
 has both a 5-hour and a weekly limit. The main Codex bucket comes first, and each
 additional bucket has its own label.
 

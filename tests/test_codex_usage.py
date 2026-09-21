@@ -157,3 +157,82 @@ class ProviderViewTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+def with_credits(balance="1986.5064250000", reached=True, unlimited=False, has=True):
+    payload = {"ordinaryUsageAllowed": not reached,
+               "rateLimits": {"primary": {"usedPercent": 100 if reached else 40, "windowDurationMins": 10080},
+                              "secondary": None,
+                              "credits": {"hasCredits": has, "unlimited": unlimited, "balance": balance},
+                              "rateLimitReachedType": "rate_limit_reached" if reached else None}}
+    return payload
+
+
+class CreditTests(unittest.TestCase):
+    def test_credits_read_balance_unlimited_and_whether_in_use(self):
+        credits = usage.build_credits(with_credits())
+        self.assertEqual((credits["text"], credits["on_credits"], credits["unlimited"]), ("1,987", True, False))
+        self.assertEqual(usage.build_credits(with_credits(reached=False))["on_credits"], False)
+        self.assertEqual(usage.build_credits(with_credits(unlimited=True, balance=None))["text"], "Unlimited")
+        self.assertIsNone(usage.build_credits(with_credits(has=False)))
+        self.assertIsNone(usage.build_credits(with_credits(balance="lots")))
+        self.assertIsNone(usage.build_credits({"rateLimits": {"primary": {"usedPercent": 1}}}))
+
+    def test_header_shows_credits_in_the_empty_five_hour_slot(self):
+        from PIL import Image, ImageDraw
+        metrics = usage.build_metrics(with_credits())
+        self.assertEqual([m["label"] for m in metrics], ["1w"])
+        original = ImageDraw.ImageDraw.text
+        for credits, expected, absent in ((usage.build_credits(with_credits()), ["credits", "1,987"], ["5h"]),
+                                          (None, ["5h", "—"], ["credits"])):
+            texts = []
+            def record(pen, xy, text, *args, **kwargs):
+                texts.append(text)
+                return original(pen, xy, text, *args, **kwargs)
+            pen = ImageDraw.Draw(Image.new("RGBA", (core.CONSOLE_W, core.BAR_H)))
+            with patch.object(ImageDraw.ImageDraw, "text", record):
+                core.render_header_signal(pen, metrics, "codex", usage_data=credits)
+            for text in expected:
+                self.assertIn(text, texts)
+            for text in absent:
+                self.assertNotIn(text, texts)
+
+    def test_tucked_drawer_carries_the_credit_line_and_grows_for_it(self):
+        from PIL import ImageDraw
+        metrics = usage.build_metrics(with_credits())
+        credits = usage.build_credits(with_credits())
+        original = ImageDraw.ImageDraw.text
+        texts = []
+        def record(pen, xy, text, *args, **kwargs):
+            texts.append(text)
+            return original(pen, xy, text, *args, **kwargs)
+        with patch.object(ImageDraw.ImageDraw, "text", record):
+            card, _ = tucked._usage_drawer(metrics, metrics[0], "worst", "codex", None, usage_data=credits)
+            plain, _ = tucked._usage_drawer(metrics, metrics[0], "worst", "codex", None)
+            tucked._usage_drawer(metrics, metrics[0], "worst", "codex", None, width=core.px(300),
+                                 horizontal=True, usage_data=credits)
+        # the rail keeps the balance short; the wide strip says it is in use
+        self.assertIn("1,987 credits", texts)
+        self.assertIn("1,987 credits · in use", texts)
+        self.assertEqual(card.height - plain.height, core.px(14))
+        # the strip reserves that room too, so the drawer stays on screen
+        for side in ("right", "top"):
+            _, _, with_line = tucked.render([], metrics, metrics[0], 0, side=side, provider="codex",
+                                            usage_open=True, usage_data=credits, max_height=core.px(700))
+            _, _, without = tucked.render([], metrics, metrics[0], 0, side=side, provider="codex",
+                                          usage_open=True, max_height=core.px(700))
+            self.assertEqual((with_line.panel[3]-with_line.panel[1]) - (without.panel[3]-without.panel[1]), core.px(14))
+
+    def test_usage_tab_and_tray_name_the_credits(self):
+        from PIL import Image, ImageDraw
+        credits = usage.build_credits(with_credits())
+        original = ImageDraw.ImageDraw.text
+        texts = []
+        def record(pen, xy, text, *args, **kwargs):
+            texts.append(text)
+            return original(pen, xy, text, *args, **kwargs)
+        pen = ImageDraw.Draw(Image.new("RGBA", (core.CONSOLE_W, core.px(400))))
+        with patch.object(ImageDraw.ImageDraw, "text", record):
+            core.render_usage(pen, usage.build_metrics(with_credits()), credits, usage.build_stats({}), 0)
+        self.assertIn("1,987 credits", texts)
+        self.assertTrue(any("on credits" in t for t in texts), texts)

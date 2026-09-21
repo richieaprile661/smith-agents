@@ -64,13 +64,24 @@ def _translated(boxes, x, y):
             for kind, x0, y0, x1, y1, agent in boxes]
 
 
-def _usage_height(horizontal, notice):
-    return c.px((66 if horizontal else 144) + (14 if notice else 0))
+def _credits(provider, usage_data, horizontal=False):
+    """The Codex credit line the drawer carries, if the account has credits.
+    The 88pt rail has room for the balance alone; there the accent colour
+    says it is in use. The wide strip spells it out."""
+    if provider != 'codex' or not isinstance(usage_data, dict) or usage_data.get('provider') != 'codex':
+        return None
+    line = usage_data['text'] + ' credits'
+    return line + (' · in use' if horizontal and usage_data.get('on_credits') else '')
+
+
+def _usage_height(horizontal, notice, credits=None):
+    return c.px((66 if horizontal else 144) + (14 if notice else 0) + (14 if credits else 0))
 
 
 def _usage_drawer(metrics, front, mode, provider, notice, width=RAIL_W, horizontal=False, usage_data=None):
     """Drawer content; the strip supplies its shared border and shadow."""
-    height = _usage_height(horizontal, notice)
+    credits = _credits(provider, usage_data, horizontal)
+    height = _usage_height(horizontal, notice, credits)
     card = Image.new('RGBA', (width, height), c._tok('paper'))
     pen = ImageDraw.Draw(card)
     metric = c.bar_reading(metrics, front, mode)
@@ -107,9 +118,16 @@ def _usage_drawer(metrics, front, mode, provider, notice, width=RAIL_W, horizont
     caption = ((label + ' used') if label else 'used') if metric else 'Unavailable'
     font = c.FONT('book', 9)
     pen.text((center-c.text_w(caption, font)//2, c.px(caption_y)), caption, font=font, fill=c._ink(62))
+    # Footer lines stack up from the bottom: the credit balance, then a notice.
+    footer = height-c.px(15)
+    if credits:
+        credits = c.elide(credits, font, width-c.px(8))
+        pen.text(((width-c.text_w(credits, font))//2, footer), credits, font=font,
+                 fill=c.provider_accent(provider) if usage_data.get('on_credits') else c._ink(78))
+        footer -= c.px(14)
     if notice:
         text = 'Not connected yet' if provider == 'hermes' else 'Last reading' if metric else 'Try again later'
-        pen.text(((width-c.text_w(text, font))//2, height-c.px(15)), text, font=font, fill=c._ink(62))
+        pen.text(((width-c.text_w(text, font))//2, footer), text, font=font, fill=c._ink(62))
     boxes = [('peek-usage-close', width-c.px(24), 0, width, c.px(24)-1, None)]
     if len(metrics) > 1:
         boxes.append(('peek-usage-cycle', 0, c.px(24), width, height, None))
@@ -469,11 +487,11 @@ def render(agents, metrics, front, now, side='right', mode='worst', max_height=N
                             side, max_height, usage_data) if usage_open else result)
     rail, boxes, scroll_max, selected_y = _strip(
         agents, now, selected, side,
-        max_height-(_usage_height(False, usage_notice) if usage_open else 0),
+        max_height-(_usage_height(False, usage_notice, _credits(provider, usage_data)) if usage_open else 0),
         scroll, figure_elapsed, provider, finish=not usage_open)
     rail_y = max(0, min(int(rail_y), max_height-rail.height))
     if usage_open:
-        drawer_h = _usage_height(False, usage_notice)
+        drawer_h = _usage_height(False, usage_notice, _credits(provider, usage_data))
         if rail_y < drawer_h and rail_y+rail.height+drawer_h > max_height:
             rail_y = max(0, max_height-rail.height-drawer_h)
     selected_agent = next((a for a in agents if a.get('id') == selected), None)

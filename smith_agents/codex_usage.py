@@ -203,6 +203,32 @@ def build_metrics(payload):
     return metrics
 
 
+def build_credits(payload):
+    """Purchased credits on the account, and whether it is running on them.
+
+    Codex reports credits beside the account limit: a balance, or unlimited.
+    When the weekly window is spent the account keeps working on credits, and
+    the payload says so; that is the moment the balance matters most."""
+    bucket = payload.get("rateLimits")
+    if not isinstance(bucket, dict):
+        buckets = payload.get("rateLimitsByLimitId")
+        bucket = buckets.get("codex") if isinstance(buckets, dict) else None
+    credits = bucket.get("credits") if isinstance(bucket, dict) else None
+    if not isinstance(credits, dict) or not credits.get("hasCredits"):
+        return None
+    unlimited = bool(credits.get("unlimited"))
+    try:
+        balance = float(credits.get("balance")) if credits.get("balance") is not None else None
+    except (TypeError, ValueError):
+        balance = None
+    if not unlimited and (balance is None or not math.isfinite(balance)):
+        return None
+    on_credits = (payload.get("ordinaryUsageAllowed") is False
+                  or bucket.get("rateLimitReachedType") == "rate_limit_reached")
+    return {"provider": "codex", "text": "Unlimited" if unlimited else format(round(balance), ","),
+            "balance": balance, "unlimited": unlimited, "on_credits": on_credits}
+
+
 def build_stats(payload, days=14, today=None):
     """Account statistics retain Codex's definitions and null/unknown values."""
     summary = payload.get("summary")

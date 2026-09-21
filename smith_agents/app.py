@@ -87,7 +87,7 @@ class SmithAgentsWidget:
         self._paint_xy = (0, 0)
         self._bar_size = (CONSOLE_W + SHADOW_PAD * 2, BAR_H + SHADOW_PAD * 2)
         self.stats = {}
-        self.codex_data = {"metrics": [], "stats": codex_usage.build_stats({}),
+        self.codex_data = {"metrics": [], "stats": codex_usage.build_stats({}), "credits": None,
                            "usage_error": "Loading Codex usage…", "stats_error": "Loading Codex stats…"}
         if not demo:
             try:
@@ -147,6 +147,8 @@ class SmithAgentsWidget:
             self.codex_data = {"metrics": codex_usage.build_metrics({"rateLimits": {
                 "primary": {"usedPercent": 37, "windowDurationMins": 300},
                 "secondary": {"usedPercent": 62, "windowDurationMins": 10080}}}),
+                "credits": codex_usage.build_credits({"rateLimits": {"credits": {
+                    "hasCredits": True, "unlimited": False, "balance": "1240"}}}),
                 "stats": codex_usage.build_stats({"summary": {"lifetimeTokens": 1234567,
                     "peakDailyTokens": 345678, "longestRunningTurnSec": 321,
                     "currentStreakDays": 3, "longestStreakDays": 8}, "dailyUsageBuckets": []}),
@@ -326,6 +328,8 @@ class SmithAgentsWidget:
                             self.codex_data[target] = builder(result[key])
                             self.codex_data[error_key] = None
                             self.codex_data[target + "_updated"] = time.time()
+                            if key == "limits":
+                                self.codex_data["credits"] = codex_usage.build_credits(result[key])
                         else:
                             self.codex_data[error_key] = result.get(key + "_error", "Codex reading unavailable")
                     cached = dict(self.codex_data)
@@ -403,7 +407,7 @@ class SmithAgentsWidget:
                 data = self.codex_data
                 error = data.get("usage_error")
                 stamp = data.get("metrics_updated")
-                return (list(data["metrics"]), None, None, [],
+                return (list(data["metrics"]), data.get("credits"), None, [],
                         ("codex", error) if error else None,
                         datetime.fromtimestamp(stamp) if stamp else None, dict(data["stats"]))
             return (list(self.metrics), self.spend, self.plan, list(self.active),
@@ -675,6 +679,8 @@ class SmithAgentsWidget:
             count = session.get('tokens')
             lines.append('Hermes tokens: ' + (core.compact_tokens(count) if count is not None else '—'))
             lines.append('Estimated cost: ' + hermes_usage.cost(session.get('estimated_cost_usd')))
+        elif spend and spend.get('provider') == 'codex':
+            lines.append("%-14s %s%s" % ("Credits", spend["text"], " · in use" if spend.get("on_credits") else ""))
         elif spend:
             lines.append("%-14s %s" % ("Credits", spend["text"]))
         lines.append("Active: %s" % (", ".join(active) if active else "idle"))

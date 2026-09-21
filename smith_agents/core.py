@@ -2352,15 +2352,25 @@ def render_header_signal(pen, metrics, provider, stale=False, usage_data=None):
         from .hermes_usage_ui import header
         header(pen, usage_data, stale)
         return
+    credits = usage_data if provider == 'codex' and isinstance(usage_data, dict) \
+        and usage_data.get('provider') == 'codex' else None
     for index, (label, metric) in enumerate(zip(('5h', 'week'), header_usage_metrics(metrics, provider))):
         center = px(116+42*index)
         font = FONT('bold', 9)
+        # A Codex plan without a 5h window leaves that field blank; an account
+        # with credits shows its balance there instead, lit while in use.
+        credit_slot = credits is not None and metric is None and index == 0
+        if credit_slot:
+            label = 'credits'
         pen.text((center-text_w(label, font)//2, px(8)), label, font=font, fill=_ink(100))
         draw_signal_field(pen, metric, provider, center-px(29)//2, px(24))
-        value = header_reading_value(metric, 'used') if metric else '—'
+        if credit_slot:
+            value, lit = credits['text'], bool(credits.get('on_credits'))
+        else:
+            value, lit = (header_reading_value(metric, 'used'), True) if metric else ('—', False)
         font = MONO('book', 13)
         pen.text((center-text_w(value, font)//2, px(58)), value, font=font,
-                 fill=provider_accent(provider) if metric else _ink(52))
+                 fill=provider_accent(provider) if lit else _ink(52))
     label = 'Usage unavailable' if provider == 'hermes' else 'Last reading · used' if stale else 'used'
     font = FONT('book', 7)
     pen.text((px(137)-text_w(label, font)//2, px(77)), label, font=font, fill=_ink(55))
@@ -2475,6 +2485,7 @@ def render_usage(pen, metrics, spend, stats, y):
                - track_x)
 
     row_y = y + px(10)
+    on_credits = bool(spend and spend.get("provider") == "codex" and spend.get("on_credits"))
     if not metrics:
         pen.text((PAD_X, row_y + px(5)), "No usage reading available", font=FONT("book", 11), fill=_ink(62))
         row_y += USAGE_ROW_H + USAGE_GAP
@@ -2489,7 +2500,9 @@ def render_usage(pen, metrics, spend, stats, y):
         name = {"session": "Session", "weekly": "Week"}.get(metric["key"],
                                                             metric["label"])
         if is_codex:
-            pen.text((PAD_X, row_y + px(2)), elide(metric["detail"], FONT("book", 10), CONSOLE_W-2*PAD_X),
+            # the spent account limit says so on its own row, where there is room
+            detail = metric["detail"] + (" · on credits" if on_credits and str(metric.get("key", "")).startswith("codex:codex:") else "")
+            pen.text((PAD_X, row_y + px(2)), elide(detail, FONT("book", 10), CONSOLE_W-2*PAD_X),
                      font=FONT("book", 10), fill=_ink(78))
         else:
             draw_tracked(pen, (PAD_X, mid - ascent(key_font) // 2),
@@ -2516,13 +2529,15 @@ def render_usage(pen, metrics, spend, stats, y):
     pen.line([(PAD_X, row_y), (CONSOLE_W - PAD_X, row_y)], fill=_ink(8))
     cost_font = MONO("bold", 13)
     note_font = FONT("book", 10)
-    cost = spend["text"] if spend else "—"
+    codex_credits = spend if spend and spend.get("provider") == "codex" else None
+    cost = (spend["text"] + " credits") if codex_credits else spend["text"] if spend else "—"
     pen.text((PAD_X, row_y + px(6)), cost, font=cost_font, fill=_tok("fg"))
     note = []
     tokens = stats.get("tokens")
     note.append("%s tokens" % (format_tokens(tokens) if tokens is not None else "—"))
     if stats.get("provider") == "codex":
         note.append("%dd" % stats.get("days", 14))
+
     else:
         note.append("{:,} turns".format(stats.get("turns", 0)))
     text = " · ".join(note)

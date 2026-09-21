@@ -64,6 +64,12 @@ switch providers. A missing reading shows **—**, not zero.
 The **Usage** tab keeps the detailed limits and reset times. Readings refresh
 about every five minutes, or through **Refresh now** in the tray menu.
 
+A Codex account with purchased credits shows the balance too: in the header
+where a plan has no 5-hour window, under the reading in the tucked drawer, on
+the **Usage** tab, and in the tray tooltip. When the weekly limit is spent and
+Codex keeps working on credits, the balance lights up and the limit row says
+**on credits**.
+
 ## Small at every edge
 
 <picture>

@@ -19,6 +19,8 @@ larger changes, and the one-line installer always installs the current
   clicking a portrait brings that window forward.
 - Live helper activity, with helpers shown compact under their parent.
 - README images rendered from the widget itself, in light and dark.
+- Codex credit balance in the header, the tucked drawer, the Usage tab, and
+  the tray, marked "on credits" once the weekly limit is spent.
 
 ### Fixed
 - Clean shutdown on SIGTERM, so the single-instance lock is released.
