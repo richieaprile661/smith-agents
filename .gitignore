@@ -46,3 +46,11 @@ credentials.json
 auth.json
 *.log
 .codex/
+
+# Design exploration output: imagegen runs, mockups, review pages. Hundreds of MB.
+/output/
+
+# Loose screenshots dropped in the repo root.
+/*.png
+/*.jpg
+/*.jpeg
