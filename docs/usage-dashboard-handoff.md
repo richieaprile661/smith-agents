@@ -8,6 +8,15 @@
 
 Saved 17 September 2026. The user wants to pause and possibly build this tomorrow. Do not start implementation simply because this handoff exists.
 
+## 21 September — snapshot saved
+
+The trial as it stood after the review pass is copied to
+`output/usage-dashboard-trial-2026-09-21/` and archived as
+`output/usage-dashboard-trial-2026-09-21.tar.gz`, both local and untracked.
+The folder holds the code, four screenshots of this state, this handoff, and
+the design 06 image, with a `SNAPSHOT.md` on how to restore it. Not committed:
+the repository is public and the trial carries real session excerpts.
+
 ## 21 September — review pass on the trial
 
 A UI and UX review of the running trial, then all findings applied:
