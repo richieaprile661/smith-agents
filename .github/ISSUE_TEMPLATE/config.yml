@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/richieaprile661/smith-agents/security/advisories/new
+    about: Private report, seen only by the maintainer. Please don't open a public issue for these.
+  - name: Setup guides
+    url: https://github.com/richieaprile661/smith-agents/tree/master/docs
+    about: Windows, Mac, Codex, and Hermes setup, before filing a setup issue.

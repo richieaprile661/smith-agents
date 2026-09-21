@@ -10,6 +10,14 @@
   — Agent Smith
 </p>
 
+<p align="center">
+  <a href="https://github.com/richieaprile661/smith-agents/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/richieaprile661/smith-agents/test.yml?branch=master&label=tests" alt="Tests on Windows and macOS"></a>
+  <a href="https://github.com/richieaprile661/smith-agents/releases"><img src="https://img.shields.io/github/v/release/richieaprile661/smith-agents?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2e7d32" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/python-3.10%2B-3776ab" alt="Python 3.10 or later">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-555" alt="Windows and macOS">
+</p>
+
 **Smith Agents** keeps your **Claude Code**, **Codex**, and **Hermes Agent** sessions in view on
 **Windows and macOS**. See what your agents are doing, check account usage, and
 jump back to a session from a small floating widget or a strip at the edge of
@@ -230,10 +238,13 @@ and [Mac setup](docs/macos.md).
 
 ## Feedback and development
 
-If something isn't working, [open an issue](https://github.com/richieaprile661/smith-agents/issues).
-Include your OS, the agent and app you use, the theme, and the steps to reproduce
-it. Remove private project names, conversations, and credentials from any
-screenshots or logs.
+If something isn't working, [open an issue](https://github.com/richieaprile661/smith-agents/issues/new/choose).
+The bug form asks for your OS, the agent and app you use, the theme, and the
+steps to reproduce it. Remove private project names, conversations, and
+credentials from any screenshots or logs. For a security problem, see
+[SECURITY.md](SECURITY.md). To contribute a change, see
+[CONTRIBUTING.md](CONTRIBUTING.md); what changed in each version is in
+[CHANGELOG.md](CHANGELOG.md).
 
 CI runs the tests and a sample-data launch on Windows and macOS. To run the checks,
 preview the figures, or regenerate these images, see

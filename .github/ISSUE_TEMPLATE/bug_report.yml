@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in the widget isn't working.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks. Please strip private project names, conversations, and credentials from anything you paste.
+        For a security problem, use the Security tab instead of an issue.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version and display scale
+      placeholder: e.g. Windows 11 at 125%, or macOS 15 on a Retina display
+  - type: checkboxes
+    id: providers
+    attributes:
+      label: Which agents were connected
+      options:
+        - label: Claude Code
+        - label: Codex
+        - label: Hermes Agent
+  - type: input
+    id: app
+    attributes:
+      label: Where the agent runs
+      placeholder: e.g. VS Code, Terminal, Cursor
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Theme
+      options:
+        - The Matrix
+        - Claude
+        - E-ink
+  - type: dropdown
+    id: layout
+    attributes:
+      label: Widget layout
+      options:
+        - Full widget
+        - Tucked to an edge
+        - Both
+  - type: textarea
+    id: steps
+    attributes:
+      label: What happened, and how to make it happen again
+      placeholder: |
+        1. ...
+        2. ...
+        Expected: ...
+        Got: ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshot or log lines
+      description: The log is in the application data folder named in the tray menu. Paste only the relevant lines.
