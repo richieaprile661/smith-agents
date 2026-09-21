@@ -226,6 +226,10 @@ def _agent_cell(agent, width, height, lines, selected, side, now, elapsed, visib
     ink = c.state_colour(agent.get('state'))
     if agent['id'] == selected:
         draw.rectangle((0, 0, width, height), fill=c._tint(ink, 10))
+    # The bottom hairline goes under the edge bars: at 1x a bar on the bottom
+    # edge is two pixels tall and the line drawn after it took one of them.
+    draw.line((0, height-1, width, height-1), fill=c._ink(8))
+    if agent['id'] == selected:
         if side in ('top', 'bottom'):
             y = height-c.px(2) if side == 'top' else 0
             draw.rectangle((c.px(3), y, width-c.px(3), y+c.px(2)), fill=ink)
@@ -243,7 +247,6 @@ def _agent_cell(agent, width, height, lines, selected, side, now, elapsed, visib
         else:
             edge = width-c.px(2) if side == 'right' else 0
             draw.rectangle((edge, c.px(3), edge+c.px(2), height-c.px(3)), fill=fg)
-    draw.line((0, height-1, width, height-1), fill=c._ink(8))
     figure = c.row_figure(agent, elapsed(agent) if elapsed else now,
                          FIGURE_W, FIGURE_H) if visible else None
     if figure:
