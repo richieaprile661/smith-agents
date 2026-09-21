@@ -23,6 +23,8 @@ larger changes, and the one-line installer always installs the current
   the tray, marked "on credits" once the weekly limit is spent.
 
 ### Fixed
+- A new main session takes the least-used Smith expression among open
+  sessions instead of a hash of its id, so faces stop repeating side by side.
 - Clean shutdown on SIGTERM, so the single-instance lock is released.
 - Stale launchers and duplicate widget relaunches.
 - Session rows keep the slot they were created in.

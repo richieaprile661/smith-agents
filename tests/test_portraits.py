@@ -39,6 +39,25 @@ class PortraitTests(unittest.TestCase):
         self.assertTrue(drawn <= set(portraits.EXPRESSIONS))
         # Forty sessions spread across the expressions rather than sharing one.
         self.assertGreater(len(drawn), 1)
+
+    def test_open_main_sessions_wear_distinct_faces_until_the_pool_runs_out(self):
+        """Nine sessions, nine expressions; a tenth repeats the least used."""
+        faces = portraits.Assignments()
+        mains = [{"id": "s%d" % i} for i in range(9)]
+        faces.assign(mains)
+        self.assertEqual({a["_portrait"] for a in mains}, set(portraits.EXPRESSIONS))
+        worn = {a["id"]: a["_portrait"] for a in mains}
+        # a tenth joins: nobody already listed changes, and it takes a face once used
+        faces.assign(mains + [{"id": "s9"}])
+        self.assertEqual({a["id"]: a["_portrait"] for a in mains}, worn)
+        # one leaves and a newcomer takes the face that became free
+        gone = mains.pop(3)
+        faces.assign(mains + [{"id": "new"}])
+        counts = {}
+        for a in mains + [{"id": "new", "_portrait": faces.choices["new"]}]:
+            counts[a["_portrait"]] = counts.get(a["_portrait"], 0) + 1
+        self.assertEqual(faces.choices["new"], gone["_portrait"])
+        self.assertEqual(set(counts.values()), {1})
         for agent in [{"id": "s", "sub": True}, {"id": "t", "sub": True, "state": "done"}]:
             self.assertIn(portraits.default_face(agent), portraits.HELPERS)
         self.assertIn(portraits.default_face({"id": "main"}), portraits.EXPRESSIONS)

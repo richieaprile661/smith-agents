@@ -8,14 +8,13 @@ the widget, as the mockup's CSS ``filter:brightness(1.25)`` and
 ``mix-blend-mode:screen`` do.
 
 Face assignment: every main session is Smith, wearing one of his nine session
-expressions, chosen from a hash of the session id - so it looks arbitrary, it
-never changes while the session lives, and a new session can bring a new
-expression. Subagents never get Smith: they draw from Brown,
-Jones, Johnson, Jackson and Thompson, least used first among the subagents
-currently listed, ties broken by a hash of the session id. A face stays with
-its session through state changes, rescans and reordering, until the session
-leaves the list. With more than five subagents the faces repeat, still least
-used first.
+expressions; subagents never get Smith and draw from Brown, Jones, Johnson,
+Jackson and Thompson. Both pools follow one rule: a new session takes the face
+least used among the sessions of its kind currently listed, ties broken by a
+hash of the session id, so two sessions side by side do not wear the same face
+until the pool runs out. A face stays with its session through state changes,
+rescans and reordering, until the session leaves the list; with more sessions
+than faces they repeat, still least used first.
 """
 import json
 import math
@@ -106,25 +105,24 @@ class Assignments:
     def assign(self, agents):
         identities = {agent.get("id") or agent.get("name") or "" for agent in agents}
         self.choices = {key: name for key, name in self.choices.items() if key in identities}
-        counts = {name: 0 for name in HELPERS}
-        pending = []
-        for agent in agents:
-            identity = agent.get("id") or agent.get("name") or ""
-            if not agent.get("sub"):
-                # One picker for main sessions, the same one ``face`` falls
-                # back to, so the first paint and every later one agree.
-                self.choices[identity] = default_face(agent)
-            elif self.choices.get(identity) in HELPERS:
-                counts[self.choices[identity]] += 1
-            else:
-                pending.append(identity)
-        # Input order must not decide a new batch.
-        for identity in sorted(set(pending)):
-            least = min(counts.values())
-            candidates = [name for name in HELPERS if counts[name] == least]
-            name = candidates[zlib.crc32(identity.encode("utf-8")) % len(candidates)]
-            self.choices[identity] = name
-            counts[name] += 1
+        for pool, wanted in ((EXPRESSIONS, False), (HELPERS, True)):
+            counts = {name: 0 for name in pool}
+            pending = []
+            for agent in agents:
+                if bool(agent.get("sub")) != wanted:
+                    continue
+                identity = agent.get("id") or agent.get("name") or ""
+                if self.choices.get(identity) in pool:
+                    counts[self.choices[identity]] += 1
+                else:
+                    pending.append(identity)
+            # Input order must not decide a new batch.
+            for identity in sorted(set(pending)):
+                least = min(counts.values())
+                candidates = [name for name in pool if counts[name] == least]
+                name = candidates[zlib.crc32(identity.encode("utf-8")) % len(candidates)]
+                self.choices[identity] = name
+                counts[name] += 1
         for agent in agents:
             agent["_portrait"] = self.choices[agent.get("id") or agent.get("name") or ""]
 

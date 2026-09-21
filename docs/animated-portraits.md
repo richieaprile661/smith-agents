@@ -29,6 +29,11 @@ Portrait colour is independent of the theme's status text and provider lamps.
 Reduced motion is respected. Faces stay with a session across state changes,
 rescans and row reordering.
 
+A new session takes the face least used among the open sessions of its kind,
+main sessions from Smith's nine expressions and helpers from his five
+colleagues, with a hash of the session id breaking ties. Two sessions side by
+side never share a face until the pool runs out.
+
 ## Rendering notes
 
 - Expanded portraits occupy 42 logical pixels; tucked edge portraits 40.
