@@ -1,5 +1,6 @@
 """The packaged dashboard: its reader, its local server, and the widget's
 shortcut to it. Every record here is synthetic; nothing reads real history."""
+import io
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 _config = tempfile.TemporaryDirectory(prefix="widget-dashboard-tests-")
 os.environ["SMITH_AGENTS_CONFIG_DIR"] = _config.name
@@ -683,9 +684,28 @@ class WidgetShortcut(unittest.TestCase):
         self.assertNotEqual(widget.config.get('dashboard_project'), '/work/one')
 
     @unittest.skipUnless(sys.platform == 'win32', 'the Windows platform module')
-    def test_windows_opens_an_edge_app_window_and_falls_back_to_the_browser(self):
+    def test_windows_opens_one_webview_window_and_hands_it_each_address(self):
         from smith_agents import platform_win32 as win
-        with patch.object(win, '_edge_path', return_value='C:/Edge/msedge.exe'), \
+        child = MagicMock()
+        child.poll.return_value = None
+        with patch.object(win, '_dashboard', None), \
+             patch('importlib.util.find_spec', return_value=object()), \
+             patch.object(win.subprocess, 'Popen', return_value=child) as popen:
+            win.open_dashboard_window('http://127.0.0.1:1/#k=x')
+            win.open_dashboard_window('http://127.0.0.1:1/#k=x&project=p')
+        popen.assert_called_once()
+        argv = popen.call_args[0][0]
+        self.assertEqual(argv[1:], ['-m', 'smith_agents.dashboard.window'])
+        self.assertNotIn('k=x', ' '.join(argv))        # the key never rides on a command line
+        self.assertEqual([c.args[0] for c in child.stdin.write.call_args_list],
+                         ['http://127.0.0.1:1/#k=x\n', 'http://127.0.0.1:1/#k=x&project=p\n'])
+
+    @unittest.skipUnless(sys.platform == 'win32', 'the Windows platform module')
+    def test_windows_without_pywebview_falls_back_to_edge_then_the_browser(self):
+        from smith_agents import platform_win32 as win
+        with patch.object(win, '_dashboard', None), \
+             patch('importlib.util.find_spec', return_value=None), \
+             patch.object(win, '_edge_path', return_value='C:/Edge/msedge.exe'), \
              patch.object(win.subprocess, 'Popen') as popen, \
              patch('webbrowser.open') as browser:
             win.open_dashboard_window('http://127.0.0.1:1/#k=x')
@@ -694,8 +714,46 @@ class WidgetShortcut(unittest.TestCase):
         browser.assert_not_called()
         with patch.object(win, '_edge_path', return_value=None), \
              patch('webbrowser.open', return_value=True) as browser:
-            win.open_dashboard_window('http://127.0.0.1:1/')
+            win.open_in_browser('http://127.0.0.1:1/')
         browser.assert_called_once_with('http://127.0.0.1:1/')
+
+    def test_git_history_never_flashes_a_console_window(self):
+        with patch.object(history.subprocess, 'run',
+                          return_value=SimpleNamespace(stdout='')) as run:
+            history.git_milestones('/work/one')
+        self.assertEqual(run.call_args.kwargs['creationflags'], history.NO_WINDOW)
+        self.assertEqual(run.call_args.kwargs['stdin'], history.subprocess.DEVNULL)
+
+    def test_the_window_process_opens_the_first_address_and_follows_later_ones(self):
+        from smith_agents.dashboard import window as dashboard_window
+        fake = MagicMock()
+        view = fake.create_window.return_value
+        fake.start.side_effect = lambda func, args, **_: func(*args)
+        stdin = io.StringIO('http://127.0.0.1:1/#k=x\n'
+                            'http://127.0.0.1:1/#k=x\n'
+                            'http://127.0.0.1:1/#k=x&project=p\n')
+        with patch.dict(sys.modules, {'webview': fake}):
+            self.assertEqual(dashboard_window.main(stdin), 0)
+        self.assertEqual(fake.create_window.call_args[0][1], 'http://127.0.0.1:1/#k=x')
+        self.assertEqual(fake.start.call_args.kwargs['gui'], 'edgechromium')
+        # The same address only raises the window; another one reloads it.
+        view.evaluate_js.assert_called_once()
+        self.assertIn('project=p', view.evaluate_js.call_args[0][0])
+        self.assertEqual(view.show.call_count, 2)
+        # The widget's exit closes stdin, and the window with it.
+        view.destroy.assert_called_once()
+
+    def test_the_window_process_falls_back_to_a_browser_without_webview2(self):
+        from smith_agents.dashboard import window as dashboard_window
+        fake = MagicMock()
+        fake.start.side_effect = RuntimeError('WebView2 runtime missing')
+        browser = MagicMock()
+        with patch.dict(sys.modules, {'webview': fake,
+                                      'smith_agents.platform_win32': SimpleNamespace(open_in_browser=browser)}), \
+             patch('smith_agents.core.log_line') as log:
+            self.assertEqual(dashboard_window.main(io.StringIO('http://127.0.0.1:1/#k=x\n')), 1)
+        browser.assert_called_once_with('http://127.0.0.1:1/#k=x')
+        self.assertIn('WebView2', log.call_args[0][0])
 
     def test_a_deleted_workspace_opens_the_dashboard_without_one(self):
         widget = self.widget(dashboard_project='/work/gone')

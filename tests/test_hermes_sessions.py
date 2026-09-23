@@ -1,6 +1,7 @@
 """Hermes compatibility uses synthetic registry, process, and SQLite fixtures."""
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -255,6 +256,25 @@ class HermesTests(unittest.TestCase):
                     self.assertFalse(max(x0, other[1]) < min(x1, other[3])
                                      and max(y0, other[2]) < min(y1, other[4]))
 
+
+
+class HermesHome(unittest.TestCase):
+    def test_home_is_found_where_hermes_keeps_it_on_each_platform(self):
+        env = {k: v for k, v in os.environ.items() if k != 'HERMES_HOME'}
+        with patch.dict(os.environ, dict(env, LOCALAPPDATA='C:/Users/me/AppData/Local'), clear=True):
+            with patch.object(hermes.sys, 'platform', 'win32'):
+                self.assertEqual(hermes.home(), Path('C:/Users/me/AppData/Local') / 'hermes')
+            with patch.object(hermes.sys, 'platform', 'darwin'):
+                self.assertEqual(hermes.home(), Path.home() / '.hermes')
+        with patch.dict(os.environ, {'HERMES_HOME': '/custom/hermes'}):
+            with patch.object(hermes.sys, 'platform', 'win32'):
+                self.assertEqual(hermes.home(), Path('/custom/hermes'))
+
+    def test_the_dashboard_reads_the_same_hermes_database(self):
+        from smith_agents.dashboard import history
+        with patch.object(history, 'hermes_home', return_value=Path('/h')):
+            self.assertEqual(history.hermes_database(), Path('/h/state.db'))
+        self.assertEqual(history.hermes_database('/x'), Path('/x/state.db'))
 
 if __name__ == "__main__":
     unittest.main()

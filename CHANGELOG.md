@@ -3,6 +3,17 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.5 — 23 September 2026
+
+### Fixed
+- Windows: the dashboard opens in its own window (WebView2), as on macOS,
+  instead of an Edge app window that could keep reopening. Opening it again
+  brings the same window forward. Without WebView2 it falls back to Edge.
+- Windows: the dashboard's git history reads and the Hermes balance check no
+  longer flash console windows.
+- Windows: Hermes is found in `%LOCALAPPDATA%\hermes`, where Hermes keeps it
+  there, so its balance and sessions appear.
+
 ## 1.1.4 — 23 September 2026
 
 ### Added

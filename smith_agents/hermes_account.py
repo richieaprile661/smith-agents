@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import sys
 import threading
 import time
 
@@ -55,7 +56,9 @@ def read(root=None, run=subprocess.run):
     code, python = found
     try:
         result = run([str(python), '-c', _READER, str(code)], capture_output=True, text=True,
-                     timeout=READ_TIMEOUT, cwd=str(code), stdin=subprocess.DEVNULL)
+                     timeout=READ_TIMEOUT, cwd=str(code), stdin=subprocess.DEVNULL,
+                     # Hermes's python.exe is a console program: keep its window hidden.
+                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
     except (OSError, subprocess.SubprocessError) as exc:
         raise Unavailable('Nous balance unavailable · retrying') from exc
     lines = [line for line in (result.stdout or '').splitlines() if line.startswith('{')]

@@ -14,9 +14,14 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 import tempfile
 
+from ..hermes_sessions import home as hermes_home
+
 FILE_CACHE = {}
+# Without it, each git call from the console-less widget flashes a console on Windows.
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 # Scratch checkouts are not projects anyone wants a build story for.
 SCRATCH = tuple(dict.fromkeys(
     ('/tmp', '/private/tmp', '/var/folders', os.path.realpath(tempfile.gettempdir()),
@@ -195,7 +200,7 @@ HERMES_TOOLS = {'terminal': 'Command calls', 'execute_code': 'Command calls',
 
 
 def hermes_database(value=None):
-    return Path(value or os.environ.get('HERMES_HOME') or Path.home() / '.hermes') / 'state.db'
+    return (Path(value) if value else hermes_home()) / 'state.db'
 
 
 def _hermes_rows(query, args=(), database=None):
@@ -544,7 +549,8 @@ def normalize_sessions(parsed, project):
 def git_milestones(project):
     try:
         result = subprocess.run(['git', 'log', '--all', '--format=%H%x00%cI%x00%s'], cwd=project,
-                                capture_output=True, text=True, timeout=15, check=True)
+                                capture_output=True, text=True, timeout=15, check=True,
+                                stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
     except (OSError, subprocess.SubprocessError):
         return []          # not a repository, or git is unavailable
     commits = []

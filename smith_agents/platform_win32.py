@@ -494,12 +494,39 @@ def _edge_path():
             return path
     return None
 
-def open_dashboard_window(url):
-    """Show the dashboard as its own app window, not a browser tab.
+_dashboard = None
 
-    Edge ships with Windows 10 and 11, and its app mode draws a plain window
-    with no tabs or address bar. A browser tab is the fallback without it.
+
+def open_dashboard_window(url):
+    """Show the dashboard in Smith's own window, as on macOS.
+
+    The window is a WebView2 view in a helper process (`dashboard.window`),
+    which gets each address on its stdin. One window: opening it again brings
+    it forward and switches the project. Without pywebview, a browser shows it.
     """
+    global _dashboard
+    if _dashboard is not None and _dashboard.poll() is None:
+        try:
+            _dashboard.stdin.write(url + "\n")
+            _dashboard.stdin.flush()
+            return
+        except (OSError, ValueError):
+            pass                                # it closed as we wrote: start anew
+    import importlib.util
+    if importlib.util.find_spec("webview") is None:
+        open_in_browser(url)
+        return
+    _dashboard = subprocess.Popen(
+        [_sibling_exe("pythonw.exe"), "-m", "smith_agents.dashboard.window"],
+        cwd=os.path.dirname(SCRIPT_DIR), stdin=subprocess.PIPE,
+        text=True, encoding="utf-8", close_fds=True)
+    _dashboard.stdin.write(url + "\n")
+    _dashboard.stdin.flush()
+
+
+def open_in_browser(url):
+    """Edge's app mode draws a plain window with no tabs or address bar; a
+    browser tab is the fallback without Edge."""
     edge = _edge_path()
     if edge:
         try:

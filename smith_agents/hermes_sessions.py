@@ -11,11 +11,19 @@ import math
 import os
 from pathlib import Path
 import sqlite3
+import sys
 import time
 
 
 def home():
-    return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes").expanduser()
+    """Where Hermes keeps its state, found the way Hermes finds it: HERMES_HOME,
+    else %LOCALAPPDATA%\\hermes on Windows and ~/.hermes elsewhere."""
+    if os.environ.get("HERMES_HOME", "").strip():
+        return Path(os.path.expandvars(os.environ["HERMES_HOME"].strip())).expanduser()
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "").strip()
+        return (Path(local) if local else Path.home() / "AppData" / "Local") / "hermes"
+    return Path.home() / ".hermes"
 
 
 def _number(value):

@@ -54,6 +54,18 @@ class Install(unittest.TestCase):
         self.assertEqual(argv[0], str(python))
         self.assertEqual(kwargs['stdin'], subprocess.DEVNULL)
 
+    def test_the_reader_never_flashes_a_console_window_on_windows(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.fake(folder)
+            calls = []
+            def run(argv, **kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(returncode=0, stdout=json.dumps(dict(reading(), available=True)))
+            with patch.object(hermes_account.sys, 'platform', 'win32'), \
+                 patch.object(subprocess, 'CREATE_NO_WINDOW', 0x08000000, create=True):
+                hermes_account.read(folder, run=run)
+        self.assertEqual(calls[0]['creationflags'], 0x08000000)
+
     def test_failures_and_sign_out_are_reported_not_raised_raw(self):
         with tempfile.TemporaryDirectory() as folder:
             self.fake(folder)

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "smith-agents"
-version = "1.1.4"
+version = "1.1.5"
 description = "Smith Agents: a floating Windows and macOS console for Claude Code, Codex, and Hermes"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,6 +26,7 @@ dependencies = [
     "pyobjc-framework-Cocoa>=11; sys_platform == 'darwin'",
     "pyobjc-framework-WebKit>=11; sys_platform == 'darwin'",
     "psutil>=6",
+    "pywebview>=5; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
