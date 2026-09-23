@@ -756,6 +756,9 @@ class PackagedAssets(unittest.TestCase):
         from smith_agents.dashboard import service
         for source, _ in service.ASSETS.values():
             path = source() if callable(source) else source
+            if isinstance(path, bytes):                 # drawn at run time
+                self.assertTrue(path.startswith(b'\x89PNG'))
+                continue
             with self.subTest(path=path.name):
                 self.assertTrue(path.is_file(), '%s is missing from the package' % path)
 

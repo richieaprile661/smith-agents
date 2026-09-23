@@ -26,6 +26,8 @@ let sessionById={};
 const sourceOf=id=>sessionById[id]?.provider||'Codex';
 const bySource=events=>{const t=Object.fromEntries(SOURCES.map(([n])=>[n,0]));events.forEach(e=>{const p=sourceOf(e.session);t[p]=(t[p]||0)+e.tokens[0]+e.tokens[2];});return t;};
 const sourceClass=name=>(SOURCES.find(([n])=>n===name)||[,'codex'])[1];
+// The widget's own glowing provider logos, served by the dashboard.
+const mark=(name,cls='mark')=>{const img=node('img',cls);img.src='/source/'+sourceClass(name)+'.png';img.alt=name;img.title=name;return img;};
 const sessionTitle=s=>s?.title||(s?`${s.helper?'Helper':s.provider} · ${s.id.slice(0,6)}`:'Recorded work');
 const exact=v=>v.toLocaleString('en-GB');
 const day=at=>at.slice(0,10);
@@ -61,7 +63,7 @@ function buildBuckets(){
 function renderSources(main,helperCount){
   const list=$('bySource');list.replaceChildren();const tokens=bySource(scopedEvents);
   SOURCES.forEach(([name,cls])=>{const n=main.filter(s=>s.provider===name).length,li=node('li',n?'':'none');
-    li.append(node('i','src-'+cls),node('span','source-name',name),node('span','source-count',plural(n,'session')));
+    li.append(mark(name),node('span','source-name',name),node('span','source-count',plural(n,'session')));
     const t=node('strong','',tokens[name]?fmt(tokens[name]):'—');if(tokens[name])t.title=exact(tokens[name])+' new tokens';li.append(t);list.append(li);});
   if(helperCount)list.append(node('li','source-helpers',`+ ${plural(helperCount,'helper session')}, counted in the session that launched them`));
 }
@@ -135,7 +137,7 @@ function renderTimeline(){
   for(let i=0;i<offset;i++)grid.append(node('span'));
   for(let i=1;i<=last;i++){
    const key=month+'-'+String(i).padStart(2,'0'),active=days.includes(key),cell=node('button','cal-cell',String(i));cell.disabled=!active;cell.dataset.day=key;cell.setAttribute('aria-pressed',String(key===calendarDay));
-   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(scopedEvents.filter(e=>day(e.at)===key)),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});cell.append(node('strong','cal-tokens',fmt(totals[key])),bar,node('small','cal-sample','allowance not recorded'));cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\nNo account allowance reading was recorded for this day.';cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
+   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(scopedEvents.filter(e=>day(e.at)===key)),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});const marks=node('span','cal-marks');SOURCES.forEach(([name])=>{if(split[name])marks.append(mark(name,'mark tiny'));});cell.append(marks,node('strong','cal-tokens',fmt(totals[key])),bar,node('small','cal-sample','allowance not recorded'));cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\nNo account allowance reading was recorded for this day.';cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
    cell.onclick=()=>{calendarDay=key;selected=null;renderTimeline();};grid.append(cell);
   }
   section.append(grid);host.append(section);
@@ -177,7 +179,7 @@ function renderDay(){
     const li=node('li'),open=b.key===selected,button=node('button','day-session');
     button.setAttribute('aria-expanded',String(open));
     const text=node('span','day-session-text');const started=[...b.events,...b.actions].map(e=>e.at).sort()[0];
-    const provider=b.sessions[0]?.provider||'Codex',tag=node('span','source-tag src-text-'+sourceClass(provider),provider);const meta=node('small','',` ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}${b.events.some(e=>e.estimated)?' · estimated':''}`);meta.prepend(tag);text.append(node('span','day-session-title',b.title),meta);
+    const provider=b.sessions[0]?.provider||'Codex',tag=mark(provider,'mark inline');const meta=node('small','',` ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}${b.events.some(e=>e.estimated)?' · estimated':''}`);meta.prepend(tag);text.append(node('span','day-session-title',b.title),meta);
     const amount=node('strong','',fmt(b.work));amount.title=exact(b.work)+' new tokens';
     const share=node('span','day-share');share.setAttribute('aria-hidden','true');const fill=node('i');fill.style.width=(newTokens?b.work/newTokens*100:0).toFixed(1)+'%';share.append(fill);
     button.append(text,amount,share);button.onclick=()=>{selected=open?null:b.key;renderDay();};li.append(button);

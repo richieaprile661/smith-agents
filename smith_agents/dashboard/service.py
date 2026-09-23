@@ -30,7 +30,26 @@ ASSETS = {
     '/plan-usage.js': (WEB / 'plan-usage.js', 'text/javascript'),
     '/plan-usage.css': (WEB / 'plan-usage.css', 'text/css'),
     '/logo.png': (lambda: brand_mark(), 'image/png'),
+    # The widget's own glowing provider marks, drawn by the same code.
+    '/source/claude.png': (lambda: source_mark('claude'), 'image/png'),
+    '/source/codex.png': (lambda: source_mark('codex'), 'image/png'),
+    '/source/hermes.png': (lambda: source_mark('hermes'), 'image/png'),
 }
+
+
+def source_mark(provider):
+    """A provider's logo with its coloured halo, as the widget shows the
+    selected account, encoded once per run."""
+    if provider not in _MARKS:
+        import io
+        from .. import core
+        stream = io.BytesIO()
+        core.provider_lamp(provider, True, 18).save(stream, format='PNG')
+        _MARKS[provider] = stream.getvalue()
+    return _MARKS[provider]
+
+
+_MARKS = {}
 
 
 def brand_mark():
@@ -74,7 +93,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             source = asset[0]() if callable(asset[0]) else asset[0]
-            body = source.read_bytes()
+            body = source if isinstance(source, bytes) else source.read_bytes()
         except OSError:
             self.fail(404)
             return
