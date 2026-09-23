@@ -1,5 +1,7 @@
 # Usage dashboard — saved for the next session
 
+> **Latest implementation handoff:** The user approved the widget dashboard shortcut and tray-menu entry. See [Dashboard implementation handoff — Opus 5](dashboard-implementation-handoff-opus-5.md) for the approved artifact, current compact-calendar and connected Plan usage trial, integration requirements, and acceptance checks. The older snapshot and narrative below predate these changes.
+
 > **Local references.** Links into `../design/` and `../output/` point at
 > untracked local directories and will not resolve in a fresh clone. The
 > selected design reference is committed as
