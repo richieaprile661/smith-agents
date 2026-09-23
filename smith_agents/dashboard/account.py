@@ -16,7 +16,7 @@ import math
 import threading
 import time
 
-from .. import codex_usage, core
+from .. import codex_usage, core, hermes_account, hermes_usage
 
 # A widget reading older than this is shown as the last available one rather
 # than as the current state of the account.
@@ -25,6 +25,7 @@ STALE_AFTER = 600
 # readings, and the floor after a provider asks us to slow down.
 MIN_INTERVAL = 30
 RATELIMIT_BACKOFF = 120
+HERMES_INTERVAL = 120
 
 BUSY_MESSAGE = 'Usage endpoint is busy; retrying later.'
 UNAVAILABLE_MESSAGE = 'Unable to read account usage. Check sign-in in the provider app.'
@@ -50,9 +51,26 @@ def read_codex():
         client.close()
 
 
+_HERMES_SPEND = hermes_account.Spend()
+
+
+def read_hermes():
+    """The Nous balance behind Hermes, and Hermes's own estimate for today."""
+    reading = hermes_account.read()
+    try:
+        today = hermes_usage.fetch().get('today_cost')
+    except hermes_usage.Unavailable:
+        today = None
+    return [], None, time.time(), dict(reading, spend=_HERMES_SPEND.add(reading['left']), today=today)
+
+
 def collectors():
-    """Resolved per call, so a reader can be substituted for a test."""
-    return (('Claude', read_claude), ('Codex', read_codex))
+    """Resolved per call, so a reader can be substituted for a test. Hermes
+    is offered only where it is installed."""
+    readers = [('Claude', read_claude), ('Codex', read_codex)]
+    if hermes_account.install() is not None:
+        readers.append(('Hermes', read_hermes))
+    return tuple(readers)
 
 
 class Readings:
@@ -108,6 +126,23 @@ class Readings:
             return None
         return {'text': text, 'on_credits': bool(value.get('on_credits'))}
 
+    @staticmethod
+    def balance(value):
+        """A money reading: dollar figures, plan words and dates only."""
+        if not isinstance(value, dict):
+            return None
+        number = lambda v: float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) \
+            and math.isfinite(v) else None
+        result = {k: number(value.get(k)) for k in
+                  ('left', 'plan_left', 'topup_left', 'plan_spent', 'plan_total', 'today')}
+        if result['left'] is None:
+            return None
+        for key in ('plan', 'status', 'renews', 'renews_at'):
+            result[key] = value[key] if isinstance(value.get(key), str) else None
+        spend = value.get('spend') if isinstance(value.get('spend'), dict) else {}
+        result['spend'] = {k: number(spend.get(k)) for k in ('spent', 'since', 'pace', 'hours_left')}
+        return result
+
     # -- collecting --------------------------------------------------------
     def from_widget(self):
         """The widget's last readings, with no account request of our own."""
@@ -123,9 +158,10 @@ class Readings:
             name = reading.get('provider')
             observed = reading.get('observed_at') or 0
             limits = self.limits(name, reading.get('metrics'), observed or now)
-            error = reading.get('error') or (None if limits else UNAVAILABLE_MESSAGE)
+            balance = self.balance(reading.get('balance'))
+            error = reading.get('error') or (None if limits or balance else UNAVAILABLE_MESSAGE)
             stale = bool(error) or not observed or now - observed > STALE_AFTER
-            providers.append({'provider': name, 'limits': limits,
+            providers.append({'provider': name, 'limits': limits, 'balance': balance,
                               'credits': self.credits(reading.get('credits')),
                               'observed_at': observed or None, 'stale': stale,
                               'error': error, 'source': 'widget'})
@@ -138,13 +174,17 @@ class Readings:
         if previous.get('retry_at', 0) > now:
             return previous
         try:
-            metrics, credits, observed = reader()
+            metrics, credits, observed, *extra = reader()
             limits = self.limits(provider, metrics, observed)
-            if not limits:
+            balance = self.balance(extra[0]) if extra else None
+            if not limits and not balance:
                 raise ValueError('No limits')
-            value = {'provider': provider, 'limits': limits, 'credits': self.credits(credits),
+            value = {'provider': provider, 'limits': limits, 'balance': balance,
+                     'credits': self.credits(credits),
                      'observed_at': observed, 'stale': False, 'error': None,
-                     'source': 'collector', 'retry_at': now + MIN_INTERVAL}
+                     'source': 'collector',
+                     # The Nous balance is read at the widget's own two-minute pace.
+                     'retry_at': now + (HERMES_INTERVAL if provider == 'Hermes' else MIN_INTERVAL)}
         except Exception as error:
             rate_limited = isinstance(error, core.UsageError) and error.kind == 'ratelimit'
             delay = (max(RATELIMIT_BACKOFF, getattr(error, 'retry_after', 0) or 0)

@@ -63,9 +63,34 @@ def fetch(root=None):
                                         'ORDER BY model LIMIT ?', (session['id'], MODEL_LIMIT+1)).fetchall()
                     session['models'] = [normalize(row) for row in models[:MODEL_LIMIT]]
                     session['models_limited'] = len(models) > MODEL_LIMIT
-            return {'sessions': sessions, 'limited': len(raw) > SESSION_LIMIT, 'updated': time.time()}
+            return {'sessions': sessions, 'limited': len(raw) > SESSION_LIMIT, 'updated': time.time(),
+                    'today_cost': _today_cost(db, columns)}
     except sqlite3.Error as exc:
         raise Unavailable('Hermes database unavailable · retrying') from exc
+
+
+def _today_cost(db, columns):
+    """Today's estimated cost. A session that ran across midnight counts
+    here in proportion to its replies written today."""
+    if 'estimated_cost_usd' not in columns:
+        return None
+    start = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+    try:
+        rows = _today_rows(db, start)
+    except sqlite3.Error:
+        return None                 # an optional reading never hides the sessions
+    total = 0.0
+    for estimate, replies, today in rows:
+        if isinstance(estimate, (int, float)) and math.isfinite(estimate) and estimate > 0 and replies:
+            total += estimate * today / replies
+    return total
+
+
+def _today_rows(db, start):
+    return db.execute("SELECT s.estimated_cost_usd, COUNT(m.rowid), "
+                      "SUM(CASE WHEN m.timestamp >= ? THEN 1 ELSE 0 END) FROM sessions s "
+                      "JOIN messages m ON m.session_id = s.id AND m.role = 'assistant' "
+                      "GROUP BY s.id HAVING MAX(m.timestamp) >= ?", (start, start)).fetchall()
 
 
 def select(data, identity=None, live_ids=(), model_index=0):

@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 from datetime import datetime
-from . import core, artwork, figure_actions, portraits, tucked, codex_usage, hermes_usage
+from . import core, artwork, figure_actions, portraits, tucked, codex_usage, hermes_usage, hermes_account
 from .runtime import backend
 from .permissions import answer_permission
 from .core import (
@@ -78,6 +78,9 @@ class SmithAgentsWidget:
         self.codex_wake = threading.Event()
         self.hermes_wake = threading.Event()
         self.hermes_data = {'sessions': [], 'error': 'Loading Hermes usage…'}
+        # The Nous balance behind Hermes, and real spend measured from it.
+        self.hermes_account = {'reading': None, 'spend': None, 'updated': None, 'error': None}
+        self.hermes_spend = hermes_account.Spend()
         self.hermes_session_id = None
         self.hermes_model_index = 0
         self._drag = None
@@ -154,12 +157,18 @@ class SmithAgentsWidget:
                     "currentStreakDays": 3, "longestStreakDays": 8}, "dailyUsageBuckets": []}),
                 "usage_error": None, "stats_error": None}
             self.hermes_data = hermes_usage.demo_data()
+            self.hermes_account = {'reading': {'left': 15.75, 'plan': 'Plus', 'plan_spent': 22.0,
+                'plan_total': 22.0, 'plan_left': 0.0, 'topup_left': 15.75, 'status': 'healthy',
+                'renews': 'Oct 17, 2026', 'renews_at': None},
+                'spend': {'spent': 0.42, 'since': time.time() - 1500, 'pace': 1.01, 'hours_left': 15.6},
+                'updated': time.time(), 'error': None}
             self.plan = "Demo"
             self.updated_at = datetime.now()
         else:
             threading.Thread(target=self._poll_loop, daemon=True).start()
             threading.Thread(target=self._codex_poll_loop, daemon=True).start()
             threading.Thread(target=self._hermes_poll_loop, daemon=True).start()
+            threading.Thread(target=self._hermes_account_loop, daemon=True).start()
         platform.start_tray(self.tray)
         self.root.after(120, self._tick)
         if not demo and hasattr(platform, "offer_accessibility_setup"):
@@ -357,6 +366,24 @@ class SmithAgentsWidget:
             self.hermes_wake.wait(30)
             self.hermes_wake.clear()
 
+    def _hermes_account_loop(self):
+        """Read the Nous balance every two minutes while Hermes is installed."""
+        if hermes_account.install() is None:
+            return
+        while not self.stopping.is_set():
+            try:
+                reading = hermes_account.read()
+                spend = self.hermes_spend.add(reading['left'])
+                with self.lock:
+                    self.hermes_account = {'reading': reading, 'spend': spend,
+                                           'updated': time.time(), 'error': None}
+            except Exception as exc:
+                message = str(exc) if isinstance(exc, hermes_account.Unavailable) else 'Nous balance unavailable'
+                with self.lock:
+                    self.hermes_account = dict(self.hermes_account, error=message)
+            if self.stopping.wait(120):
+                break
+
     def _navigate_hermes(self, kind, direction):
         data = self._snapshot()[6]
         sessions = data.get('sessions', [])
@@ -400,6 +427,7 @@ class SmithAgentsWidget:
                     [a.get('session_id') for a in getattr(self, 'agents', [])
                      if a.get('provider') == 'hermes' and a.get('state') != 'closed'],
                     getattr(self, 'hermes_model_index', 0))
+                data['account'] = dict(getattr(self, 'hermes_account', {}))
                 error, stamp = data.get('error'), data.get('updated')
                 return ([], data, None, [], ('hermes', error) if error else None,
                         datetime.fromtimestamp(stamp) if stamp else None, data)
@@ -737,7 +765,9 @@ class SmithAgentsWidget:
             error = self.error
             claude_at = self.updated_at.timestamp() if self.updated_at else 0
             codex = dict(self.codex_data)
-        return [
+            hermes = dict(getattr(self, 'hermes_account', {}))
+            today = getattr(self, 'hermes_data', {}).get('today_cost')
+        readings = [
             {"provider": "Claude", "metrics": metrics, "credits": None,
              "observed_at": claude_at,
              "error": error[1] if error and not metrics else None},
@@ -745,7 +775,13 @@ class SmithAgentsWidget:
              "credits": codex.get("credits"),
              "observed_at": codex.get("metrics_updated") or 0,
              "error": codex.get("usage_error")},
+            {"provider": "Hermes", "metrics": [], "credits": None,
+             "balance": dict(hermes.get("reading") or {}, spend=hermes.get("spend"), today=today)
+             if hermes.get("reading") else None,
+             "observed_at": hermes.get("updated") or 0, "error": hermes.get("error")},
         ]
+        # Hermes gets a card only where it is installed.
+        return readings if hermes_account.install() is not None else readings[:2]
 
     def open_dashboard(self, *_args):
         """Shared by the footer shortcut, the tray menu and the context menu.

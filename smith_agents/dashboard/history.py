@@ -231,11 +231,14 @@ def hermes_sessions(project, database=None):
     session's totals are split across the days its replies were written, in
     proportion to its replies on each day, and marked as estimated. Only
     timestamps and tool names are read from its messages, never their text."""
+    # Older Hermes databases lack the cost column; read NULL rather than nothing.
+    have = {name for _, name, *_ in _hermes_rows('PRAGMA table_info(sessions)', (), database)}
+    cost_column = 'estimated_cost_usd' if 'estimated_cost_usd' in have else 'NULL'
     rows = _hermes_rows('SELECT id, parent_session_id, started_at, ended_at, model, title, '
-                        'input_tokens, output_tokens, cache_read_tokens, cache_write_tokens '
-                        'FROM sessions WHERE cwd = ?', (str(project),), database)
+                        'input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, '
+                        '%s FROM sessions WHERE cwd = ?' % cost_column, (str(project),), database)
     parsed = []
-    for identity, parent, started, ended, model, title, fresh, output, read, write in rows:
+    for identity, parent, started, ended, model, title, fresh, output, read, write, estimate in rows:
         replies = [stamp(_unix(at)) for (at,) in _hermes_rows(
             "SELECT timestamp FROM messages WHERE session_id = ? AND role = 'assistant' "
             'ORDER BY timestamp', (identity,), database)]
@@ -244,14 +247,25 @@ def hermes_sessions(project, database=None):
         totals = [(number(fresh) or 0) + (number(write) or 0), number(read) or 0, number(output) or 0]
         per_day = Counter(at[:10] for at in replies)
         last = {at[:10]: at for at in replies}
+        cost = estimate if isinstance(estimate, (int, float)) and estimate >= 0 else None
         receipts, given = [], [0, 0, 0]
         for i, (day, count) in enumerate(sorted(per_day.items())):
             final = i == len(per_day) - 1
             values = [total - done if final else total * count // len(replies)
                       for total, done in zip(totals, given)]
             given = [a + b for a, b in zip(given, values)]
-            receipts.append({'id': f'hermes:{identity}:{day}', 'owner': None, 'at': last[day],
-                             'tokens': values, 'estimated': True})
+            receipt = {'id': f'hermes:{identity}:{day}', 'owner': None, 'at': last[day],
+                       'tokens': values, 'estimated': True}
+            if cost is not None:
+                receipt['cost'] = cost * count / len(replies)
+            receipts.append(receipt)
+        # Hermes's own estimate per model and task, largest first.
+        models = [{'model': m, 'task': t or 'main work', 'calls': number(n) or 0,
+                   'cost': c if isinstance(c, (int, float)) and c >= 0 else 0}
+                  for m, t, n, c in _hermes_rows(
+                      'SELECT model, task, SUM(api_call_count), SUM(estimated_cost_usd) '
+                      'FROM session_model_usage WHERE session_id = ? GROUP BY model, task '
+                      'ORDER BY 4 DESC LIMIT 12', (identity,), database)]
         actions = [{'at': at, 'id': f'hermes:{identity}:{n}',
                     'label': HERMES_TOOLS.get(tool, 'Other tool calls')}
                    for n, (at, tool) in enumerate(
@@ -265,7 +279,8 @@ def hermes_sessions(project, database=None):
             title = first[0][0] if first else None
         parsed.append({'meta': {'id': 'hermes:' + identity, 'cwd': str(project), 'provider': 'Hermes',
                                 'timestamp': _unix(started), 'method': 'session totals split by day',
-                                'parent_thread_id': 'hermes:' + parent if parent else None},
+                                'parent_thread_id': 'hermes:' + parent if parent else None,
+                                'models': models},
                        'receipts': receipts, 'counters': [], 'actions': actions,
                        'model': model, 'invalid': 0, 'title': clean_title(title)})
     return parsed
@@ -484,6 +499,8 @@ def normalize_sessions(parsed, project):
                    'nickname': spawn.get('agent_nickname') if isinstance(spawn, dict) else None,
                    'started': stamp(meta.get('timestamp')), 'helper': bool(parent),
                    'method': meta.get('method', 'response receipts')}
+        if meta.get('models'):
+            session['models'] = meta['models']
         own = [r for r in data['receipts'] if r['owner'] in (None, identity)]
         if own:
             for receipt in own:
@@ -494,6 +511,8 @@ def normalize_sessions(parsed, project):
                 event = {k: receipt[k] for k in ('id', 'at', 'tokens')} | {'session': identity}
                 if receipt.get('estimated'):
                     event['estimated'] = True
+                if receipt.get('cost') is not None:
+                    event['cost'] = receipt['cost']
                 events.append(event)
         else:
             # Never assign the first cumulative count to the hour we found it.

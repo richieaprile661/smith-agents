@@ -816,6 +816,30 @@ class HermesHistory(unittest.TestCase):
         self.assertEqual([a['label'] for a in actions if a['session'] == 'hermes:main'], ['Command calls'])
         self.assertNotIn('private', json.dumps([sessions, events, actions]))
 
+    def test_hermes_cost_is_split_like_tokens_and_models_are_listed(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as folder:
+            root = self.database(folder)
+            with sqlite3.connect(Path(root) / 'state.db') as db:
+                db.execute('ALTER TABLE sessions ADD COLUMN estimated_cost_usd REAL')
+                db.execute("UPDATE sessions SET estimated_cost_usd = 3.0 WHERE id = 'main'")
+                db.execute('CREATE TABLE session_model_usage (session_id TEXT, model TEXT, task TEXT, '
+                           'api_call_count INTEGER, estimated_cost_usd REAL)')
+                db.execute("INSERT INTO session_model_usage VALUES ('main', 'x/big', '', 5, 2.5)")
+                db.execute("INSERT INTO session_model_usage VALUES ('main', 'x/small', 'approval', 2, 0.5)")
+            sessions, events, *_ = history.normalize_sessions(history.hermes_sessions('/work/one', root), '/work/one')
+        own = sorted((e for e in events if e['session'] == 'hermes:main'), key=lambda e: e['at'])
+        self.assertAlmostEqual(sum(e['cost'] for e in own), 3.0)
+        self.assertAlmostEqual(own[0]['cost'], 2.0)                 # two of three replies that day
+        main = next(s for s in sessions if s['id'] == 'hermes:main')
+        self.assertEqual([(m['model'], m['task'], m['calls']) for m in main['models']],
+                         [('x/big', 'main work', 5), ('x/small', 'approval', 2)])
+        # A database without the cost column still yields its sessions, with no cost.
+        with tempfile.TemporaryDirectory() as folder:
+            parsed = history.hermes_sessions('/work/one', self.database(folder))
+        self.assertTrue(parsed)
+        self.assertTrue(all('cost' not in r for p in parsed for r in p['receipts']))
+
     def test_workspaces_and_counts_include_hermes(self):
         with tempfile.TemporaryDirectory() as folder:
             database = self.database(folder)

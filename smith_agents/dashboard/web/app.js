@@ -10,6 +10,9 @@ function icon(name) {const s=document.createElementNS(NS,'svg');s.setAttribute('
 document.querySelectorAll('[data-icon]').forEach(n=>n.append(icon(n.dataset.icon)));
 const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const sum=a=>a.reduce((s,v)=>s+v,0);
+// Hermes's estimated cost; the other sources save none, so no figure is shown for them.
+const spend=events=>events.some(e=>e.cost!=null)?sum(events.map(e=>e.cost||0)):null;
+const usd=v=>'$'+(v<10?v.toFixed(2):v.toFixed(v<100?2:0));
 const total=events=>sum(events.map(e=>sum(e.tokens)));
 const fmt=v=>v>=1e9?(v/1e9).toFixed(v<1e10?1:0)+'B':v>=1e6?(v/1e6).toFixed(v<1e8?1:0)+'M':v>=1e3?(v/1e3).toFixed(v<1e4?1:0)+'K':v.toLocaleString('en-GB');
 const work=events=>sum(events.map(e=>e.tokens[0]+e.tokens[2]));
@@ -141,7 +144,7 @@ function renderTimeline(){
   for(let i=0;i<offset;i++)grid.append(node('span'));
   for(let i=1;i<=last;i++){
    const key=month+'-'+String(i).padStart(2,'0'),active=days.includes(key),cell=node('button','cal-cell',String(i));cell.disabled=!active;cell.dataset.day=key;cell.setAttribute('aria-pressed',String(key===calendarDay));
-   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(byDay[key]||[]),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});const marks=node('span','cal-marks');SOURCES.forEach(([name])=>{if(split[name])marks.append(mark(name,'mark tiny'));});cell.append(marks,node('strong','cal-tokens',fmt(totals[key])),bar,node('small','cal-sample','allowance not recorded'));cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\nNo account allowance reading was recorded for this day.';cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
+   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(byDay[key]||[]),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});const marks=node('span','cal-marks');SOURCES.forEach(([name])=>{if(split[name])marks.append(mark(name,'mark tiny'));});const cost=spend(byDay[key]||[]);cell.append(marks,node('strong','cal-tokens',fmt(totals[key])),...(cost!=null?[node('span','cal-cost',usd(cost)+' est.')]:[]),bar,node('small','cal-sample','allowance not recorded'));if(cost!=null)cell.title+=`\nHermes estimate: ${usd(cost)}`;cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\nNo account allowance reading was recorded for this day.';cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
    cell.onclick=()=>{calendarDay=key;selected=null;renderTimeline();};grid.append(cell);
   }
   section.append(grid);host.append(section);
@@ -173,6 +176,7 @@ function renderDay(){
   head.append(node('div','eyebrow',new Intl.DateTimeFormat('en-GB',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(calendarDay+'T12:00:00Z')).toUpperCase()));
   const big=node('div','day-total');const n=node('strong','',fmt(newTokens));n.title=exact(newTokens)+' tokens';big.append(n,node('span','','new tokens'));head.append(big);
   head.append(node('p','day-sub',`${plural(list.length,'session')} · ${fmt(reused)} cached context · allowance change not recorded`));
+  const dayCost=spend(events);if(dayCost!=null)head.append(node('p','day-cost',`${usd(dayCost)} estimated spend`));
   if(events.some(e=>e.estimated))head.append(node('p','day-note','Hermes tokens are estimated: Hermes saves totals per session, split here by the days it replied.'));
   const fresh=sum(events.map(e=>e.tokens[0])),bar=node('div','day-split');bar.setAttribute('aria-hidden','true');
   const f=node('i','fresh');f.style.flex=String(fresh||0);const o=node('i','output');o.style.flex=String(newTokens-fresh||0);bar.append(f,o);
@@ -183,13 +187,14 @@ function renderDay(){
     const li=node('li'),open=b.key===selected,button=node('button','day-session');
     button.setAttribute('aria-expanded',String(open));
     const text=node('span','day-session-text');const started=[...b.events,...b.actions].map(e=>e.at).sort()[0];
-    const provider=b.sessions[0]?.provider||'Codex',tag=mark(provider,'mark inline');const meta=node('small','',` ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}${b.events.some(e=>e.estimated)?' · estimated':''}`);meta.prepend(tag);text.append(node('span','day-session-title',b.title),meta);
+    const provider=b.sessions[0]?.provider||'Codex',tag=mark(provider,'mark inline');const meta=node('small','',` ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}${spend(b.events)!=null?' · '+usd(spend(b.events))+' est.':b.events.some(e=>e.estimated)?' · estimated':''}`);meta.prepend(tag);text.append(node('span','day-session-title',b.title),meta);
     const amount=node('strong','',fmt(b.work));amount.title=exact(b.work)+' new tokens';
     const share=node('span','day-share');share.setAttribute('aria-hidden','true');const fill=node('i');fill.style.width=(newTokens?b.work/newTokens*100:0).toFixed(1)+'%';share.append(fill);
     button.append(text,amount,share);button.onclick=()=>{selected=open?null:b.key;renderDay();};li.append(button);
     if(open){
       const detail=node('div','day-session-detail');
       detail.append(receiptList(b.events,'day-receipt small'));
+      const models=b.sessions[0]?.models;if(models?.length){detail.append(node('p','day-models-title','Whole session, by model · Hermes estimate'));const dl=node('dl','day-receipt small');models.slice(0,6).forEach(m=>{const row=node('div');row.append(node('dt','',`${m.model.split('/').pop()} · ${m.task.replace(/_/g,' ')}`),node('dd','',usd(m.cost)));dl.append(row);});detail.append(dl);}
       const acts=node('ul','day-activity');b.summary.highlights.forEach(h=>{const item=node('li');item.append(icon('chapters'),node('span','',h.title));acts.append(item);});detail.append(acts);
       if(b.helpers.length){const hl=node('ul','day-helpers');b.helpers.slice(0,5).forEach(h=>hl.append(node('li','',`${sessionTitle(h)} · ${fmt(work(b.events.filter(e=>e.session===h.id)))}`)));if(b.helpers.length>5)hl.append(node('li','',`+${b.helpers.length-5} more`));detail.append(hl);}
       const more=node('button','text-action','Open activity');more.append(node('span','','→'));more.onclick=()=>openActivity(b);detail.append(more);

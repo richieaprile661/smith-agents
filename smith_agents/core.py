@@ -2499,7 +2499,8 @@ USAGE_GAP = px(7)
 
 def usage_height(metrics, stats=None):
     if (stats or {}).get('provider') == 'hermes':
-        return px(306)
+        from .hermes_usage_ui import panel_height
+        return panel_height(stats)
     rows = max(1, len(metrics))
     row_h = px(40) if any(m.get("provider") == "codex" for m in metrics) else USAGE_ROW_H
     return (px(10) + rows * row_h + (rows - 1) * USAGE_GAP
