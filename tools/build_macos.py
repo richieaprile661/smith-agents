@@ -13,11 +13,12 @@ def main():
         raise SystemExit("Build the Mac app on macOS.")
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
-    # The project already supplies the artwork. Reuse it as an ICNS resource.
-    from PIL import Image
+    # Matrix is the default theme, so the bundle wears Smith's face, drawn
+    # by the same code as the Dock tile the dashboard window shows.
+    sys.path.insert(0, str(ROOT))
+    from smith_agents.artwork import app_icon
     icon = build / "smith-agents.icns"
-    image = Image.open(ROOT / "smith_agents/assets/smith-agents.ico").convert("RGBA")
-    image.resize((1024, 1024), Image.Resampling.LANCZOS).save(icon, format="ICNS")
+    app_icon().save(icon, format="ICNS")
     env = dict(os.environ)
     env.setdefault("PYINSTALLER_CONFIG_DIR", str(build / "pyinstaller-cache"))
     subprocess.run([
@@ -26,7 +27,14 @@ def main():
         "--osx-bundle-identifier", "io.github.richieaprile661.claude-usage-widget",
         "--paths", str(ROOT), "--collect-data", "smith_agents",
         "--hidden-import", "smith_agents.platform_darwin",
+        # The dashboard is imported only when someone opens it, and its page
+        # is data rather than code; name both so the frozen app carries them.
+        "--hidden-import", "smith_agents.dashboard",
+        "--hidden-import", "smith_agents.dashboard.service",
+        "--hidden-import", "smith_agents.dashboard.history",
+        "--hidden-import", "smith_agents.dashboard.account",
         "--hidden-import", "AppKit", "--hidden-import", "Foundation",
+        "--hidden-import", "WebKit",
         "--hidden-import", "PyObjCTools.AppHelper", "--hidden-import", "psutil",
         "--exclude-module", "tkinter", "--exclude-module", "pystray",
         "--exclude-module", "smith_agents.platform_win32",
@@ -52,7 +60,8 @@ def main():
         shutil.copyfile(font_license, notices / font_license.name)
     # Retain the license files supplied by each bundled runtime distribution.
     from importlib.metadata import distribution
-    for name in ("pillow", "psutil", "pyobjc-core", "pyobjc-framework-Cocoa"):
+    for name in ("pillow", "psutil", "pyobjc-core", "pyobjc-framework-Cocoa",
+                 "pyobjc-framework-WebKit"):
         dist = distribution(name)
         for entry in dist.files or ():
             if entry.is_absolute() or ".." in entry.parts:

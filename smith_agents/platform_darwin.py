@@ -736,6 +736,121 @@ def screen_bounds(root, position=None, *, work_area=True):
             round(frame.size.width * RASTER_SCALE), round(frame.size.height * RASTER_SCALE))
 
 
+_dashboard_classes = None
+_dashboard = None  # the open dashboard window, kept while it is on screen
+
+
+def _dashboard_native_classes():
+    global _dashboard_classes
+    if _dashboard_classes is not None:
+        return _dashboard_classes
+    import AppKit as A
+    import Foundation as F
+    import WebKit
+
+    class DashboardDelegate(F.NSObject):
+        def windowWillClose_(self, notification):
+            global _dashboard
+            _dashboard = None
+            # Back to a menu-bar-only app once its one ordinary window closes.
+            A.NSApplication.sharedApplication().setActivationPolicy_(
+                A.NSApplicationActivationPolicyAccessory)
+
+        def webView_decidePolicyForNavigationAction_decisionHandler_(
+                self, web_view, action, handler):
+            # The window shows the local dashboard only. Anything else goes
+            # to the person's browser.
+            url = action.request().URL()
+            if url is None or url.host() in ("127.0.0.1", "localhost", None) or url.scheme() == "about":
+                handler(WebKit.WKNavigationActionPolicyAllow)
+                return
+            A.NSWorkspace.sharedWorkspace().openURL_(url)
+            handler(WebKit.WKNavigationActionPolicyCancel)
+
+    _dashboard_classes = (DashboardDelegate,)
+    return _dashboard_classes
+
+
+def _dashboard_menu():
+    """While the dashboard is open Smith is an ordinary app, with a menu bar
+    so Close, Copy, Select All and Reload have their usual shortcuts."""
+    import AppKit as A
+    def menu(title, items):
+        holder = A.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, None, "")
+        sub = A.NSMenu.alloc().initWithTitle_(title)
+        for label, action, key in items:
+            sub.addItemWithTitle_action_keyEquivalent_(label, action, key)
+        holder.setSubmenu_(sub)
+        return holder
+    bar = A.NSMenu.alloc().init()
+    bar.addItem_(menu(APP_NAME, [("Close Dashboard", "performClose:", "w")]))
+    bar.addItem_(menu("Edit", [("Copy", "copy:", "c"), ("Select All", "selectAll:", "a")]))
+    bar.addItem_(menu("View", [("Reload", "reload:", "r")]))
+    return bar
+
+
+def _dock_icon():
+    """The Dock tile while the dashboard is open, for the running theme."""
+    from . import artwork, core
+    image = _native_image(artwork.app_icon(core.PORTRAITS))
+    image.setSize_((512, 512))
+    return image
+
+
+def open_dashboard_window(url):
+    """Show the dashboard in Smith's own window rather than a browser tab.
+
+    One window: opening it again brings it forward and switches the project.
+    Call on the main thread.
+    """
+    global _dashboard
+    import AppKit as A
+    import Foundation as F
+    import WebKit
+    app = A.NSApplication.sharedApplication()
+    if _dashboard is None:
+        (Delegate,) = _dashboard_native_classes()
+        style = (A.NSWindowStyleMaskTitled | A.NSWindowStyleMaskClosable
+                 | A.NSWindowStyleMaskMiniaturizable | A.NSWindowStyleMaskResizable)
+        window = A.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            A.NSMakeRect(0, 0, 1280, 860), style, A.NSBackingStoreBuffered, False)
+        window.setReleasedWhenClosed_(False)
+        window.setTitle_("%s Dashboard" % APP_NAME)
+        window.setMinSize_(A.NSMakeSize(720, 560))
+        # The page's own background, so opening never flashes white.
+        window.setBackgroundColor_(A.NSColor.colorWithSRGBRed_green_blue_alpha_(
+            0x16 / 255, 0x1a / 255, 0x1e / 255, 1.0))
+        window.setAppearance_(A.NSAppearance.appearanceNamed_(A.NSAppearanceNameDarkAqua))
+        delegate = Delegate.alloc().init()
+        view = WebKit.WKWebView.alloc().initWithFrame_configuration_(
+            window.contentView().bounds(), WebKit.WKWebViewConfiguration.alloc().init())
+        view.setAutoresizingMask_(A.NSViewWidthSizable | A.NSViewHeightSizable)
+        view.setValue_forKey_(False, "drawsBackground")
+        view.setNavigationDelegate_(delegate)
+        window.setContentView_(view)
+        window.setDelegate_(delegate)
+        window.center()
+        window.setFrameAutosaveName_("SmithDashboard")
+        _dashboard = SimpleNamespace(window=window, view=view, delegate=delegate, url=url)
+        view.loadRequest_(F.NSURLRequest.requestWithURL_(F.NSURL.URLWithString_(url)))
+    elif url != _dashboard.url:
+        previous = F.NSURL.URLWithString_(_dashboard.url)
+        target = F.NSURL.URLWithString_(url)
+        _dashboard.url = url
+        if previous.port() == target.port():
+            # Same server, another project. A fragment change alone does not
+            # reload, and the page reads its key and project when it loads.
+            _dashboard.view.evaluateJavaScript_completionHandler_(
+                "location.replace(%s); location.reload();" % json.dumps(url), None)
+        else:
+            _dashboard.view.loadRequest_(F.NSURLRequest.requestWithURL_(target))
+    app.setActivationPolicy_(A.NSApplicationActivationPolicyRegular)
+    app.setApplicationIconImage_(_dock_icon())
+    app.setMainMenu_(_dashboard_menu())
+    app.activateIgnoringOtherApps_(True)
+    _dashboard.window.makeKeyAndOrderFront_(None)
+
+
 def create_shell(widget, core):
     root = MacWindow(widget)
     return root, root
@@ -824,6 +939,9 @@ class MacTray:
         if w.demo:
             item(menu, "Demo — sample data").setEnabled_(False)
         item(menu, "Refresh now", w.refresh_now)
+        # Available from the menu bar whether the console is open, hidden or
+        # tucked: opening the dashboard never needs the widget expanded.
+        item(menu, "Open dashboard", w.open_dashboard)
         item(menu, "Show console", w.toggle_bar, w.config["visible"])
         item(menu, "Tuck to edge", w.toggle_tuck, w.config["tucked"])
         submenu("Tuck position", [(edge.title(), lambda edge=edge: w.set_tuck(True, side=edge),

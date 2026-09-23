@@ -280,6 +280,27 @@ def face_icon(size, ink="white"):
     return icon
 
 
+def app_icon(portraits=True):
+    """The 1024 px macOS app icon: the brand mark in white on a dark tile.
+
+    Matrix, the default theme, wears Smith's face exactly as drawn (facing
+    left, no glow); Claude and E-ink keep the line man. Used for the app
+    bundle and for the Dock while the dashboard window is open.
+    """
+    from PIL import ImageDraw
+    size, inset = 1024, 100                     # Apple's 824 px icon grid
+    tile = Image.new("RGBA", (size, size))
+    ImageDraw.Draw(tile).rounded_rectangle((inset, inset, size - inset, size - inset),
+                                           radius=185, fill=(0x16, 0x1a, 0x1e, 255))
+    alpha = _tray_alpha(MATRIX_TRAY if portraits else None)
+    scale = min(560 / alpha.width, 560 / alpha.height)
+    target = (max(1, round(alpha.width * scale)), max(1, round(alpha.height * scale)))
+    mark = Image.new("RGBA", target, "white")
+    mark.putalpha(alpha.resize(target, Image.Resampling.LANCZOS))
+    tile.alpha_composite(mark, ((size - target[0]) // 2, (size - target[1]) // 2))
+    return tile
+
+
 def tray_icon(size, ink="white", path=None):
     alpha = _tray_alpha(path)
     padding = max(1, round(size / 22))

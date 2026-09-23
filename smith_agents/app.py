@@ -487,7 +487,8 @@ class SmithAgentsWidget:
                 self.config["bar_mode"], notice, max_height=max_height, scroll=self._agent_scroll,
                 figure_elapsed=figure_elapsed, header_frame=header_frame,
                 provider=self.config.get("usage_provider", "claude"), data_notice=self._data_notice(),
-                reading_view=self.config.get("reading_view", "used"))
+                reading_view=self.config.get("reading_view", "used"),
+                dashboard_project=self._dashboard_label())
             self._bar_size = image.size
             x, y = self._slide_position(image.size)
             # boxes are shell-relative; the shadow pad offsets them in the image
@@ -701,6 +702,96 @@ class SmithAgentsWidget:
     def _build_tray(self):
         return platform.build_tray(self)
 
+    # -- dashboard ---------------------------------------------------------
+    def _dashboard_target(self):
+        """The workspace "Open dashboard" will select.
+
+        An open drawer is an explicit choice, so it wins. A single running
+        session is unambiguous. Several sessions with nothing selected is a
+        guess, so the last workspace opened from here is used instead and the
+        dashboard keeps its own project picker either way.
+        """
+        if self.agent_open:
+            agent = next((a for a in self.agents if a.get("id") == self.agent_open), None)
+            if agent and agent.get("cwd"):
+                return agent["cwd"]
+        live = {a["cwd"] for a in self.agents
+                if a.get("cwd") and not a.get("sub") and a.get("state") != "closed"}
+        if len(live) == 1:
+            return live.pop()
+        return self.config.get("dashboard_project") or None
+
+    def _dashboard_label(self):
+        """Just the folder name; paint must not touch the disk."""
+        target = self._dashboard_target()
+        return os.path.basename(os.path.normpath(target)) if target else None
+
+    def _account_readings(self):
+        """What the widget has already read, for the dashboard to show.
+
+        The dashboard does not poll the providers itself while the widget is
+        running: it reports these, including how stale they are.
+        """
+        with self.lock:
+            metrics = list(self.metrics)
+            error = self.error
+            claude_at = self.updated_at.timestamp() if self.updated_at else 0
+            codex = dict(self.codex_data)
+        return [
+            {"provider": "Claude", "metrics": metrics, "credits": None,
+             "observed_at": claude_at,
+             "error": error[1] if error and not metrics else None},
+            {"provider": "Codex", "metrics": list(codex.get("metrics") or []),
+             "credits": codex.get("credits"),
+             "observed_at": codex.get("metrics_updated") or 0,
+             "error": codex.get("usage_error")},
+        ]
+
+    def open_dashboard(self, *_args):
+        """Shared by the footer shortcut, the tray menu and the context menu.
+
+        Starting the server blocks, so it happens off the UI thread. The
+        dashboard window is then shown back on the UI thread.
+        """
+        target = self._dashboard_target()
+        threading.Thread(target=self._launch_dashboard, args=(target,),
+                         name="smith-dashboard-open", daemon=True).start()
+
+    def _launch_dashboard(self, target):
+        from . import dashboard
+        # A workspace can be deleted between two launches. Opening the
+        # dashboard with no project selected is better than failing.
+        if target and not os.path.isdir(target):
+            target = None
+        try:
+            dashboard.SERVICE.share_account_readings(self._account_readings)
+            url = dashboard.launch(target)
+        except dashboard.DashboardError as error:
+            log_line("dashboard: %s" % error)
+            self.root.after(0, lambda message=str(error): platform.show_error(message))
+            return
+        except Exception as error:                      # never take the widget down
+            log_line("dashboard failed: %s: %s" % (type(error).__name__, error))
+            self.root.after(0, lambda: platform.show_error(
+                "Could not open the dashboard. See widget.log for details."))
+            return
+        self.root.after(0, lambda: self._show_dashboard(url, target))
+
+    def _show_dashboard(self, url, target):
+        try:
+            platform.open_dashboard_window(url)
+        except Exception as error:                      # never take the widget down
+            log_line("dashboard window failed: %s: %s" % (type(error).__name__, error))
+            platform.show_error("Could not open the dashboard window. "
+                                "See widget.log for details.")
+            return
+        if target and self.config.get("dashboard_project") != target:
+            self._remember_dashboard_project(target)
+
+    def _remember_dashboard_project(self, target):
+        self.config["dashboard_project"] = target
+        self._save_config()
+
 
     # -- context menu ------------------------------------------------------
     def toggle_demo(self):
@@ -785,6 +876,11 @@ class SmithAgentsWidget:
 
     def quit(self, *_args):
         self.stopping.set()
+        try:
+            from . import dashboard
+            dashboard.shutdown()
+        except Exception:
+            pass        # a stuck listener must not stop the widget from closing
         self.wake.set()
         self.codex_wake.set()
         if hasattr(self, "hermes_wake"):
@@ -1127,6 +1223,12 @@ class SmithAgentsWidget:
                 else:
                     self._confirm_kill = agent["id"]
                     self._reveal_agent(agent)
+            elif kind == "dashboard":
+                self.open_dashboard()
+            elif kind == "settings":
+                # The widget's settings are its own menu; the glyph opens it
+                # rather than introducing a second place to change things.
+                platform.popup_menu(self, event)
             elif kind == "clear":
                 self._dismiss([a.get("id") for a in self.agents
                                if a.get("state") == "closed" and not a.get("sub")])

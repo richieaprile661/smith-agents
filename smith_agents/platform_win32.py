@@ -486,6 +486,32 @@ def process_start_time(started):
 def show_error(message):
     ctypes.windll.user32.MessageBoxW(None, message, APP_NAME, 0x50010)
 
+def _edge_path():
+    for root in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"),
+                 os.environ.get("LOCALAPPDATA")):
+        path = root and os.path.join(root, "Microsoft", "Edge", "Application", "msedge.exe")
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+def open_dashboard_window(url):
+    """Show the dashboard as its own app window, not a browser tab.
+
+    Edge ships with Windows 10 and 11, and its app mode draws a plain window
+    with no tabs or address bar. A browser tab is the fallback without it.
+    """
+    edge = _edge_path()
+    if edge:
+        try:
+            subprocess.Popen([edge, "--app=" + url, "--window-size=1280,860"],
+                             close_fds=True)
+            return
+        except OSError:
+            pass
+    import webbrowser
+    if not webbrowser.open(url):
+        raise OSError("no browser available")
+
 def launch_argv():
     return _launch_argv()
 
@@ -627,6 +653,9 @@ def build_tray(self):
 
     menu = pystray.Menu(
         pystray.MenuItem("Refresh now", ui(self.refresh_now), default=True),
+        # Available from the tray whether the console is open, hidden or
+        # tucked: opening the dashboard never needs the widget expanded.
+        pystray.MenuItem("Open dashboard", ui(self.open_dashboard)),
         pystray.MenuItem("Show console", ui(self.toggle_bar),
                          checked=lambda _i: self.config["visible"]),
         pystray.MenuItem("Tuck to edge", ui(self.toggle_tuck),
@@ -671,6 +700,7 @@ def build_context_menu(self):
     menu = tk.Menu(self.root, tearoff=0)
     self._demo_var = tk.BooleanVar(value=self.config["demo_figures"])
     menu.add_command(label="Refresh now", command=self.refresh_now)
+    menu.add_command(label="Open dashboard", command=self.open_dashboard)
     menu.add_command(label="Connect Codex status…", command=self.connect_codex)
     dock_menu = tk.Menu(menu, tearoff=0)
     for name in DOCKS:

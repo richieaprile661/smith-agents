@@ -104,6 +104,17 @@ def main():
             widget.agent_open = None
             widget._agent_scroll = 0
             widget._repaint()
+            # The dashboard shortcut, clicked natively. The launch itself is
+            # stubbed: this check opens no browser and starts no server.
+            with patch.object(widget, "open_dashboard") as opened:
+                click("dashboard")
+            assert opened.called, "the footer dashboard shortcut did nothing"
+            # Settings shares the widget's own menu, which is modal, so the
+            # target is checked rather than clicked.
+            assert any(row[0] == "settings" for row in widget.agent_rows), "no settings target"
+            titles = [widget.tray.menu.itemAtIndex_(i).title()
+                      for i in range(widget.tray.menu.numberOfItems())]
+            assert "Open dashboard" in titles, titles
             widget.root.after(100, widget._repaint)
             log = Path(demo_dir.name) / "widget.log"
             assert not log.exists() or "failed" not in log.read_text()
@@ -115,7 +126,7 @@ def main():
             target = Path("build/previews/mac-native.png")
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(bytes(png))
-            print("PASS: native panel, Retina image, template icon, tabs, reading, fold, tuck, visibility, docking, menu, agent drawer, scrolling, End session cancel")
+            print("PASS: native panel, Retina image, template icon, tabs, reading, fold, tuck, visibility, docking, menu, agent drawer, scrolling, End session cancel, dashboard shortcut")
         except Exception:
             failures.append(traceback.format_exc())
         finally:

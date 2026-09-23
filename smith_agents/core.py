@@ -60,6 +60,9 @@ DEFAULTS = {
     "bar_mode": "worst",
     "reading_view": "used",
     "usage_provider": "claude",
+    # The workspace the dashboard opened last, used when the running sessions
+    # do not say which one is meant.
+    "dashboard_project": None,
     "demo_figures": False,
     # session ids whose closed row you have cleared away by hand
     "dismissed": [],
@@ -1578,7 +1581,11 @@ ROW_H = px(108)  # minimum; long names and font metrics can grow a row
 ROW_FIGURE_W = px(56)
 ROW_FIGURE_H = px(42)
 ROW_NAME_GAP = px(8)
-FOOT_H = px(49)
+# The footer's bottom line: the dashboard shortcut and the settings menu.
+# Every expanded tab ends with it, so the pane you are on never decides
+# whether the dashboard is one click away.
+ACTION_H = px(30)
+FOOT_H = px(49) + ACTION_H
 KILL_W = px(16)
 GAP = px(8)
 # Tucked, this much of the console stays on screen: the group over the
@@ -2011,6 +2018,40 @@ def _arrow(pen, x, y, colour):
     pen.line([(x, y + arm), (x + arm, y)], fill=colour, width=width)
     pen.line([(x + arm - px(3), y), (x + arm, y)], fill=colour, width=width)
     pen.line([(x + arm, y), (x + arm, y + px(3))], fill=colour, width=width)
+
+
+def _tiles(pen, x, y, size, colour):
+    """The dashboard mark: four panes of different heights, as approved.
+
+    Drawn rather than typed, like the link arrow - the theme fonts have no
+    glyph for it and fall back to a box.
+    """
+    width = max(1, px(1))
+    unit = size / 18.0
+    radius = max(1, round(unit))
+    for left, top, wide, tall in ((0, 0, 7, 7), (11, 0, 7, 4),
+                                  (0, 11, 7, 7), (11, 8, 7, 10)):
+        pen.rounded_rectangle([x + left * unit, y + top * unit,
+                               x + (left + wide) * unit, y + (top + tall) * unit],
+                              radius=radius, outline=colour, width=width)
+
+
+def _gear(pen, x, y, size, colour):
+    """The settings mark: a ring and its teeth, at the same weight."""
+    import math
+    width = max(1, px(1))
+    cx, cy = x + size / 2, y + size / 2
+    ring = size * 0.32
+    hub = size * 0.14
+    pen.ellipse([cx - ring, cy - ring, cx + ring, cy + ring], outline=colour, width=width)
+    pen.ellipse([cx - hub, cy - hub, cx + hub, cy + hub], outline=colour, width=width)
+    # Six short, wide teeth: eight thin ones read as a sun at this size.
+    for step in range(6):
+        angle = math.pi * step / 3
+        dx, dy = math.cos(angle), math.sin(angle)
+        pen.line([cx + dx * ring * 0.9, cy + dy * ring * 0.9,
+                  cx + dx * size * 0.46, cy + dy * size * 0.46],
+                 fill=colour, width=width * 2)
 
 
 def _cross(pen, x, y, size, colour):
@@ -3107,6 +3148,38 @@ def render_drawer(pen, agent, y, now=None):
     return boxes
 
 
+def render_action_row(pen, y, project=None):
+    """The footer's shortcut line: open the dashboard, open the menu.
+
+    A layered window cannot track hover, so there is nowhere to hang a
+    tooltip: the dashboard action carries "Open dashboard" as visible text,
+    with the workspace it will select after it when there is room for it.
+    """
+    band(pen, y + px(1), y + ACTION_H - px(2), _ink(5),
+         corners=(False, False, True, True))
+    rule(pen, y, _ink(13))
+    glyph = px(13)
+    button = px(22)
+    top = y + (ACTION_H - button) // 2
+    inset = (button - glyph) // 2
+
+    gear_x = CONSOLE_W - PAD_X - button
+    _gear(pen, gear_x + inset, top + inset, glyph, _ink(78))
+
+    label_font = FONT("book", 10)
+    text_x = PAD_X + glyph + px(6)
+    label = "Open dashboard" + (" · " + project if project else "")
+    label = elide(label, label_font, gear_x - px(8) - text_x)
+    _tiles(pen, PAD_X, top + inset, glyph, _ink(78))
+    pen.text((text_x, top + (button - ascent(label_font)) // 2), label,
+             font=label_font, fill=_ink(78))
+    pad = px(4)
+    return [("dashboard", PAD_X - pad, top - pad,
+             text_x + text_w(label, label_font) + pad, top + button + pad, None),
+            ("settings", gear_x - pad, top - pad,
+             gear_x + button + pad, top + button + pad, None)]
+
+
 def agents_height(agents, open_id):
     if not agents:
         return ROW_H + FOOT_H
@@ -3137,7 +3210,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
                    open_id=None, confirm_id=None, expanded=True,
                    bar_mode="worst", notice=None, max_height=None, scroll=0,
                    figure_elapsed=None, header_frame=None, provider=None, data_notice=None,
-                   reading_view="used"):
+                   reading_view="used", dashboard_project=None):
     """The whole shell: the bar, and when it is open the tabs and one pane."""
     front = metrics[0] if metrics else None
     rows = sort_agents(agents)
@@ -3150,9 +3223,9 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
     if expanded:
         height += TAB_H
         if tab == "usage":
-            height += usage_height(metrics, stats)
+            height += usage_height(metrics, stats) + ACTION_H
         elif tab == "stats":
-            height += stats_height()
+            height += stats_height() + ACTION_H
         else:
             height += agents_height(rows, open_id)
         if data_notice and tab in ("usage", "stats"):
@@ -3181,8 +3254,10 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
         y += px(26)
     if tab == "usage":
         boxes += render_usage(pen, metrics, spend, stats, y)
+        boxes += render_action_row(pen, height - ACTION_H, dashboard_project)
     elif tab == "stats":
         boxes += render_stats(pen, stats, y)
+        boxes += render_action_row(pen, height - ACTION_H, dashboard_project)
     else:
         if not rows:
             rule(pen, y, _ink(13))
@@ -3229,6 +3304,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
             link = _link(pen, CONSOLE_W - PAD_X - (px(65) if overflow else 0) - text_w(label, foot_font),
                          y + px(30), label, foot_font, _ink(78), True)
             boxes.append(("clear",) + link + (None,))
+        boxes += render_action_row(pen, y + px(49), dashboard_project)
 
     if overflow:
         chip, boxes = fit_agent_viewport(chip, boxes, max_height, scroll)

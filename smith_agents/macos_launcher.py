@@ -9,7 +9,6 @@ import subprocess
 import sys
 import tempfile
 
-from PIL import Image
 from . import __version__
 
 
@@ -59,9 +58,9 @@ def create_launcher(python, install_dir, applications_dir):
         log = shlex.quote(str(install_dir / "launch.log"))
         executable.write_text('#!/bin/sh\nexec ' + command + ' "$@" >>' + log + ' 2>&1\n')
         executable.chmod(0o755)
-        with Image.open(Path(__file__).parent / "assets/smith-agents.ico") as icon:
-            icon.convert("RGBA").resize((1024, 1024), Image.Resampling.LANCZOS).save(
-                resources / "smith-agents.icns", format="ICNS")
+        # Matrix is the default theme, so the bundle wears Smith's face.
+        from .artwork import app_icon
+        app_icon().save(resources / "smith-agents.icns", format="ICNS")
         backup = Path(temporary) / "previous.app"
         if bundle.exists():
             bundle.rename(backup)
