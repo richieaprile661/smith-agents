@@ -28,7 +28,7 @@ const date=(d,year=false)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:
 const addDays=(d,n)=>{const t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()+n);return t.toISOString().slice(0,10);};
 const plural=(n,s)=>`${n} ${s}${n===1?'':'s'}`;
 const counts=items=>{const c={};items.forEach(a=>c[a.label]=(c[a.label]||0)+1);return Object.entries(c).sort((a,b)=>b[1]-a[1]);};
-let data=null, project=(window.smithSession&&smithSession.project)||'', range='week', mode='sessions', anchor=null, buckets=[], selected=null, loading=false, snapshotVersion=null;
+let data=null, project=(window.smithSession&&smithSession.project)||'', range='week', anchor=null, buckets=[], selected=null, loading=false, snapshotVersion=null;
 let scopedEvents=[], scopedActions=[], scopedCommits=[], periodStart='',periodEnd='';
 function scope(){
   // All time ends at the last recorded day, not today: padding the story with
@@ -40,53 +40,18 @@ function scope(){
   scopedEvents=data.events.filter(inside);scopedActions=data.actions.filter(inside);scopedCommits=data.commits.filter(inside);
 }
 function buildBuckets(){
-  scope();const existing=selected;
-  if(mode==='sessions'){
-    // One card per main session; its helpers ride inside it.
-    const ids=[...new Set([...scopedEvents,...scopedActions].map(e=>e.session))];
-    const byId=Object.fromEntries(data.sessions.map(s=>[s.id,s]));
-    const roots=ids.filter(id=>!byId[id]?.helper||!ids.includes(byId[id].parent));
-    buckets=roots.map(id=>{
-      const session=byId[id],helpers=ids.filter(h=>byId[h]?.parent===id).map(h=>byId[h]);
-      const members=new Set([id,...helpers.map(h=>h.id)]);
-      const events=scopedEvents.filter(e=>members.has(e.session)),actions=scopedActions.filter(a=>members.has(a.session));
-      const times=[...events,...actions].map(e=>e.at).sort();
-      return {key:id,title:sessionTitle(session),start:times[0],end:times.at(-1),events,actions,commits:[],sessions:[session,...helpers],helpers,icon:session?.helper?'people':'code'};
-    }).sort((a,b)=>a.start.localeCompare(b.start));
-  }else{
-    const groups=[];
-    if(range==='day'){
-      for(let h=0;h<24;h++){
-        const key=periodStart+'T'+String(h).padStart(2,'0');
-        if([...scopedEvents,...scopedActions,...scopedCommits].some(e=>e.at.startsWith(key)))groups.push({key,start:key+':00:00',end:key+':59:59',label:String(h).padStart(2,'0')+':00'});
-      }
-    }else{
-      const days=Math.round((new Date(periodEnd)-new Date(periodStart))/864e5)+1,step=days>45?7:1;
-      for(let d=periodStart;d<=periodEnd;d=addDays(d,step))groups.push({key:d,start:d+'T00:00:00',end:(addDays(d,step-1)>periodEnd?periodEnd:addDays(d,step-1))+'T23:59:59',label:step===1?date(d):date(d)+' – '+date(addDays(d,step-1)>periodEnd?periodEnd:addDays(d,step-1))});
-    }
-    buckets=groups.map(g=>{
-      const inside=e=>e.at.slice(0,19)>=g.start&&e.at.slice(0,19)<=g.end;
-      const events=scopedEvents.filter(inside),actions=scopedActions.filter(inside),commits=scopedCommits.filter(inside).sort((a,b)=>b.at.localeCompare(a.at));
-      const ids=new Set([...events,...actions].map(e=>e.session));
-      const title=commits[0]?.title||(actions.length?'Recorded project work':events.length?'Recorded token traffic':'No recorded activity');
-      const glyph=commits.length?'edit':counts(actions)[0]?.[0]==='Image-generation calls'?'image':'code';
-      return {...g,title,events,actions,commits,sessions:data.sessions.filter(s=>ids.has(s.id)),icon:glyph};
-    });
-  }
-  // Only chapters with recorded session activity. A commit alone is a
-  // milestone without a session behind it here, and its card would only
-  // say "No receipts".
-  buckets=buckets.filter(b=>b.events.length||b.actions.length);
-  buckets.forEach(b=>{
-    b.total=total(b.events);b.work=work(b.events);b.cached=cached(b.events);b.summary=summaryFor(b);
-    if(mode!=='sessions'){
-      // Commits label the receipt, not the card: the card gets the session's own words.
-      const named=b.sessions.filter(s=>s?.title&&!s.helper).map(s=>({s,w:work(b.events.filter(e=>e.session===s.id))})).sort((a,z)=>z.w-a.w);
-      b.title=named[0]?named[0].s.title:b.title;
-      b.helpers=b.sessions.filter(s=>s?.helper);
-    }
-  });
-  selected=buckets.some(b=>b.key===existing)?existing:buckets.reduce((best,b)=>!best||b.total>best.total?b:best,null)?.key;
+  scope();
+  // One entry per main session; its helpers ride inside it.
+  const ids=[...new Set([...scopedEvents,...scopedActions].map(e=>e.session))];
+  const byId=Object.fromEntries(data.sessions.map(s=>[s.id,s]));
+  const roots=ids.filter(id=>!byId[id]?.helper||!ids.includes(byId[id].parent));
+  buckets=roots.map(id=>{
+    const session=byId[id],helpers=ids.filter(h=>byId[h]?.parent===id).map(h=>byId[h]);
+    const members=new Set([id,...helpers.map(h=>h.id)]);
+    const events=scopedEvents.filter(e=>members.has(e.session)),actions=scopedActions.filter(a=>members.has(a.session));
+    const times=[...events,...actions].map(e=>e.at).sort();
+    return {key:id,title:sessionTitle(session),start:times[0],end:times.at(-1),events,actions,commits:[],sessions:[session,...helpers],helpers};
+  }).filter(b=>b.events.length||b.actions.length).sort((a,b)=>a.start.localeCompare(b.start));
 }
 function setNumber(id,v){$(id).textContent=fmt(v);$(id).title=exact(v)+' tokens';}
 const TONES=['lavender','sage','gold','peach'];let host_signature=null;
@@ -126,34 +91,26 @@ function render(){
   buildBuckets();$('dashboard').hidden=false;$('projectCoverage').hidden=false;
   const sessions=new Set([...scopedEvents,...scopedActions].map(e=>e.session));
   setNumber('total',work(scopedEvents));setNumber('cachedTotal',cached(scopedEvents));$('projectName').textContent=data.project;renderShares();
-  $('sessionCount').textContent=sessions.size;$('chapterCount').textContent=buckets.filter(b=>b.events.length||b.actions.length).length;
-  $('chapterUnit').textContent=mode==='sessions'?'session chapters':range==='day'?'recorded hours':buckets.some(b=>day(b.start)!==day(b.end))?'recorded weeks':'recorded days';
+  $('sessionCount').textContent=sessions.size;$('chapterCount').textContent=new Set([...scopedEvents,...scopedActions].map(e=>day(e.at))).size;
+  $('chapterUnit').textContent='active days';
   $('historyStart').textContent=data.first?date(day(data.first),true):'No receipts';
   $('summaryDates').textContent=periodLabel();$('dates').textContent=periodStart===periodEnd?date(periodEnd):date(periodStart)+' – '+date(periodEnd);
   $('previous').disabled=range==='all'||!data.first||periodStart<=day(data.first);
   $('next').disabled=range==='all'||anchor>=data.today;
   $('previous').style.visibility=$('next').style.visibility=range==='all'?'hidden':'';
   document.querySelectorAll('[data-range]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.range===range)));
-  document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
-  $('storyHint').textContent=mode==='sessions'?'Select a session to inspect its recorded activity.':'Select a chapter to explore the work.';
-  $('chapterExplanation').textContent=mode==='sessions'?'Sessions with recorded activity':'Chapters follow time · summaries and saved project changes';
   $('coverageLine').textContent=`${data.timezone} · ${(data.sources||[]).join(' and ')||'No'} receipts · Earlier or missing work is not reconstructed.`;
   const observed=new Date(data.generated).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   $('updated').textContent='Read at '+observed+' · refreshes every 30s';
-  renderTimeline();renderReceipt();
+  renderTimeline();
 }
 let calendarDay=null;
 function renderTimeline(){
- const host=$('chapters');host.replaceChildren();$('connections').replaceChildren();
- $('timeline').classList.add('compact-calendar');$('timeline').style.width='100%';
- $('timelineScroll').setAttribute('aria-label','Activity calendar');
- $('storyHint').textContent='Choose a day to explore its sessions and usage.';
+ const host=$('chapters');host.replaceChildren();
  $('chapterExplanation').textContent='New tokens · Darker days used more';
- $('timelineHint').textContent='Allowance change is not recorded per day';
  const records=[...scopedEvents,...scopedActions],days=[...new Set(records.map(e=>day(e.at)))].sort();
- if(!days.length){host.append(node('li','empty-state','No recorded activity in this period.'));return;}
- const chosen=buckets.find(b=>b.key===selected);
- if(!days.includes(calendarDay))calendarDay=chosen?day(chosen.start):days.at(-1);
+ if(!days.length){host.append(node('li','empty-state','No recorded activity in this period.'));calendarDay=null;renderDay();return;}
+ if(!days.includes(calendarDay))calendarDay=days.reduce((best,d)=>work(scopedEvents.filter(e=>day(e.at)===d))>work(scopedEvents.filter(e=>day(e.at)===best))?d:best,days.at(-1));
  const totals=Object.fromEntries(days.map(d=>[d,work(scopedEvents.filter(e=>day(e.at)===d))]));
  const peak=Math.max(1,...Object.values(totals));
  const months=[...new Set(days.map(d=>d.slice(0,7)))].reverse();
@@ -165,49 +122,79 @@ function renderTimeline(){
   for(let i=1;i<=last;i++){
    const key=month+'-'+String(i).padStart(2,'0'),active=days.includes(key),cell=node('button','cal-cell',String(i));cell.disabled=!active;cell.dataset.day=key;cell.setAttribute('aria-pressed',String(key===calendarDay));
    if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;cell.append(node('strong','cal-tokens',fmt(totals[key])),node('span','cal-allowance','—'),node('small','cal-sample','allowance not recorded'));cell.title=`${date(key)} · ${exact(totals[key])} new tokens. No account allowance reading was recorded for this day, so no change is shown.`;}
-   cell.onclick=()=>{calendarDay=key;const matches=calendarBuckets(key);if(matches.length)selected=matches[0].key;renderTimeline();renderReceipt();};grid.append(cell);
+   cell.onclick=()=>{calendarDay=key;selected=null;renderTimeline();};grid.append(cell);
   }
   section.append(grid);host.append(section);
  });
- const list=node('li','cal-sessions');list.append(node('h3','',date(calendarDay)+' · Highest usage first'));
- calendarBuckets(calendarDay).forEach(b=>{const button=node('button','cal-session');button.setAttribute('aria-pressed',String(b.key===selected));button.append(node('span','',b.title),node('strong','',fmt(work(b.events.filter(e=>day(e.at)===calendarDay)))+' tokens'));button.onclick=()=>select(b.key);list.append(button);});host.append(list);
+ renderDay();
 }
-function calendarBuckets(d){return buckets.filter(b=>[...b.events,...b.actions].some(e=>day(e.at)===d)).sort((a,b)=>work(b.events.filter(e=>day(e.at)===d))-work(a.events.filter(e=>day(e.at)===d)));}
-function select(key){selected=key;renderTimeline();renderReceipt();}
-function current(){return buckets.find(b=>b.key===selected);}
+function calendarBuckets(d){return buckets.map(b=>onDay(b,d)).filter(b=>b.events.length||b.actions.length).sort((a,b)=>b.work-a.work);}
+// A session seen through one calendar day: only that day's receipts and calls.
+function onDay(b,d){
+  const events=b.events.filter(e=>day(e.at)===d),actions=b.actions.filter(a=>day(a.at)===d);
+  const present=new Set([...events,...actions].map(e=>e.session));
+  const view={...b,start:d+'T00:00:00',end:d+'T23:59:59',events,actions,helpers:b.helpers.filter(h=>present.has(h.id)),sessions:b.sessions.filter(s=>s&&present.has(s.id))};
+  view.total=total(events);view.work=work(events);view.cached=cached(events);view.summary=summaryFor(view);
+  return view;
+}
+function receiptList(events,cls){
+  const values=[0,1,2].map(j=>sum(events.map(e=>e.tokens[j])));
+  const dl=node('dl',cls);
+  [['fresh','Fresh input',values[0]],['output','Output',values[2]],['cached','Cached context',values[1]]].forEach(([dot,label,v])=>{
+    const row=node('div',dot==='cached'?'dim':'');const dt=node('dt');dt.append(node('i','dot '+dot),document.createTextNode(label));const dd=node('dd','',fmt(v));dd.title=exact(v)+' tokens';row.append(dt,dd);dl.append(row);});
+  return dl;
+}
+function renderDay(){
+  const panel=$('dayPanel');panel.replaceChildren();
+  if(!calendarDay){panel.append(node('p','day-empty','Choose another period to see recorded sessions.'));return;}
+  const list=calendarBuckets(calendarDay),events=scopedEvents.filter(e=>day(e.at)===calendarDay);
+  const newTokens=work(events),reused=cached(events);
+  const head=node('div','day-head');
+  head.append(node('div','eyebrow',new Intl.DateTimeFormat('en-GB',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(calendarDay+'T12:00:00Z')).toUpperCase()));
+  const big=node('div','day-total');const n=node('strong','',fmt(newTokens));n.title=exact(newTokens)+' tokens';big.append(n,node('span','','new tokens'));head.append(big);
+  head.append(node('p','day-sub',`${plural(list.length,'session')} · ${fmt(reused)} cached context · allowance change not recorded`));
+  const fresh=sum(events.map(e=>e.tokens[0])),bar=node('div','day-split');bar.setAttribute('aria-hidden','true');
+  const f=node('i','fresh');f.style.flex=String(fresh||0);const o=node('i','output');o.style.flex=String(newTokens-fresh||0);bar.append(f,o);
+  head.append(bar,receiptList(events,'day-receipt'));panel.append(head);
+  panel.append(node('h3','day-list-title','Sessions · highest usage first'));
+  const ul=node('ul','day-sessions');
+  list.forEach(b=>{
+    const li=node('li'),open=b.key===selected,button=node('button','day-session');
+    button.setAttribute('aria-expanded',String(open));
+    const text=node('span','day-session-text');const started=[...b.events,...b.actions].map(e=>e.at).sort()[0];
+    text.append(node('span','day-session-title',b.title),node('small','',`${b.sessions[0]?.provider||'Session'} · ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}`));
+    const amount=node('strong','',fmt(b.work));amount.title=exact(b.work)+' new tokens';
+    const share=node('span','day-share');share.setAttribute('aria-hidden','true');const fill=node('i');fill.style.width=(newTokens?b.work/newTokens*100:0).toFixed(1)+'%';share.append(fill);
+    button.append(text,amount,share);button.onclick=()=>{selected=open?null:b.key;renderDay();};li.append(button);
+    if(open){
+      const detail=node('div','day-session-detail');
+      detail.append(receiptList(b.events,'day-receipt small'));
+      const acts=node('ul','day-activity');b.summary.highlights.forEach(h=>{const item=node('li');item.append(icon('chapters'),node('span','',h.title));acts.append(item);});detail.append(acts);
+      if(b.helpers.length){const hl=node('ul','day-helpers');b.helpers.slice(0,5).forEach(h=>hl.append(node('li','',`${sessionTitle(h)} · ${fmt(work(b.events.filter(e=>e.session===h.id)))}`)));if(b.helpers.length>5)hl.append(node('li','',`+${b.helpers.length-5} more`));detail.append(hl);}
+      const more=node('button','text-action','Open activity');more.append(node('span','','→'));more.onclick=()=>openActivity(b);detail.append(more);
+      li.append(detail);
+    }
+    ul.append(li);
+  });
+  panel.append(ul);
+}
 function summaryFor(b){
   // A factual description of what the activity log recorded. The dashboard
   // does not summarize your sessions and makes no claim about outcomes.
-  const highlights=counts(b.actions).filter(([label])=>label!=='Helper launches').slice(0,4).map(([label,n])=>({title:`${exact(n)} ${NOUNS[label]||label.toLowerCase()}`,body:`The activity log records ${exact(n)} ${NOUNS[label]||label.toLowerCase()} in this chapter. Their results stay in the original session.`}));
+  const highlights=counts(b.actions).filter(([label])=>label!=='Helper launches').slice(0,4).map(([label,n])=>({title:`${exact(n)} ${NOUNS[label]||label.toLowerCase()}`,body:`The activity log records ${exact(n)} ${NOUNS[label]||label.toLowerCase()} on this day. Their results stay in the original session.`}));
   const helpers=(b.helpers||b.sessions.filter(s=>s?.helper)).length;
   if(helpers)highlights.splice(Math.min(3,highlights.length),0,{title:plural(helpers,'helper session'),body:'Helper sessions were spawned by the main session; their tokens are included here.'});
   if(!highlights.length&&b.events.length)highlights.push({title:'AI activity was recorded',body:'Usage records are available, but the log does not describe what was produced.'});
-  if(!highlights.length)highlights.push({title:'No activity summary available',body:b.commits.length?'Saved project changes are available in the source notes. There are no matching session receipts for this chapter.':'No session receipts were found in this period.'});
+  if(!highlights.length)highlights.push({title:'No activity summary available',body:b.commits.length?'Saved project changes are available in the source notes. There are no matching session receipts for this day.':'No session receipts were found in this period.'});
   return {highlights:highlights.slice(0,3),extra:[],evidence:[]};
-}
-function renderReceipt(){
-  const b=current();$('openActivity').disabled=!b;
-  $('selectedLabel').textContent=mode==='sessions'?'SELECTED SESSION':range==='day'?'SELECTED HOUR':'SELECTED CHAPTER';
-  $('selectedTitle').textContent=b?.title||'No recorded activity';
-  $('selectedDate').textContent=b?(day(b.start)===day(b.end)?date(day(b.start),true):date(day(b.start))+' – '+date(day(b.end),true))+(mode==='sessions'?' · '+(b.sessions[0]?.provider||''):''):'Choose another period';
-  const commits=b?.commits||[];$('selectedCommits').hidden=!commits.length;
-  $('selectedCommits').textContent=commits.length?`Saved: ${commits[0].title}${commits.length>1?` · +${commits.length-1} more`:''}`:'';
-  const values=[0,1,2].map(j=>sum((b?.events||[]).map(e=>e.tokens[j])));
-  ['fresh','cached','output'].forEach((id,i)=>setNumber(id,values[i]));setNumber('selectedTotal',values[0]+values[2]);setNumber('receiptTotal',values[0]+values[2]);setNumber('receiptTraffic',sum(values));
-  $('selectedCached').textContent=values[1]?fmt(values[1])+' cached context':'';
-  $('activity').replaceChildren();
-  $('activity').classList.add('plain-activity');
-  (b?.summary.highlights||[{title:'No recorded activity'}]).forEach(item=>{const li=node('li');li.append(icon('chapters'),node('span','',item.title));$('activity').append(li);});
-  if(b?.helpers?.length){const li=node('li','helper-list');const ul=node('ul');b.helpers.slice(0,5).forEach(h=>{const w=work(b.events.filter(e=>e.session===h.id));ul.append(node('li','',`${sessionTitle(h)} · ${fmt(w)}`));});if(b.helpers.length>5)ul.append(node('li','',`+${b.helpers.length-5} more`));li.append(ul);$('activity').append(li);}
-  document.querySelector('.activity-bottom small').textContent='Observed activity · outcome not reviewed';
 }
 function dialog(title,eyebrow){$('dialogTitle').textContent=title;$('dialogEyebrow').textContent=eyebrow;$('dialogContent').replaceChildren();$('dialogContent').className='';if(!$('details').open)$('details').showModal();return $('dialogContent');}
 function paragraph(parent,text,cls){parent.append(node('p',cls,text));}
 function table(parent,headers,rows){const t=node('table'),head=node('thead'),hr=node('tr'),body=node('tbody');headers.forEach(s=>hr.append(node('th','',s)));head.append(hr);rows.forEach(row=>{const r=node('tr');row.forEach(s=>r.append(node('td','',s)));body.append(r);});t.append(head,body);parent.append(t);}
 function disclosure(parent,label,id){const d=node('details','summary-disclosure');if(id)d.id=id;d.append(node('summary','',label));const body=node('div','disclosure-body');d.append(body);parent.append(d);return {details:d,body};}
 function ledger(parent,rows){const dl=node('dl','plain-ledger');rows.forEach(([name,value])=>{const row=node('div');row.append(node('dt','',name),node('dd','',value));dl.append(row);});parent.append(dl);}
-function openActivity(section){
-  const b=current();if(!b)return;
+function openActivity(b,section){
+  if(!b)return;
   const summary=b.summary,content=dialog('What the records show','WHAT WE CAN SEE');
   content.classList.add('plain-summary');
   const meta=node('div','summary-meta');meta.append(node('span','',date(day(b.start),true)),node('span','',plural(b.sessions.length,'recorded session')),node('span','summary-provenance','Activity only'));content.append(meta);
@@ -226,7 +213,7 @@ function openActivity(section){
   const evidence=disclosure(content,'What supports this summary?','summaryEvidence');
   paragraph(evidence.body,'The highlights above count recorded tool requests. They do not establish that a feature was finished or that checks passed, and no session content is read or summarized to produce them.');
   if(b.commits.length){evidence.body.append(node('h3','','Saved project changes in this period'));const ul=node('ul');b.commits.forEach(c=>ul.append(node('li','',`${date(day(c.at))} · ${c.title}`)));evidence.body.append(ul);paragraph(evidence.body,'These changes provide context for the time period. Token usage is not assigned to a particular change.');}
-  const sessions=disclosure(content,plural(b.sessions.length,'session')+' in this chapter','dialogSessions');
+  const sessions=disclosure(content,plural(b.sessions.length,'session')+' on this day','dialogSessions');
   b.sessions.forEach(s=>{const row=node('div','session-note');row.append(node('strong','',(s.helper?`${s.provider} helper · `:`${s.provider} · `)+sessionTitle(s)),node('span','',s.started?date(day(s.started))+' · '+s.started.slice(11,16):'Start not recorded'));const technical=disclosure(row,'Session details');ledger(technical.body,[['Session',s.id],['Model',s.model||'Not recorded'],['Tokens in this selection',exact(total(b.events.filter(e=>e.session===s.id)))]]);sessions.body.append(row);});
   const log=disclosure(sessions.body,'Recorded tool requests');if(b.actions.length)ledger(log.body,counts(b.actions).map(([l,c])=>[l,exact(c)]));else paragraph(log.body,'No tool requests were recorded in this selection.');
   if(section==='commits'){evidence.details.open=true;evidence.details.scrollIntoView({block:'start'});}
@@ -238,7 +225,7 @@ function coverage(){
   const files=data.coverage.sourceFiles||{};table(c,['Source','Log files read'],Object.entries(files).map(([k,v])=>[k,String(v)]));
   table(c,['Coverage','Recorded'],[['History starts',data.first?date(day(data.first),true):'No receipts'],['Latest receipt',data.last?date(day(data.last),true)+' '+data.last.slice(11,16):'None'],['Sessions',exact(data.sessions.length)],['Response receipts',exact(data.events.length)],['Git milestones',exact(data.commits.length)],['Missing indexed log files',String(data.coverage.missingFiles||0)],['Excluded internal review sessions',String(data.coverage.excludedInternalSessions||0)],['Duplicate response records removed',String(data.coverage.duplicateResponses||0)],['Unreadable / invalid records',String(data.coverage.unreadableRecords||0)],['Undated counter tokens excluded',exact(data.coverage.undatedTokens||0)]]);
   paragraph(c,'All time means all available receipts for this project on this computer. A date with no receipts means no activity was recorded here; it does not prove that no work happened. Another computer can hold additional history.');
-  paragraph(c,'The Story view groups receipts by day (by hour in Day view, by week for long histories). Chapter titles use a session’s own opening words, then saved Git milestones. They are navigation labels, not token attribution to a particular change.');
+  paragraph(c,'The calendar shows new tokens per day. Choosing a day lists its sessions, with helper sessions counted inside the session that launched them. Session titles use each session’s own opening words.');
   paragraph(c,'Activity highlights count recorded tool requests. Nothing in your sessions is read, summarized or sent anywhere to produce them, and no model is called.');
   paragraph(c,'Token receipts are deduplicated by response identity. Fresh input = input minus cached input; output includes reasoning tokens. Cached input is included once in total recorded traffic. Response receipts can differ from account or session summary counters. No allowance percentage, API price or cost estimate is inferred.');
 }
@@ -259,10 +246,9 @@ async function refresh(manual=false){
   finally{loading=false;$('refresh').disabled=false;}
 }
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{if(!data)return;range=b.dataset.range;selected=null;render();});
-document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{if(!data)return;mode=b.dataset.mode;selected=null;render();});
 $('previous').onclick=()=>{anchor=addDays(anchor,range==='day'?-1:-7);selected=null;render();};
 $('next').onclick=()=>{anchor=addDays(anchor,range==='day'?1:7);if(anchor>data.today)anchor=data.today;selected=null;render();};
-$('openActivity').onclick=()=>openActivity();$('coverageButton').onclick=coverage;
+$('coverageButton').onclick=coverage;
 document.querySelectorAll('[data-info]').forEach(b=>b.onclick=tokenInfo);
 $('closeDialog').onclick=()=>$('details').close();$('details').onclick=e=>{if(e.target===$('details')){const r=$('details').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('details').close();}};
 $('refresh').onclick=()=>refresh(true);
@@ -273,4 +259,4 @@ document.addEventListener('visibilitychange',poll);
 setInterval(poll,30000);
 refresh();
 // Read-only state for validation; raw transcripts never enter the browser.
-window.smithDashboard={refresh,get snapshot(){return data;},get buckets(){return buckets;},get selected(){return selected;},get range(){return range;},get mode(){return mode;},get events(){return scopedEvents;},get project(){return project;}};
+window.smithDashboard={refresh,get snapshot(){return data;},get buckets(){return buckets;},get selected(){return selected;},get range(){return range;},get day(){return calendarDay;},get events(){return scopedEvents;},get project(){return project;}};
