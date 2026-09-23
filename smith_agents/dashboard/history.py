@@ -1,4 +1,5 @@
-"""Read-only project snapshot for the design trial. Never reads credentials.
+"""Read-only project snapshot from local Codex, Claude Code and Hermes history.
+Never reads credentials.
 
 Codex receipt input includes cached input; reasoning is already part of output.
 Prefer per-response receipts, never add them to cumulative counters. The fallback
@@ -185,6 +186,98 @@ def claude_logs(project, projects_dir=None):
     return logs
 
 
+HERMES_TOOLS = {'terminal': 'Command calls', 'execute_code': 'Command calls',
+                'process_manage': 'Command calls', 'read_file': 'File reads',
+                'search_files': 'File reads', 'patch': 'File-edit calls',
+                'write_file': 'File-edit calls', 'vision_analyze': 'Image inspections',
+                'web_search': 'Web lookups', 'web_extract': 'Web lookups',
+                'clarify': 'Clarification calls', 'delegate_task': 'Helper launches'}
+
+
+def hermes_database(value=None):
+    return Path(value or os.environ.get('HERMES_HOME') or Path.home() / '.hermes') / 'state.db'
+
+
+def _hermes_rows(query, args=(), database=None):
+    path = hermes_database(database)
+    if not path.is_file():
+        return []
+    try:
+        with sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=.5) as db:
+            db.execute('PRAGMA query_only=ON')
+            return db.execute(query, args).fetchall()
+    except sqlite3.Error:
+        return []
+
+
+def hermes_workspaces(database=None):
+    """Hermes sessions per recorded workspace, for project discovery."""
+    return Counter({workspace(cwd): n for cwd, n in _hermes_rows(
+        'SELECT cwd, COUNT(*) FROM sessions WHERE cwd IS NOT NULL GROUP BY cwd', (), database)
+        if workspace(cwd)})
+
+
+def _unix(value):
+    try:
+        return datetime.fromtimestamp(float(value), timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def hermes_sessions(project, database=None):
+    """Hermes sessions for a workspace, in the shape ``normalize_sessions`` reads.
+
+    Hermes saves running totals per session, not a receipt per response. Each
+    session's totals are split across the days its replies were written, in
+    proportion to its replies on each day, and marked as estimated. Only
+    timestamps and tool names are read from its messages, never their text."""
+    rows = _hermes_rows('SELECT id, parent_session_id, started_at, ended_at, model, title, '
+                        'input_tokens, output_tokens, cache_read_tokens, cache_write_tokens '
+                        'FROM sessions WHERE cwd = ?', (str(project),), database)
+    parsed = []
+    for identity, parent, started, ended, model, title, fresh, output, read, write in rows:
+        replies = [stamp(_unix(at)) for (at,) in _hermes_rows(
+            "SELECT timestamp FROM messages WHERE session_id = ? AND role = 'assistant' "
+            'ORDER BY timestamp', (identity,), database)]
+        replies = [at for at in replies if at] or [stamp(_unix(ended or started))]
+        replies = [at for at in replies if at]
+        totals = [(number(fresh) or 0) + (number(write) or 0), number(read) or 0, number(output) or 0]
+        per_day = Counter(at[:10] for at in replies)
+        last = {at[:10]: at for at in replies}
+        receipts, given = [], [0, 0, 0]
+        for i, (day, count) in enumerate(sorted(per_day.items())):
+            final = i == len(per_day) - 1
+            values = [total - done if final else total * count // len(replies)
+                      for total, done in zip(totals, given)]
+            given = [a + b for a, b in zip(given, values)]
+            receipts.append({'id': f'hermes:{identity}:{day}', 'owner': None, 'at': last[day],
+                             'tokens': values, 'estimated': True})
+        actions = [{'at': at, 'id': f'hermes:{identity}:{n}',
+                    'label': HERMES_TOOLS.get(tool, 'Other tool calls')}
+                   for n, (at, tool) in enumerate(
+                       (stamp(_unix(t)), tool) for t, tool in _hermes_rows(
+                           "SELECT timestamp, tool_name FROM messages WHERE session_id = ? "
+                           "AND role = 'tool' ORDER BY timestamp", (identity,), database))
+                   if at]
+        if not title:
+            first = _hermes_rows("SELECT content FROM messages WHERE session_id = ? AND role = 'user' "
+                                 'ORDER BY timestamp LIMIT 1', (identity,), database)
+            title = first[0][0] if first else None
+        parsed.append({'meta': {'id': 'hermes:' + identity, 'cwd': str(project), 'provider': 'Hermes',
+                                'timestamp': _unix(started), 'method': 'session totals split by day',
+                                'parent_thread_id': 'hermes:' + parent if parent else None},
+                       'receipts': receipts, 'counters': [], 'actions': actions,
+                       'model': model, 'invalid': 0, 'title': clean_title(title)})
+    return parsed
+
+
+def session_counts(sessions):
+    """Main sessions and helpers, and main sessions per provider."""
+    main = [s for s in sessions if not s.get('helper')]
+    return {'sessions': len(main), 'helpers': len(sessions) - len(main),
+            'providers': dict(Counter(s['provider'] for s in main))}
+
+
 def discover_projects(home=None):
     """Every workspace the local Codex history mentions, most sessions first.
     Only directories that still exist count, and scratch folders are left out."""
@@ -226,7 +319,8 @@ def discover_projects(home=None):
                 cwd = workspace(first_cwd(path))
                 if cwd:
                     claude[cwd] += 1
-    counts = codex + claude
+    hermes = hermes_workspaces()
+    counts = codex + claude + hermes
     projects = []
     for cwd, sessions in counts.most_common():
         path = Path(cwd)
@@ -234,7 +328,8 @@ def discover_projects(home=None):
             continue
         projects.append({'id': project_id(cwd), 'name': path.name, 'path': cwd,
                          'sessions': sessions,
-                         'sources': {'Codex': codex[cwd], 'Claude Code': claude[cwd]}})
+                         'sources': {'Codex': codex[cwd], 'Claude Code': claude[cwd],
+                                     'Hermes': hermes[cwd]}})
     names = Counter(p['name'] for p in projects)
     for project in projects:
         if names[project['name']] > 1:
@@ -369,7 +464,8 @@ def normalize_sessions(parsed, project):
         session = {'id': identity, 'parent': parent, 'model': data['model'],
                    'provider': meta.get('provider', 'Codex'), 'title': title,
                    'nickname': spawn.get('agent_nickname') if isinstance(spawn, dict) else None,
-                   'started': stamp(meta.get('timestamp')), 'helper': bool(parent), 'method': 'response receipts'}
+                   'started': stamp(meta.get('timestamp')), 'helper': bool(parent),
+                   'method': meta.get('method', 'response receipts')}
         own = [r for r in data['receipts'] if r['owner'] in (None, identity)]
         if own:
             for receipt in own:
@@ -377,7 +473,10 @@ def normalize_sessions(parsed, project):
                     coverage['duplicateResponses'] += 1
                     continue
                 seen_responses.add(receipt['id'])
-                events.append({k: receipt[k] for k in ('id', 'at', 'tokens')} | {'session': identity})
+                event = {k: receipt[k] for k in ('id', 'at', 'tokens')} | {'session': identity}
+                if receipt.get('estimated'):
+                    event['estimated'] = True
+                events.append(event)
         else:
             # Never assign the first cumulative count to the hour we found it.
             session['method'] = 'counter differences'
@@ -463,10 +562,12 @@ def snapshot(project, home=None):
             parsed.append(parse_claude_transcript(path))
         except OSError:
             missing += 1
+    hermes = hermes_sessions(project)
+    parsed.extend(hermes)
     sessions, events, actions, coverage = normalize_sessions(parsed, project)
     coverage['missingFiles'] = missing
     coverage['indexedSessions'] = len(indexed)
-    coverage['sourceFiles'] = {'Codex': len(paths), 'Claude Code': len(claude)}
+    coverage['sourceFiles'] = {'Codex': len(paths), 'Claude Code': len(claude), 'Hermes': len(hermes)}
     events.sort(key=lambda e: e['at'])
     now = datetime.now().astimezone().isoformat(timespec='seconds')
     data = {'project': project.name, 'id': project_id(project), 'timezone': zone_label(),
@@ -484,10 +585,13 @@ def overview(projects, home=None):
     rows = []
     for project in projects:
         days = {}
-        for event in snapshot(project['path'], home)['events']:
+        data = snapshot(project['path'], home)
+        for event in data['events']:
             total = days.setdefault(event['at'][:10], [0, 0, 0])
             for i, value in enumerate(event['tokens']):
                 total[i] += value
-        rows.append({'id': project['id'], 'name': project['name'],
-                     'sessions': project['sessions'], 'days': days})
+        # Counted the way the page counts: main sessions with recorded
+        # activity, helpers apart, not raw log files.
+        rows.append({'id': project['id'], 'name': project['name'], 'days': days}
+                    | session_counts(data['sessions']))
     return rows

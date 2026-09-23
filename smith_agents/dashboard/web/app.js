@@ -76,7 +76,7 @@ function renderShares(){
     if(!p.other){row.type='button';row.setAttribute('aria-label',`Open ${p.name}`);row.onclick=()=>selectProject(p.id);}
     host.append(row);
   });
-  $('projectsNote').textContent=rows.length?`${plural(rows.length,'project')} with recorded traffic for ${periodLabel()}. ${plural(data.projects.length,'workspace')} found in local Codex and Claude Code history.`:`No recorded traffic for ${periodLabel()}.`;
+  $('projectsNote').textContent=rows.length?`${plural(rows.length,'project')} with recorded traffic for ${periodLabel()}. ${plural(data.projects.length,'workspace')} found in local Codex, Claude Code and Hermes history.`:`No recorded traffic for ${periodLabel()}.`;
 }
 function fillProjects(list){
   const select=$('project');
@@ -90,8 +90,10 @@ function periodLabel(){return periodStart===periodEnd?date(periodEnd,true):date(
 function render(){
   buildBuckets();$('dashboard').hidden=false;$('projectCoverage').hidden=false;
   const sessions=new Set([...scopedEvents,...scopedActions].map(e=>e.session));
+  const byId=Object.fromEntries(data.sessions.map(s=>[s.id,s])),active=[...sessions].map(id=>byId[id]).filter(Boolean);
+  const main=active.filter(s=>!s.helper),helperCount=active.length-main.length,providers={};main.forEach(s=>providers[s.provider]=(providers[s.provider]||0)+1);
   setNumber('total',work(scopedEvents));setNumber('cachedTotal',cached(scopedEvents));$('projectName').textContent=data.project;renderShares();
-  $('sessionCount').textContent=sessions.size;$('chapterCount').textContent=new Set([...scopedEvents,...scopedActions].map(e=>day(e.at))).size;
+  $('sessionCount').textContent=main.length;$('sessionUnit').textContent=main.length===1?'session':'sessions';$('sessionSplit').textContent=[...Object.entries(providers).sort((a,b)=>b[1]-a[1]).map(([p,n])=>`${p} ${n}`),...(helperCount?[plural(helperCount,'helper')]:[])].join(' · ');$('chapterCount').textContent=new Set([...scopedEvents,...scopedActions].map(e=>day(e.at))).size;
   $('chapterUnit').textContent='active days';
   $('historyStart').textContent=data.first?date(day(data.first),true):'No receipts';
   $('summaryDates').textContent=periodLabel();$('dates').textContent=periodStart===periodEnd?date(periodEnd):date(periodStart)+' – '+date(periodEnd);
@@ -153,6 +155,7 @@ function renderDay(){
   head.append(node('div','eyebrow',new Intl.DateTimeFormat('en-GB',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(calendarDay+'T12:00:00Z')).toUpperCase()));
   const big=node('div','day-total');const n=node('strong','',fmt(newTokens));n.title=exact(newTokens)+' tokens';big.append(n,node('span','','new tokens'));head.append(big);
   head.append(node('p','day-sub',`${plural(list.length,'session')} · ${fmt(reused)} cached context · allowance change not recorded`));
+  if(events.some(e=>e.estimated))head.append(node('p','day-note','Hermes tokens are estimated: Hermes saves totals per session, split here by the days it replied.'));
   const fresh=sum(events.map(e=>e.tokens[0])),bar=node('div','day-split');bar.setAttribute('aria-hidden','true');
   const f=node('i','fresh');f.style.flex=String(fresh||0);const o=node('i','output');o.style.flex=String(newTokens-fresh||0);bar.append(f,o);
   head.append(bar,receiptList(events,'day-receipt'));panel.append(head);
@@ -162,7 +165,7 @@ function renderDay(){
     const li=node('li'),open=b.key===selected,button=node('button','day-session');
     button.setAttribute('aria-expanded',String(open));
     const text=node('span','day-session-text');const started=[...b.events,...b.actions].map(e=>e.at).sort()[0];
-    text.append(node('span','day-session-title',b.title),node('small','',`${b.sessions[0]?.provider||'Session'} · ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}`));
+    text.append(node('span','day-session-title',b.title),node('small','',`${b.sessions[0]?.provider||'Session'} · ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}${b.events.some(e=>e.estimated)?' · estimated':''}`));
     const amount=node('strong','',fmt(b.work));amount.title=exact(b.work)+' new tokens';
     const share=node('span','day-share');share.setAttribute('aria-hidden','true');const fill=node('i');fill.style.width=(newTokens?b.work/newTokens*100:0).toFixed(1)+'%';share.append(fill);
     button.append(text,amount,share);button.onclick=()=>{selected=open?null:b.key;renderDay();};li.append(button);
@@ -221,7 +224,7 @@ function openActivity(b,section){
 }
 function coverage(){
   const c=dialog('What this preview can see','LOCAL RECORDING COVERAGE');
-  paragraph(c,`Project history reads retained Codex and Claude Code transcripts for ${data.project} and Git commit metadata from that folder, on this computer only. Hermes, other computers and missing historical logs are outside this snapshot. Account limits live under Plan usage.`);
+  paragraph(c,`Project history reads retained Codex and Claude Code transcripts and saved Hermes sessions for ${data.project} and Git commit metadata from that folder, on this computer only. Hermes saves running totals per session rather than per response, so its tokens are split across the days its replies were written and marked as estimated. Other computers and missing historical logs are outside this snapshot. Account limits live under Plan usage.`);
   const files=data.coverage.sourceFiles||{};table(c,['Source','Log files read'],Object.entries(files).map(([k,v])=>[k,String(v)]));
   table(c,['Coverage','Recorded'],[['History starts',data.first?date(day(data.first),true):'No receipts'],['Latest receipt',data.last?date(day(data.last),true)+' '+data.last.slice(11,16):'None'],['Sessions',exact(data.sessions.length)],['Response receipts',exact(data.events.length)],['Git milestones',exact(data.commits.length)],['Missing indexed log files',String(data.coverage.missingFiles||0)],['Excluded internal review sessions',String(data.coverage.excludedInternalSessions||0)],['Duplicate response records removed',String(data.coverage.duplicateResponses||0)],['Unreadable / invalid records',String(data.coverage.unreadableRecords||0)],['Undated counter tokens excluded',exact(data.coverage.undatedTokens||0)]]);
   paragraph(c,'All time means all available receipts for this project on this computer. A date with no receipts means no activity was recorded here; it does not prove that no work happened. Another computer can hold additional history.');

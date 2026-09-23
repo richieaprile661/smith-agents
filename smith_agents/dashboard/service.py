@@ -263,7 +263,7 @@ class DashboardService:
     def snapshot(self, wanted):
         chosen = self._chosen(wanted)
         if chosen is None:
-            return {'error': 'No local Codex or Claude Code history was found on this computer.',
+            return {'error': 'No local Codex, Claude Code or Hermes history was found on this computer.',
                     'project': None, 'projects': [], 'sessions': [], 'events': [], 'actions': [],
                     'commits': [], 'coverage': {}, 'timezone': history.zone_label()}
         with self.lock:

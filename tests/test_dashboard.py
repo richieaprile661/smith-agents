@@ -16,6 +16,8 @@ from unittest.mock import Mock, patch
 
 _config = tempfile.TemporaryDirectory(prefix="widget-dashboard-tests-")
 os.environ["SMITH_AGENTS_CONFIG_DIR"] = _config.name
+# No test reads the real Hermes history on this computer.
+os.environ["HERMES_HOME"] = os.path.join(_config.name, "no-hermes")
 
 from smith_agents import core
 from smith_agents.app import SmithAgentsWidget
@@ -241,7 +243,7 @@ class ProjectIdentity(unittest.TestCase):
                                          ('b.jsonl', str(Path(root) / 'deleted'))])
         self.assertEqual([p['name'] for p in found], ['alive'])
         self.assertEqual(found[0]['id'], project_id(str(alive)))
-        self.assertEqual(found[0]['sources'], {'Codex': 1, 'Claude Code': 0})
+        self.assertEqual(found[0]['sources'], {'Codex': 1, 'Claude Code': 0, 'Hermes': 0})
 
     def test_a_scratch_checkout_is_not_offered_as_a_project(self):
         with tempfile.TemporaryDirectory() as root:
@@ -772,6 +774,57 @@ class PackagedAssets(unittest.TestCase):
         page = (Path(core.__file__).resolve().parent / 'dashboard/web/app.js').read_text()
         self.assertNotIn('5% → 17%', page)
         self.assertIn('allowance not recorded', page)
+
+
+class HermesHistory(unittest.TestCase):
+    def database(self, folder):
+        import sqlite3
+        path = Path(folder) / 'state.db'
+        with sqlite3.connect(path) as db:
+            db.execute('CREATE TABLE sessions (id TEXT, parent_session_id TEXT, started_at REAL, '
+                       'ended_at REAL, model TEXT, title TEXT, cwd TEXT, input_tokens INTEGER, '
+                       'output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER)')
+            db.execute('CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT, '
+                       'tool_name TEXT, timestamp REAL)')
+            day = 1790000000.0                      # any fixed instant
+            db.execute("INSERT INTO sessions VALUES ('main', NULL, ?, ?, 'm', 'Plan the work', '/work/one', 90, 30, 500, 10)",
+                       (day, day + 86400 * 2))
+            db.execute("INSERT INTO sessions VALUES ('kid', 'main', ?, NULL, 'm', NULL, '/work/one', 4, 2, 0, 0)", (day,))
+            db.execute("INSERT INTO sessions VALUES ('else', NULL, ?, NULL, 'm', 'x', '/work/two', 1, 1, 0, 0)", (day,))
+            for at in (day + 10, day + 20, day + 86400 * 2):
+                db.execute("INSERT INTO messages VALUES ('main', 'assistant', 'private reply', NULL, ?)", (at,))
+            db.execute("INSERT INTO messages VALUES ('main', 'tool', 'private output', 'terminal', ?)", (day + 15,))
+            db.execute("INSERT INTO messages VALUES ('kid', 'user', 'Check the tests', NULL, ?)", (day,))
+        return path.parent
+
+    def test_hermes_totals_are_split_by_reply_day_and_kept_whole(self):
+        with tempfile.TemporaryDirectory() as folder:
+            parsed = history.hermes_sessions('/work/one', self.database(folder))
+            sessions, events, actions, _ = history.normalize_sessions(parsed, '/work/one')
+        main = next(s for s in sessions if s['id'] == 'hermes:main')
+        self.assertEqual((main['provider'], main['title'], main['helper']), ('Hermes', 'Plan the work', False))
+        kid = next(s for s in sessions if s['id'] == 'hermes:kid')
+        self.assertEqual((kid['parent'], kid['helper'], kid['title']), ('hermes:main', True, 'Check the tests'))
+        own = [e for e in events if e['session'] == 'hermes:main']
+        self.assertEqual(len(own), 2)                               # two reply days
+        self.assertTrue(all(e['estimated'] for e in own))
+        # Fresh input includes cache writes; nothing is lost or added in the split.
+        self.assertEqual([sum(e['tokens'][i] for e in own) for i in range(3)], [100, 500, 30])
+        self.assertEqual([a['label'] for a in actions if a['session'] == 'hermes:main'], ['Command calls'])
+        self.assertNotIn('private', json.dumps([sessions, events, actions]))
+
+    def test_workspaces_and_counts_include_hermes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            database = self.database(folder)
+            self.assertEqual(history.hermes_workspaces(database), {'/work/one': 2, '/work/two': 1})
+            sessions, *_ = history.normalize_sessions(history.hermes_sessions('/work/one', database), '/work/one')
+        self.assertEqual(history.session_counts(sessions),
+                         {'sessions': 1, 'helpers': 1, 'providers': {'Hermes': 1}})
+
+    def test_a_missing_hermes_database_is_not_an_error(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(history.hermes_sessions('/work/one', folder), [])
+            self.assertEqual(history.hermes_workspaces(folder), {})
 
 
 class BrandMark(unittest.TestCase):
