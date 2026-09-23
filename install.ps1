@@ -9,18 +9,32 @@
 
     $smithInstallDir = $env:SMITH_AGENTS_INSTALL_DIR
     if (-not $smithInstallDir) { $smithInstallDir = Join-Path $env:LOCALAPPDATA "Smith Agents" }
+    # Install the published release, not master: the wheel is pinned by version and checksum.
+    $smithVersion = "1.1.3"
+    $smithSha256 = "8b5c65603421be296c40d50615e3ecec4ee0f00f6daf4ca90ce3089829af347d"
+    $smithWheel = "smith_agents-$smithVersion-py3-none-any.whl"
+    New-Item -ItemType Directory -Path $smithInstallDir -Force | Out-Null
     $smithPackage = $env:SMITH_AGENTS_PACKAGE
+    $smithDownload = $null
     if (-not $smithPackage) {
-        $smithPackage = "https://github.com/richieaprile661/smith-agents/archive/refs/heads/master.zip"
+        $smithDownload = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+        New-Item -ItemType Directory -Path $smithDownload -Force | Out-Null
+        $smithPackage = Join-Path $smithDownload $smithWheel
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/richieaprile661/smith-agents/releases/download/v$smithVersion/$smithWheel" -OutFile $smithPackage
+        if ((Get-FileHash -Algorithm SHA256 -LiteralPath $smithPackage).Hash -ne $smithSha256) {
+            Remove-Item -LiteralPath $smithDownload -Recurse -Force
+            throw "The downloaded Smith Agents $smithVersion package failed its checksum. Nothing was installed."
+        }
     }
     $smithVenv = Join-Path $smithInstallDir "venv"
-    New-Item -ItemType Directory -Path $smithInstallDir -Force | Out-Null
     & py -3 -m venv $smithVenv
     if ($LASTEXITCODE -ne 0) { throw "Could not create the Smith Agents environment." }
     $smithPython = Join-Path $smithVenv "Scripts\python.exe"
-    # master can contain newer code with the same package version.
+    # Reinstall even when the version matches, so a repeat run repairs the environment.
     & $smithPython -m pip install --upgrade --force-reinstall $smithPackage
-    if ($LASTEXITCODE -ne 0) { throw "Installation failed. Check the error above and try again." }
+    $smithPipExit = $LASTEXITCODE
+    if ($smithDownload) { Remove-Item -LiteralPath $smithDownload -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($smithPipExit -ne 0) { throw "Installation failed. Check the error above and try again." }
     & $smithPython -c "import smith_agents"
     if ($LASTEXITCODE -ne 0) { throw "The installed package does not contain Smith Agents." }
 

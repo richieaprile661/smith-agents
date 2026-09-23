@@ -1,8 +1,28 @@
 # Changelog
 
-Smith Agents ships continuously from `master`. The version number moves for
-larger changes, and the one-line installer always installs the current
-`master`, so a version below may have gained entries after its first release.
+The one-line installer installs the latest GitHub release, pinned by version
+and checksum. Changes on `master` reach it only when a new version is released.
+
+## 1.1.3 — 23 September 2026
+
+### Added
+- A usage dashboard, opened from the widget in its own window: a month
+  calendar of active sessions with each day's sources, a day breakdown beside
+  it, and a projects panel, across Claude Code, Codex, and Hermes history.
+- Codex credit balance in the header, the tucked drawer, the Usage tab, and
+  the tray, marked "on credits" once the weekly limit is spent.
+- A free Codex rate-limit reset, shown when one is available.
+- The real Nous balance and spend behind Hermes, which now fills the Hermes
+  usage tab.
+
+### Changed
+- The one-line installers install the published release wheel and verify its
+  SHA256, instead of installing `master`.
+
+### Fixed
+- A new main session takes the least-used Smith expression among open
+  sessions instead of a hash of its id, so faces stop repeating side by side.
+- Tilt, Shout, and Chin Up keep their chins inside the portrait crop.
 
 ## 1.1.2 — 16 to 21 September 2026
 
@@ -19,12 +39,8 @@ larger changes, and the one-line installer always installs the current
   clicking a portrait brings that window forward.
 - Live helper activity, with helpers shown compact under their parent.
 - README images rendered from the widget itself, in light and dark.
-- Codex credit balance in the header, the tucked drawer, the Usage tab, and
-  the tray, marked "on credits" once the weekly limit is spent.
 
 ### Fixed
-- A new main session takes the least-used Smith expression among open
-  sessions instead of a hash of its id, so faces stop repeating side by side.
 - Clean shutdown on SIGTERM, so the single-instance lock is released.
 - Stale launchers and duplicate widget relaunches.
 - Session rows keep the slot they were created in.

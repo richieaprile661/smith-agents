@@ -177,6 +177,13 @@ and `tools/build_macos.py`, then remove the previous wheel after building its
 replacement. `test_release.py` checks that exactly one wheel ships, that its
 version matches the source, and that its code and resources match the checkout.
 
+Publish the wheel from `release/` as a GitHub release tagged `v<version>`, then
+point `install.sh` and `install.ps1` at it: set the version and the wheel's
+SHA256 (`shasum -a 256 release/*.whl`) in both. The one-line installers install
+only that pinned wheel, so users get nothing new until this step lands on
+`master`. `test_release.py` checks that both installers pin the same version and
+checksum as each other and as the source.
+
 The workflow in `.github/workflows/test.yml` runs these tests and starts the
 widget with sample data on Windows and macOS. For the VS Code bridge and the
 approval review, see [Windows setup](windows.md). For the Mac smoke test and

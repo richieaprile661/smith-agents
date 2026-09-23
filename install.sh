@@ -12,11 +12,26 @@ if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(sy
 fi
 
 smith_install_dir=${SMITH_AGENTS_INSTALL_DIR:-"$HOME/Library/Application Support/Smith Agents"}
-smith_package=${SMITH_AGENTS_PACKAGE:-https://github.com/richieaprile661/smith-agents/archive/refs/heads/master.zip}
+# Install the published release, not master: the wheel is pinned by version and checksum.
+smith_version=1.1.3
+smith_sha256=8b5c65603421be296c40d50615e3ecec4ee0f00f6daf4ca90ce3089829af347d
+smith_wheel=smith_agents-$smith_version-py3-none-any.whl
 mkdir -p "$smith_install_dir"
+if [ -n "${SMITH_AGENTS_PACKAGE:-}" ]; then
+    smith_package=$SMITH_AGENTS_PACKAGE
+else
+    smith_download=$(mktemp -d)
+    trap 'rm -rf "$smith_download"' EXIT
+    smith_package="$smith_download/$smith_wheel"
+    curl -fsSL -o "$smith_package" "https://github.com/richieaprile661/smith-agents/releases/download/v$smith_version/$smith_wheel"
+    if [ "$(shasum -a 256 "$smith_package" | cut -d ' ' -f 1)" != "$smith_sha256" ]; then
+        echo "The downloaded Smith Agents $smith_version package failed its checksum. Nothing was installed." >&2
+        exit 1
+    fi
+fi
 python3 -m venv "$smith_install_dir/venv"
 smith_python="$smith_install_dir/venv/bin/python"
-# master can contain newer code with the same package version.
+# Reinstall even when the version matches, so a repeat run repairs the environment.
 "$smith_python" -m pip install --upgrade --force-reinstall "$smith_package"
 "$smith_python" -c 'import smith_agents'
 

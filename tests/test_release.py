@@ -38,5 +38,19 @@ class ReleaseTests(unittest.TestCase):
                     self.assertIn(relative.as_posix(), names, "New package resources must ship in the wheel.")
 
 
+class InstallerTests(unittest.TestCase):
+    def test_installers_pin_the_same_release(self):
+        shell = (ROOT / "install.sh").read_text(encoding="utf-8")
+        powershell = (ROOT / "install.ps1").read_text(encoding="utf-8")
+        version = re.search(r"^smith_version=(\S+)$", shell, re.M)[1]
+        checksum = re.search(r"^smith_sha256=([0-9a-f]{64})$", shell, re.M)[1]
+        self.assertEqual(version, __version__, "Point the installers at the new release.")
+        self.assertIn(f'$smithVersion = "{version}"', powershell)
+        self.assertIn(f'$smithSha256 = "{checksum}"', powershell)
+        for script in (shell, powershell):
+            self.assertNotIn("master.zip", script)
+            self.assertIn("releases/download/v", script)
+
+
 if __name__ == "__main__":
     unittest.main()

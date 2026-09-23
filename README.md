@@ -130,8 +130,8 @@ On Windows, it adds a Start menu shortcut. On macOS, it adds the app to
 1. Quit Smith Agents from its tray or menu-bar menu.
 2. Run the same install command again.
 
-The installer replaces the code with the version on `master` and starts the
-widget. Your settings and agent logins stay as they are, and your Claude and Codex
+The installer replaces the code with the latest published release, checks its
+checksum, and starts the widget. Your settings and agent logins stay as they are, and your Claude and Codex
 sessions can keep running. Smith Agents doesn't check for updates on its own. If
 you installed to a custom folder with `SMITH_AGENTS_INSTALL_DIR`, set it to the
 same folder when you update.
