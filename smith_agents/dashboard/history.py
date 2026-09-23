@@ -597,18 +597,19 @@ def snapshot(project, home=None):
     return data
 
 
+def overview_row(project, data):
+    """One project's daily token totals, from its snapshot."""
+    days = {}
+    for event in data['events']:
+        total = days.setdefault(event['at'][:10], [0, 0, 0])
+        for i, value in enumerate(event['tokens']):
+            total[i] += value
+    # Counted the way the page counts: main sessions with recorded
+    # activity, helpers apart, not raw log files.
+    return ({'id': project['id'], 'name': project['name'], 'days': days}
+            | session_counts(data['sessions'], data['events'], data['actions']))
+
+
 def overview(projects, home=None):
     """Daily token totals per project, enough for a share panel and no more."""
-    rows = []
-    for project in projects:
-        days = {}
-        data = snapshot(project['path'], home)
-        for event in data['events']:
-            total = days.setdefault(event['at'][:10], [0, 0, 0])
-            for i, value in enumerate(event['tokens']):
-                total[i] += value
-        # Counted the way the page counts: main sessions with recorded
-        # activity, helpers apart, not raw log files.
-        rows.append({'id': project['id'], 'name': project['name'], 'days': days}
-                    | session_counts(data['sessions'], data['events'], data['actions']))
-    return rows
+    return [overview_row(project, snapshot(project['path'], home)) for project in projects]

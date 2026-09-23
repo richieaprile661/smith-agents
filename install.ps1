@@ -10,8 +10,8 @@
     $smithInstallDir = $env:SMITH_AGENTS_INSTALL_DIR
     if (-not $smithInstallDir) { $smithInstallDir = Join-Path $env:LOCALAPPDATA "Smith Agents" }
     # Install the published release, not master: the wheel is pinned by version and checksum.
-    $smithVersion = "1.1.3"
-    $smithSha256 = "8b5c65603421be296c40d50615e3ecec4ee0f00f6daf4ca90ce3089829af347d"
+    $smithVersion = "1.1.4"
+    $smithSha256 = "67ff59f9821bd25e17db07a2fe807895becb71a16981a29f8428b94cdc2abab3"
     $smithWheel = "smith_agents-$smithVersion-py3-none-any.whl"
     New-Item -ItemType Directory -Path $smithInstallDir -Force | Out-Null
     $smithPackage = $env:SMITH_AGENTS_PACKAGE

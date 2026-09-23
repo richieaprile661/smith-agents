@@ -18,7 +18,8 @@ import secrets
 import threading
 import time
 
-from . import history
+from .. import allowance_log
+from . import allowance, history
 from .account import Readings
 
 WEB = Path(__file__).resolve().parent / 'web'
@@ -161,7 +162,7 @@ class DashboardService:
         # Reading the local transcripts is the slow part. It runs under its own
         # lock so that several browser windows share one scan, and so that
         # opening the dashboard never waits behind one.
-        self.scan_lock = threading.Lock()
+        self.scan_lock = threading.RLock()
         self.server = None
         self.thread = None
         self.token = ''
@@ -235,7 +236,7 @@ class DashboardService:
 
     @staticmethod
     def _empty():
-        return {'at': 0.0, 'projects': [], 'overview': None, 'snapshots': {}}
+        return {'at': 0.0, 'projects': [], 'overview': None, 'snapshots': {}, 'allowance': None}
 
     def _projects(self):
         """Every workspace local history mentions, at most 30 seconds old."""
@@ -252,7 +253,7 @@ class DashboardService:
                                      'sessions': 0, 'sources': {}})
             with self.lock:
                 self.cache = {'at': time.monotonic(), 'projects': projects,
-                              'overview': None, 'snapshots': {}}
+                              'overview': None, 'snapshots': {}, 'allowance': None}
             return projects
 
     def _overview(self, projects):
@@ -261,7 +262,7 @@ class DashboardService:
             with self.lock:
                 if self.cache['overview'] is not None:
                     return self.cache['overview']
-            rows = history.overview(projects)
+            rows = [history.overview_row(p, self._project_snapshot(p)) for p in projects]
             with self.lock:
                 if self.cache['projects'] is projects:
                     self.cache['overview'] = rows
@@ -279,12 +280,8 @@ class DashboardService:
     def projects(self):
         return [{k: v for k, v in p.items() if k != 'path'} for p in self._projects()]
 
-    def snapshot(self, wanted):
-        chosen = self._chosen(wanted)
-        if chosen is None:
-            return {'error': 'No local Codex, Claude Code or Hermes history was found on this computer.',
-                    'project': None, 'projects': [], 'sessions': [], 'events': [], 'actions': [],
-                    'commits': [], 'coverage': {}, 'timezone': history.zone_label()}
+    def _project_snapshot(self, chosen):
+        """One project's history, read once per project-list refresh."""
         with self.lock:
             cached = self.cache['snapshots'].get(chosen['id'])
         if cached is None:
@@ -298,8 +295,48 @@ class DashboardService:
                     cached['project'] = chosen['name']
                     with self.lock:
                         self.cache['snapshots'][chosen['id']] = cached
-        cached['projects'] = self._overview(self._projects())
         return cached
+
+    def _allowance(self, projects):
+        """Saved account readings split across every project's receipts.
+
+        A limit is shared by all of an account's sessions, whatever folder
+        they ran in, so the split looks at every project, not only the one
+        on screen."""
+        with self.lock:
+            cached = self.cache['allowance']
+        if cached is not None:
+            return cached
+        events, seen = [], set()
+        for project in projects:
+            data = self._project_snapshot(project)
+            accounts = {s['id']: allowance.ACCOUNTS.get(s['provider']) for s in data['sessions']}
+            for event in data['events']:
+                account = accounts.get(event['session'])
+                if account and event['id'] not in seen:
+                    seen.add(event['id'])
+                    events.append(dict(event, provider=account))
+        result = allowance.attribute(allowance_log.read(), events)
+        with self.lock:
+            if self.cache['projects'] is projects:
+                self.cache['allowance'] = result
+        return result
+
+    def snapshot(self, wanted):
+        chosen = self._chosen(wanted)
+        if chosen is None:
+            return {'error': 'No local Codex, Claude Code or Hermes history was found on this computer.',
+                    'project': None, 'projects': [], 'sessions': [], 'events': [], 'actions': [],
+                    'commits': [], 'coverage': {}, 'timezone': history.zone_label()}
+        cached = self._project_snapshot(chosen)
+        projects = self._projects()
+        shares = self._allowance(projects)
+        result = dict(cached, projects=self._overview(projects),
+                      allowance={'days': shares['days'], 'since': shares['since']},
+                      version=cached.get('version', '') + shares['version'])
+        result['events'] = [dict(e, allow=shares['shares'][e['id']]) if e['id'] in shares['shares'] else e
+                            for e in cached['events']]
+        return result
 
     def allowance(self):
         return self.readings.snapshot()

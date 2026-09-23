@@ -27,6 +27,21 @@ const sourceClass=name=>(SOURCES.find(([n])=>n===name)||[,'codex'])[1];
 const mark=(name,cls='mark')=>{const img=node('img',cls);img.src='/source/'+sourceClass(name)+'.png';img.alt=name;img.title=name;return img;};
 const sessionTitle=s=>s?.title||(s?`${s.helper?'Helper':s.provider} · ${s.id.slice(0,6)}`:'Recorded work');
 const exact=v=>v.toLocaleString('en-GB');
+// Weekly allowance, from account readings the widget saved. A share is exact
+// when one session was active between two readings, and estimated ("~") when
+// the rise was split between overlapping sessions by their token weight.
+const ACCOUNTS=[['Claude Code','Claude'],['Codex','Codex']];
+const pp=v=>(v<9.95?v.toFixed(1):Math.round(v))+'%';
+const recordedOn=(d,account)=>{const from=data.allowance?.since?.[account];return !!from&&d>=from;};
+const weekShare=(events,source)=>{let pct=0,est=false;events.forEach(e=>{const w=e.allow?.week;if(w&&sourceOf(e.session)===source){pct+=w.pct;est=est||w.est;}});return {pct,est};};
+const accountDay=(d,account)=>data.allowance?.days?.[d]?.[account]?.week;
+function allowanceLines(d,events){
+  return ACCOUNTS.filter(([source,account])=>recordedOn(d,account)&&events.some(e=>sourceOf(e.session)===source)).map(([source,account])=>{
+    const share=weekShare(events,source),whole=accountDay(d,account);
+    return {source,account,share,whole};
+  });
+}
+const shareText=s=>(s.est?'~':'')+'+'+pp(s.pct);
 const day=at=>at.slice(0,10);
 const date=(d,year=false)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',...(year?{year:'numeric'}:{}),timeZone:'UTC'}).format(new Date(d+'T12:00:00Z'));
 const addDays=(d,n)=>{const t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()+n);return t.toISOString().slice(0,10);};
@@ -144,12 +159,25 @@ function renderTimeline(){
   for(let i=0;i<offset;i++)grid.append(node('span'));
   for(let i=1;i<=last;i++){
    const key=month+'-'+String(i).padStart(2,'0'),active=days.includes(key),cell=node('button','cal-cell',String(i));cell.disabled=!active;cell.dataset.day=key;cell.setAttribute('aria-pressed',String(key===calendarDay));
-   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(byDay[key]||[]),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});const marks=node('span','cal-marks');SOURCES.forEach(([name])=>{if(split[name])marks.append(mark(name,'mark tiny'));});const cost=spend(byDay[key]||[]);cell.append(marks,node('strong','cal-tokens',fmt(totals[key])),...(cost!=null?[node('span','cal-cost',usd(cost)+' est.')]:[]),bar,node('small','cal-sample','allowance not recorded'));if(cost!=null)cell.title+=`\nHermes estimate: ${usd(cost)}`;cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\nNo account allowance reading was recorded for this day.';cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
+   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(byDay[key]||[]),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});const marks=node('span','cal-marks');SOURCES.forEach(([name])=>{if(split[name])marks.append(mark(name,'mark tiny'));});const cost=spend(byDay[key]||[]);cell.append(marks,node('strong','cal-tokens',fmt(totals[key])),...(cost!=null?[node('span','cal-cost',usd(cost)+' est.')]:[]),bar,allowanceCell(key,byDay[key]||[]));cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\n'+allowanceTitle(key,byDay[key]||[])+(cost!=null?`\nHermes estimate: ${usd(cost)}`:'');cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
    cell.onclick=()=>{calendarDay=key;selected=null;renderTimeline();};grid.append(cell);
   }
   section.append(grid);host.append(section);
  }
  renderDay();
+}
+function allowanceCell(d,events){
+  const lines=allowanceLines(d,events);
+  if(!lines.length)return node('small','cal-sample','allowance not recorded');
+  const row=node('small','cal-allow');row.append(document.createTextNode('wk '));
+  lines.forEach((l,i)=>{if(i)row.append(document.createTextNode(' '));row.append(node('span','a-'+sourceClass(l.source),shareText(l.share)));});
+  return row;
+}
+function allowanceTitle(d,events){
+  const lines=allowanceLines(d,events);
+  if(!lines.length)return 'No account allowance reading was recorded for this day.';
+  return lines.map(l=>{const w=l.whole;const account=w&&w.start!=null?` Account ${pp(w.start)} → ${pp(w.end)} that day${w.reset?' (window reset)':''}.`:'';
+    return `${l.account} weekly: this project ${shareText(l.share)}${l.share.est?' (estimate, split with overlapping sessions)':''}.${account}`;}).join('\n');
 }
 function calendarBuckets(d){return buckets.map(b=>onDay(b,d)).filter(b=>b.events.length||b.actions.length).sort((a,b)=>b.work-a.work);}
 // A session seen through one calendar day: only that day's receipts and calls.
@@ -175,7 +203,15 @@ function renderDay(){
   const head=node('div','day-head');
   head.append(node('div','eyebrow',new Intl.DateTimeFormat('en-GB',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(calendarDay+'T12:00:00Z')).toUpperCase()));
   const big=node('div','day-total');const n=node('strong','',fmt(newTokens));n.title=exact(newTokens)+' tokens';big.append(n,node('span','','new tokens'));head.append(big);
-  head.append(node('p','day-sub',`${plural(list.length,'session')} · ${fmt(reused)} cached context · allowance change not recorded`));
+  const lines=allowanceLines(calendarDay,events);
+  head.append(node('p','day-sub',`${plural(list.length,'session')} · ${fmt(reused)} cached context${lines.length?'':' · allowance change not recorded'}`));
+  lines.forEach(l=>{const w=l.whole,p=node('p','day-allowance');p.append(mark(l.source,'mark inline'));
+    const parts=[`Week ${w&&w.start!=null?pp(w.start)+' → '+pp(w.end):'—'}`,`this project ${shareText(l.share)}${l.share.est?' est.':''}`];
+    if(w&&w.unattributed>0.05)parts.push(`${pp(w.unattributed)} outside local sessions`);
+    if(w&&w.reset)parts.push('window reset');
+    if(w&&w.first&&data.allowance.since[l.account]===calendarDay)parts.push('recorded from '+new Date(w.first*1000).toTimeString().slice(0,5));
+    if(w&&w.gap)parts.push('gaps while the widget was closed');
+    p.append(document.createTextNode(' '+parts.join(' · ')));head.append(p);});
   const dayCost=spend(events);if(dayCost!=null)head.append(node('p','day-cost',`${usd(dayCost)} estimated spend`));
   if(events.some(e=>e.estimated))head.append(node('p','day-note','Hermes tokens are estimated: Hermes saves totals per session, split here by the days it replied.'));
   const fresh=sum(events.map(e=>e.tokens[0])),bar=node('div','day-split');bar.setAttribute('aria-hidden','true');
@@ -187,7 +223,7 @@ function renderDay(){
     const li=node('li'),open=b.key===selected,button=node('button','day-session');
     button.setAttribute('aria-expanded',String(open));
     const text=node('span','day-session-text');const started=[...b.events,...b.actions].map(e=>e.at).sort()[0];
-    const provider=b.sessions[0]?.provider||'Codex',tag=mark(provider,'mark inline');const meta=node('small','',` ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}${spend(b.events)!=null?' · '+usd(spend(b.events))+' est.':b.events.some(e=>e.estimated)?' · estimated':''}`);meta.prepend(tag);text.append(node('span','day-session-title',b.title),meta);
+    const provider=b.sessions[0]?.provider||'Codex',tag=mark(provider,'mark inline');const meta=node('small','',` ${started?started.slice(11,16):''}${b.helpers.length?' · '+plural(b.helpers.length,'helper'):''}${spend(b.events)!=null?' · '+usd(spend(b.events))+' est.':b.events.some(e=>e.estimated)?' · estimated':''}${(()=>{const src=ACCOUNTS.find(([n])=>n===provider);if(!src||!recordedOn(calendarDay,src[1]))return '';const w=weekShare(b.events,provider);return w.pct>=0.05?' · wk '+shareText(w):'';})()}`);meta.prepend(tag);text.append(node('span','day-session-title',b.title),meta);
     const amount=node('strong','',fmt(b.work));amount.title=exact(b.work)+' new tokens';
     const share=node('span','day-share');share.setAttribute('aria-hidden','true');const fill=node('i');fill.style.width=(newTokens?b.work/newTokens*100:0).toFixed(1)+'%';share.append(fill);
     button.append(text,amount,share);button.onclick=()=>{selected=open?null:b.key;renderDay();};li.append(button);

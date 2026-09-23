@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 from datetime import datetime
-from . import core, artwork, figure_actions, portraits, tucked, codex_usage, hermes_usage, hermes_account
+from . import core, allowance_log, artwork, figure_actions, portraits, tucked, codex_usage, hermes_usage, hermes_account
 from .runtime import backend
 from .permissions import answer_permission
 from .core import (
@@ -296,6 +296,7 @@ class SmithAgentsWidget:
                     self.error = None
                     self.updated_at = datetime.now()
                 save_cache(payload, plan)
+                allowance_log.record("Claude", metrics)
                 backoff = 0
             except UsageError as exc:
                 with self.lock:
@@ -339,6 +340,7 @@ class SmithAgentsWidget:
                             self.codex_data[target + "_updated"] = time.time()
                             if key == "limits":
                                 self.codex_data["credits"] = codex_usage.build_credits(result[key])
+                                allowance_log.record("Codex", self.codex_data["metrics"])
                         else:
                             self.codex_data[error_key] = result.get(key + "_error", "Codex reading unavailable")
                     cached = dict(self.codex_data)

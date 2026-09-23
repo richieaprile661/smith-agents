@@ -3,6 +3,18 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.4 — 23 September 2026
+
+### Added
+- Weekly allowance per day and per session in the dashboard, from the day the
+  widget starts saving account readings. Each calendar day shows how much of
+  the Claude and Codex weekly limits its sessions used, and the day panel
+  shows the account's start and end reading. A rise while one session ran is
+  exact; overlapping sessions split it by token weight, marked "~". Use from
+  claude.ai or another computer stays outside local sessions. Readings are
+  kept in `allowance-history.jsonl` in the widget's settings folder for 90
+  days: percentages and reset times only.
+
 ## 1.1.3 — 23 September 2026
 
 ### Added

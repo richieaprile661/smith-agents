@@ -50,7 +50,7 @@
    if(provider.observed_at)card.append(make('p','plan-updated','Account reading: '+new Date(provider.observed_at*1000).toLocaleTimeString()));
    grid.append(card);
   }
-  panel.append(grid,make('p','plan-note','These limits and balances are account-wide: they include your other sessions, projects and devices. Project history does not show an allowance change per day, because no reading is recorded for a past day. Observations below start over when the widget restarts.'));
+  panel.append(grid,make('p','plan-note','These limits and balances are account-wide: they include your other sessions, projects and devices. Project history shows the weekly change per day and per session from the day the widget began saving these readings; earlier days have none. Observations below start over when the widget restarts.'));
   const refreshButton=make('button','button','Refresh readings');refreshButton.onclick=()=>refresh();panel.append(refreshButton,make('p','plan-updated','Updates every 30 seconds while this tab is visible. A single reading cannot predict when you will run out.'));
  }
  async function refresh(){if(busy)return;busy=true;if(!last)panel.textContent='Reading your account limits…';try{last=await smithSession.api('/api/allowance');render(last);}catch(error){if(last)render({...last,providers:last.providers.map(p=>({...p,stale:true,error:'Connection interrupted. Showing the last reading.'}))});else panel.textContent=(error&&error.message)||'Could not read account usage. Reopen Plan usage to retry.';}finally{busy=false;}}
