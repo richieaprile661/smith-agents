@@ -57,7 +57,12 @@
   "smith-06-chin-up": {
     "image": "smith-06-chin-up.png",
     "sha256": "192bf1256e9f884353a395acd31103ed52736b7da256dba77db0533c235fe77c",
-    "source": "output/imagegen/expressions/06-chin-up.png"
+    "source": "output/imagegen/expressions/06-chin-up.png",
+    "head": {
+      "width": 459,
+      "eye": 331,
+      "centre": 381.5
+    }
   },
   "smith-07-turn-right": {
     "image": "smith-07-turn-right.png",
@@ -67,7 +72,12 @@
   "smith-08-shout": {
     "image": "smith-08-shout.png",
     "sha256": "e262796788f949a3fa40ef342c0508ab0d59048fbb110642413d78b3d484d81f",
-    "source": "output/imagegen/expressions/08-shout.png"
+    "source": "output/imagegen/expressions/08-shout.png",
+    "head": {
+      "width": 457,
+      "eye": 372,
+      "centre": 383.5
+    }
   },
   "smith-09-faint-smile": {
     "image": "smith-09-faint-smile.png",
@@ -77,6 +87,11 @@
   "smith-10-tilt": {
     "image": "smith-10-tilt.png",
     "sha256": "6e00894a5bedc60c939db9316c497216484586c52ab72fcf3298106b29b1c70e",
-    "source": "output/imagegen/expressions/10-tilt.png"
+    "source": "output/imagegen/expressions/10-tilt.png",
+    "head": {
+      "width": 435,
+      "eye": 350,
+      "centre": 380.5
+    }
   }
 }
