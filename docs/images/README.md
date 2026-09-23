@@ -15,6 +15,8 @@ the first two. Claude usage is 42% / 18%; Codex usage is 71% / 31% (5h / week).
 | `github-matrix-usage.png` | Both providers' 5h and weekly Signal Fields and glowing logos. |
 | `github-matrix-tuck.png` | Horizontal and vertical strips with attached usage drawers. |
 | `github-matrix-themes.png` | Claude, Matrix, and E-ink using the same layout. |
+| `github-matrix-dashboard.png` | The dashboard with sample history for three projects: calendar days with weekly shares, the day panel, and project shares. Needs Playwright to render; skipped with a notice when it isn't installed. |
+| `github-matrix-demo.webp` | A 4.8-second loop of the three main sample sessions, portraits animating at the pace their state sets. One image for both GitHub themes. |
 | `github-social-preview.png` | The 1280×640 card for shared links. Upload it under Settings → Social preview; GitHub has no API for it. |
 
 Every sheet also has a `-dark.png` twin on near-black paper; the README picks it

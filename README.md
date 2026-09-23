@@ -23,12 +23,32 @@
 jump back to a session from a small floating widget or a strip at the edge of
 your screen.
 
-[Install](#install) · [Sessions](#a-clear-view-of-every-session) · [Usage](#usage-in-a-field-of-signals) · [Screen edges](#small-at-every-edge) · [Codex setup](docs/codex.md) · [Hermes setup](docs/hermes.md)
+[Install](#install) · [Sessions](#a-clear-view-of-every-session) · [Usage](#usage-in-a-field-of-signals) · [Screen edges](#small-at-every-edge) · [Dashboard](#see-where-your-usage-went) · [Codex setup](docs/codex.md) · [Hermes setup](docs/hermes.md)
 
 - **See the work.** Figures, context, and current activity for each session.
 - **Watch your usage.** Separate **5h** and **week** fields, in your provider's color.
 - **Keep your screen.** Tuck to any screen edge. One click on a portrait brings
   that session's window to the front.
+- **See where it went.** A dashboard with usage per day and per session, and each
+  session's share of your weekly limit.
+
+<p align="center">
+  <img src="docs/images/github-matrix-demo.webp" alt="The Smith Agents widget in motion: code-drawn portraits for api-service waiting for approval, design-system ready, and storefront running tests, each animating at the pace of its state." width="360">
+</p>
+
+**Install in one line.** Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/richieaprile661/smith-agents/master/install.ps1 | iex
+```
+
+macOS (Terminal):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/richieaprile661/smith-agents/master/install.sh | sh
+```
+
+You need Python 3.10 or later. See [Install](#install) for details and updates.
 
 ## A clear view of every session
 
@@ -86,6 +106,25 @@ editor and terminal windows.
 - **Click a provider logo** to unfold the attached usage drawer.
 - **Click the drawer reading** to cycle through available limits, including 5h and week.
 - **Click the Smith icon** to return to the full widget.
+
+## See where your usage went
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/github-matrix-dashboard-dark.png">
+  <img src="docs/images/github-matrix-dashboard.png" alt="The Smith Agents dashboard for a sample storefront project: a September calendar where each day shows its new tokens and its share of the weekly limit, such as wk +3%, beside a day panel listing the week's start and end reading and each session's share." width="880">
+</picture>
+
+Choose **Open dashboard** from the widget, the tray, or the menu bar. It opens in
+its own window and reads your local Claude Code, Codex, and Hermes history.
+
+- **Every day and session.** New tokens per day, per project, and per source,
+  with the sessions behind each day.
+- **Your weekly limit, split.** Each day and session shows its share of the
+  Claude and Codex weekly limits. When one session ran alone, the share is exact.
+  When sessions overlapped, the rise is split by their tokens and marked `~`.
+- **Recorded from now on.** The providers only report the current percentage, so
+  shares start on the day your widget begins saving readings. Earlier days stay
+  unrecorded.
 
 ## Choose your atmosphere
 
@@ -235,6 +274,13 @@ For the Codex setups that have been tested, see
   Server. Smith Agents doesn't save credentials in its settings, logs, or caches.
 - **No model calls to read usage.** Checking your limits doesn't start a
   conversation or run an agent task.
+- **A local dashboard.** The dashboard is served only to this computer, on a
+  loopback address with a new key each time it starts. It reads your local
+  session history and doesn't upload it.
+- **Only percentages are saved.** For the dashboard's weekly shares, the widget
+  keeps each usage reading in `allowance-history.jsonl` in its settings folder:
+  the percentage, its limit window, and the reset time. No tokens, prompts, or
+  credentials. Readings older than 90 days are removed.
 - **A separate demo.** `--demo` uses temporary settings and sample data. It
   doesn't read credentials or sessions, or request usage.
 

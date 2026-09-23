@@ -141,7 +141,35 @@ def render_parts(theme, zoom, out_dir):
         save(name, wordmark)
 
 
-def render_theme(theme, zoom, out_dir):
+DEMO_SECONDS = 4.8
+DEMO_FPS = 12.5
+
+
+def render_demo(out_dir):
+    """The widget in motion: portraits animate at the pace their state sets,
+    the way the running widget draws them. Saved as an animated WebP."""
+    from smith_agents import runtime
+    runtime.backend().display_scale = lambda: (96, 1.0)
+    from smith_agents import core, portraits
+    from smith_agents.sample_data import demo_stats
+
+    now = time.time()
+    # Main sessions only: short enough to sit near the top of the README.
+    agents = [agent for agent in sessions(now) if not agent.get("sub")]
+    metrics = core.build_metrics({"limits": [{"kind": "session", "percent": 42},
+                                             {"kind": "weekly_all", "percent": 18}]})
+    frames = []
+    for index in range(round(DEMO_SECONDS * DEMO_FPS)):
+        t = index / DEMO_FPS
+        motion = lambda agent, t=t: 20.0 + portraits.rate(agent.get("state")) * t
+        image, _ = core.render_console(metrics, None, demo_stats(), agents, now + t,
+                                       provider="claude", figure_elapsed=motion)
+        frames.append(image)
+    frames[0].save(Path(out_dir) / "demo.webp", save_all=True, append_images=frames[1:],
+                   duration=round(1000 / DEMO_FPS), loop=0, quality=82, method=6)
+
+
+def render_theme(theme, zoom, out_dir, worker="--worker"):
     settings = Path(out_dir) / "settings"
     settings.mkdir(parents=True, exist_ok=True)
     (settings / "config.json").write_text(json.dumps({"theme": theme, "zoom": zoom}),
@@ -150,8 +178,10 @@ def render_theme(theme, zoom, out_dir):
     claude_dir.mkdir(exist_ok=True)
     env = dict(os.environ, SMITH_AGENTS_CONFIG_DIR=str(settings),
                CLAUDE_CONFIG_DIR=str(claude_dir), PYTHONPATH=str(ROOT))
-    subprocess.run([sys.executable, __file__, "--worker", theme, str(zoom), str(out_dir)],
-                   check=True, env=env, cwd=ROOT)
+    command = [sys.executable, __file__, worker, str(out_dir)]
+    if worker == "--worker":
+        command[2:] = [worker, theme, str(zoom), str(out_dir)]
+    subprocess.run(command, check=True, env=env, cwd=ROOT)
 
 
 # Two pixels per displayed README pixel. UI is rendered natively at each zoom.
@@ -304,11 +334,146 @@ def compose_themes(themes):
     return canvas
 
 
+# The dashboard sample: three projects over September 2026, with account
+# readings saved from 17 September, so the calendar shows days before and
+# after recording began. Fixed dates and a fixed seed keep the image stable.
+DASHBOARD_TODAY = "2026-09-24"
+DASHBOARD_PROJECTS = [
+    ("storefront", [("Add coupon support to checkout", "Claude Code"),
+                    ("Checkout test suite", "Codex"),
+                    ("Refactor payment adapters", "Claude Code"),
+                    ("Release notes for coupons", "Codex")]),
+    ("api-service", [("Rename the orders table columns", "Claude Code"),
+                     ("Migration dry run", "Codex")]),
+    ("design-system", [("Tighten the spacing scale", "Claude Code")]),
+]
+DASHBOARD_ACTIONS = ("Command calls", "File reads", "File-edit calls", "File reads", "Command calls")
+
+
+def sample_history():
+    """Snapshots in the shape history.snapshot returns, and saved readings."""
+    import random
+    from datetime import datetime, timedelta, timezone
+    from smith_agents.dashboard import allowance, history
+    rng = random.Random(7)
+    days = [9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24]
+    snapshots, all_events = {}, []
+    for p_index, (name, titles) in enumerate(DASHBOARD_PROJECTS):
+        path = "/sample/" + name
+        sessions, events, actions = [], [], []
+        for s_index, (title, provider) in enumerate(titles):
+            for day in days:
+                if rng.random() > (0.75 if p_index == 0 else 0.35):
+                    continue
+                identity = "%s-%d-%d" % (name, s_index, day)
+                start = datetime(2026, 9, day, 8 + rng.randrange(0, 9), rng.randrange(60),
+                                 tzinfo=timezone.utc)
+                sessions.append({"id": identity, "parent": None, "model": "sample",
+                                 "provider": provider, "title": title, "nickname": None,
+                                 "started": start.isoformat(timespec="seconds"),
+                                 "helper": False, "method": "response receipts"})
+                for step in range(rng.randrange(12, 40)):
+                    at = (start + timedelta(minutes=step * rng.randrange(2, 6))).isoformat(timespec="seconds")
+                    events.append({"id": "%s:%d" % (identity, step), "session": identity, "at": at,
+                                   "tokens": [rng.randrange(1500, 9000), rng.randrange(30000, 140000),
+                                              rng.randrange(200, 1600)]})
+                    if step % 3 == 0:
+                        actions.append({"at": at, "session": identity,
+                                        "label": DASHBOARD_ACTIONS[step % len(DASHBOARD_ACTIONS)]})
+        events.sort(key=lambda e: e["at"])
+        snapshots[path] = {
+            "project": name, "id": history.project_id(path), "timezone": "UTC",
+            "generated": DASHBOARD_TODAY + "T20:00:00+00:00",
+            "sources": sorted({s["provider"] for s in sessions}), "today": DASHBOARD_TODAY,
+            "sessions": sessions, "events": events, "actions": actions, "commits": [],
+            "coverage": {"sourceFiles": {}}, "first": events[0]["at"], "last": events[-1]["at"],
+            "version": name}
+        providers = {s["id"]: allowance.ACCOUNTS.get(s["provider"]) for s in sessions}
+        all_events += [dict(e, provider=providers[e["session"]]) for e in events]
+    # Readings every five minutes from 17 September, day and night,, rising with local use
+    # plus a little from elsewhere, in whole percents as Claude reports them.
+    readings = []
+    for account, base, scale in (("Claude", 12.0, 1 / 380000), ("Codex", 20.0, 1 / 420000)):
+        mine = sorted((datetime.fromisoformat(e["at"]).timestamp(), allowance.weight(e))
+                      for e in all_events if e["provider"] == account)
+        t = datetime(2026, 9, 17, 7, tzinfo=timezone.utc).timestamp()
+        end = datetime(2026, 9, 24, 21, tzinfo=timezone.utc).timestamp()
+        used, i = base, 0
+        while t < end:
+            while i < len(mine) and mine[i][0] <= t:
+                used += mine[i][1] * scale
+                i += 1
+            readings.append({"at": t, "provider": account, "window": "week",
+                             "pct": float(int(min(100, used))), "reset": "2026-09-25T16:00:00+00:00"})
+            t += 300
+    return snapshots, readings
+
+
+def render_dashboard(out_dir):
+    """The real dashboard page, served with sample history, in a headless browser."""
+    from unittest.mock import patch
+    from smith_agents import allowance_log
+    from smith_agents.dashboard import history
+    from smith_agents.dashboard.service import DashboardService
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("Skipping the dashboard image: install Playwright (pip install playwright; "
+              "playwright install chromium).")
+        return
+    snapshots, readings = sample_history()
+    projects = [{"id": data["id"], "name": data["project"], "path": path,
+                 "sessions": len(data["sessions"]), "sources": {}} for path, data in snapshots.items()]
+    service = DashboardService()
+    with patch.object(history, "discover_projects", return_value=projects), \
+         patch.object(history, "snapshot", side_effect=lambda path: dict(snapshots[path])), \
+         patch.object(allowance_log, "read", return_value=readings):
+        url = service.url(projects[0]["id"])
+        with sync_playwright() as browser:
+            chrome = browser.chromium.launch()
+            page = chrome.new_page(viewport={"width": 1440, "height": 1040}, device_scale_factor=2)
+            page.goto(url)
+            page.wait_for_selector(".cal-cell .cal-allow")
+            page.wait_for_timeout(800)
+            page.screenshot(path=str(Path(out_dir) / "dashboard.png"))
+            chrome.close()
+    service.stop()
+
+
+def compose_dashboard(parts):
+    from PIL import Image
+    path = parts / "dashboard.png"
+    if not path.exists():
+        return None
+    shot = Image.open(path).convert("RGBA")
+    width = WIDTH - 144
+    shot = shot.resize((width, round(shot.height * width / shot.width)), Image.LANCZOS)
+    canvas, pen = sheet(shot.height + 390, "05", "See where your usage went.",
+                        "Each day and session, with its share of the weekly limit.")
+    frame = Image.new("RGBA", (shot.width + 4, shot.height + 4), LINE)
+    canvas.alpha_composite(frame, (70, 270))
+    canvas.alpha_composite(shot, (72, 272))
+    y = shot.height + 306
+    pen.text((72, y), "wk +X%  is the share of the weekly limit;  ~  marks a split between sessions "
+             "that overlapped.", font=font(25), fill=MUTED)
+    pen.text((72, y + 40), "Recorded from the day the widget starts saving readings. "
+             "Earlier days stay unrecorded.", font=font(25), fill=MUTED)
+    return canvas
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--worker", nargs=3, metavar=("THEME", "ZOOM", "DIR"), help=argparse.SUPPRESS)
+    parser.add_argument("--dashboard-worker", metavar="DIR", help=argparse.SUPPRESS)
+    parser.add_argument("--demo-worker", metavar="DIR", help=argparse.SUPPRESS)
     parser.add_argument("--out", default=str(OUT), help="Output folder (default: docs/images)")
     args = parser.parse_args()
+    if args.demo_worker:
+        render_demo(args.demo_worker)
+        return
+    if args.dashboard_worker:
+        render_dashboard(args.dashboard_worker)
+        return
     if args.worker:
         theme, zoom, out_dir = args.worker
         render_parts(theme, float(zoom), out_dir)
@@ -319,6 +484,13 @@ def main():
         scratch = Path(scratch)
         parts = scratch / "main"
         render_theme("matrix", 2.5, parts)
+        subprocess.run([sys.executable, __file__, "--dashboard-worker", str(parts)], check=True,
+                       env=dict(os.environ, SMITH_AGENTS_CONFIG_DIR=str(parts / "settings"),
+                                PYTHONPATH=str(ROOT), TZ="UTC"), cwd=ROOT)
+        demo = scratch / "demo"
+        render_theme("matrix", 1.6, demo, worker="--demo-worker")
+        (out / "github-matrix-demo.webp").write_bytes((demo / "demo.webp").read_bytes())
+        print(out / "github-matrix-demo.webp")
         themes = []
         for theme in THEMES:
             theme_parts = scratch / theme
@@ -336,6 +508,9 @@ def main():
                 "github-matrix-tuck%s.png" % suffix: compose_tuck(parts),
                 "github-matrix-themes%s.png" % suffix: compose_themes(themes),
             }
+            dashboard = compose_dashboard(parts)
+            if dashboard is not None:
+                images["github-matrix-dashboard%s.png" % suffix] = dashboard
             if scheme == "light":
                 images["github-social-preview.png"] = compose_social(parts)
             for name, image in images.items():

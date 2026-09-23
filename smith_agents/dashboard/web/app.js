@@ -31,7 +31,7 @@ const exact=v=>v.toLocaleString('en-GB');
 // when one session was active between two readings, and estimated ("~") when
 // the rise was split between overlapping sessions by their token weight.
 const ACCOUNTS=[['Claude Code','Claude'],['Codex','Codex']];
-const pp=v=>(v<9.95?v.toFixed(1):Math.round(v))+'%';
+const pp=v=>(v<0.95?v.toFixed(1):Math.round(v))+'%';
 const recordedOn=(d,account)=>{const from=data.allowance?.since?.[account];return !!from&&d>=from;};
 const weekShare=(events,source)=>{let pct=0,est=false;events.forEach(e=>{const w=e.allow?.week;if(w&&sourceOf(e.session)===source){pct+=w.pct;est=est||w.est;}});return {pct,est};};
 const accountDay=(d,account)=>data.allowance?.days?.[d]?.[account]?.week;
@@ -170,7 +170,10 @@ function allowanceCell(d,events){
   const lines=allowanceLines(d,events);
   if(!lines.length)return node('small','cal-sample','allowance not recorded');
   const row=node('small','cal-allow');row.append(document.createTextNode('wk '));
-  lines.forEach((l,i)=>{if(i)row.append(document.createTextNode(' '));row.append(node('span','a-'+sourceClass(l.source),shareText(l.share)));});
+  // A source with no measurable share that day would only add a "+0%".
+  const shown=lines.filter(l=>l.share.pct>=0.05);
+  if(!shown.length)row.append(document.createTextNode('0%'));
+  shown.forEach((l,i)=>{if(i)row.append(document.createTextNode(' '));row.append(node('span','a-'+sourceClass(l.source),shareText(l.share)));});
   return row;
 }
 function allowanceTitle(d,events){

@@ -207,7 +207,10 @@ py tools/render_readme_images.py
 ```
 
 Each sheet is written twice, for GitHub's light and dark pages, plus the
-1280×640 social preview card.
+1280×640 social preview card and the animated demo loop. The dashboard sheet
+serves the real dashboard page with sample history and captures it in a headless
+browser, so it needs Playwright (`pip install playwright`, then
+`playwright install chromium`); without it, that one image is skipped.
 
 Fonts follow the rendering platform (for example, Segoe UI on Windows). The
 script renders each theme in a separate process with temporary settings. It
