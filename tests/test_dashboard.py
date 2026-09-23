@@ -824,6 +824,14 @@ class HermesHistory(unittest.TestCase):
         self.assertEqual(history.session_counts(sessions),
                          {'sessions': 1, 'helpers': 1, 'providers': {'Hermes': 1}})
 
+    def test_sessions_without_activity_are_not_counted(self):
+        sessions = [{'id': 'a', 'provider': 'Codex'}, {'id': 'b', 'provider': 'Codex'},
+                    {'id': 'h', 'provider': 'Codex', 'helper': True}]
+        events = [{'session': 'a', 'at': '2026-09-01T10:00:00', 'tokens': [1, 0, 1]}]
+        actions = [{'session': 'h', 'at': '2026-09-01T10:00:00', 'label': 'Command calls'}]
+        self.assertEqual(history.session_counts(sessions, events, actions),
+                         {'sessions': 1, 'helpers': 1, 'providers': {'Codex': 1}})
+
     def test_a_missing_hermes_database_is_not_an_error(self):
         with tempfile.TemporaryDirectory() as folder:
             self.assertEqual(history.hermes_sessions('/work/one', folder), [])

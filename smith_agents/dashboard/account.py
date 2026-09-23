@@ -50,9 +50,6 @@ def read_codex():
         client.close()
 
 
-PROVIDERS = ('Claude', 'Codex')
-
-
 def collectors():
     """Resolved per call, so a reader can be substituted for a test."""
     return (('Claude', read_claude), ('Codex', read_codex))

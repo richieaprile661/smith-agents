@@ -271,11 +271,50 @@ def hermes_sessions(project, database=None):
     return parsed
 
 
-def session_counts(sessions):
-    """Main sessions and helpers, and main sessions per provider."""
+def session_counts(sessions, events=None, actions=None):
+    """Main sessions and helpers, and main sessions per provider. Given the
+    events and actions, only sessions with recorded activity count, as on
+    the page."""
+    if events is not None or actions is not None:
+        active = {e['session'] for e in (events or []) + (actions or [])}
+        sessions = [s for s in sessions if s['id'] in active]
     main = [s for s in sessions if not s.get('helper')]
     return {'sessions': len(main), 'helpers': len(sessions) - len(main),
             'providers': dict(Counter(s['provider'] for s in main))}
+
+
+def codex_threads(home, query, args=()):
+    """Rows from the newest readable Codex thread index, or none at all."""
+    for database in sorted(home.glob('state_*.sqlite'), reverse=True):
+        try:
+            with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=.5) as db:
+                return list(db.execute(query, args))
+        except sqlite3.Error:
+            continue
+    return []
+
+
+def rollout_workspace(path, limit=8):
+    """The workspace an unindexed Codex rollout belongs to, from its opening
+    session_meta record; only that record is read."""
+    try:
+        with path.open() as stream:
+            for _ in range(limit):
+                line = stream.readline()
+                if not line:
+                    break
+                record = json.loads(line)
+                if record.get('type') == 'session_meta':
+                    return workspace(record.get('payload', {}).get('cwd'))
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def unindexed_rollouts(home):
+    """Retained session logs the thread index may not mention."""
+    for folder in ('sessions', 'archived_sessions'):
+        yield from (home / folder).rglob('*.jsonl')
 
 
 def discover_projects(home=None):
@@ -283,33 +322,12 @@ def discover_projects(home=None):
     Only directories that still exist count, and scratch folders are left out."""
     home = codex_home(home)
     logs = {}          # log file -> workspace; a session indexed twice counts once
-    for database in sorted(home.glob('state_*.sqlite'), reverse=True):
-        try:
-            with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=.5) as db:
-                for cwd, path in db.execute('SELECT cwd, rollout_path FROM threads'):
-                    if workspace(cwd) and path:
-                        logs[Path(path)] = workspace(cwd)
-            break
-        except sqlite3.Error:
-            continue
-    for folder in ('sessions', 'archived_sessions'):
-        for path in (home / folder).rglob('*.jsonl'):
-            if path in logs:
-                continue
-            try:
-                with path.open() as stream:
-                    for _ in range(8):
-                        line = stream.readline()
-                        if not line:
-                            break
-                        record = json.loads(line)
-                        if record.get('type') == 'session_meta':
-                            cwd = workspace(record.get('payload', {}).get('cwd'))
-                            if cwd:
-                                logs[path] = cwd
-                            break
-            except (OSError, ValueError):
-                continue
+    for cwd, path in codex_threads(home, 'SELECT cwd, rollout_path FROM threads'):
+        if workspace(cwd) and path:
+            logs[Path(path)] = workspace(cwd)
+    for path in unindexed_rollouts(home):
+        if path not in logs and (cwd := rollout_workspace(path)):
+            logs[path] = cwd
     codex = Counter(logs.values())
     claude = Counter()
     root = claude_projects()
@@ -522,34 +540,14 @@ def snapshot(project, home=None):
     project = Path(project)
     home = codex_home(home)
     paths, indexed = set(), set()
-    for database in sorted(home.glob('state_*.sqlite'), reverse=True):
-        try:
-            with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=.5) as db:
-                rows = list(db.execute('SELECT id,rollout_path FROM threads WHERE cwd=?', (str(project),)))
-            for identity, path in rows:
-                indexed.add(identity)
-                paths.add(Path(path))
-            break
-        except sqlite3.Error:
-            continue
+    for identity, path in codex_threads(home, 'SELECT id,rollout_path FROM threads WHERE cwd=?',
+                                        (str(project),)):
+        indexed.add(identity)
+        paths.add(Path(path))
     # Also inspect metadata of unindexed logs; all-time includes retained history.
-    for folder in ('sessions', 'archived_sessions'):
-        for path in (home / folder).rglob('*.jsonl'):
-            if path in paths:
-                continue
-            try:
-                with path.open() as stream:
-                    for _ in range(8):
-                        line = stream.readline()
-                        if not line:
-                            break
-                        record = json.loads(line)
-                        if record.get('type') == 'session_meta':
-                            if workspace(record.get('payload', {}).get('cwd')) == str(project):
-                                paths.add(path)
-                            break
-            except (OSError, ValueError):
-                continue
+    for path in unindexed_rollouts(home):
+        if path not in paths and rollout_workspace(path) == str(project):
+            paths.add(path)
     parsed, missing = [], 0
     for path in sorted(paths):
         try:
@@ -593,5 +591,5 @@ def overview(projects, home=None):
         # Counted the way the page counts: main sessions with recorded
         # activity, helpers apart, not raw log files.
         rows.append({'id': project['id'], 'name': project['name'], 'days': days}
-                    | session_counts(data['sessions']))
+                    | session_counts(data['sessions'], data['events'], data['actions']))
     return rows

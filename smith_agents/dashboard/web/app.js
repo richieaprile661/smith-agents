@@ -5,12 +5,6 @@ const paths = {
   people:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   chapters:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M8 13h8M8 17h6',
   calendar:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2',
-  code:'m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18',
-  edit:'m16 3 5 5M3 21l5-1L21 7a2.1 2.1 0 0 0-5-5L3 15Z',
-  search:'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
-  check:'m5 12 4 4L19 6M21 12a9 9 0 1 1-9-9',
-  tokens:'M20 5c0 2-4 3-8 3S4 7 4 5s4-3 8-3 8 1 8 3ZM4 5v14c0 2 4 3 8 3s8-1 8-3V5M4 12c0 2 4 3 8 3s8-1 8-3',
-  image:'M3 3h18v18H3ZM3 17l6-6 4 4 3-3 5 5M9 7h.01',
 };
 function icon(name) {const s=document.createElementNS(NS,'svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('fill','none');s.setAttribute('stroke','currentColor');s.setAttribute('stroke-width','1.65');s.setAttribute('stroke-linecap','round');s.setAttribute('stroke-linejoin','round');s.setAttribute('aria-hidden','true');const p=document.createElementNS(NS,'path');p.setAttribute('d',paths[name]||paths.chapters);s.append(p);return s;}
 document.querySelectorAll('[data-icon]').forEach(n=>n.append(icon(n.dataset.icon)));
@@ -36,7 +30,7 @@ const addDays=(d,n)=>{const t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate
 const plural=(n,s)=>`${n} ${s}${n===1?'':'s'}`;
 const counts=items=>{const c={};items.forEach(a=>c[a.label]=(c[a.label]||0)+1);return Object.entries(c).sort((a,b)=>b[1]-a[1]);};
 let data=null, project=(window.smithSession&&smithSession.project)||'', range='week', anchor=null, buckets=[], selected=null, loading=false, snapshotVersion=null;
-let scopedEvents=[], scopedActions=[], scopedCommits=[], periodStart='',periodEnd='';
+let scopedEvents=[], scopedActions=[], periodStart='',periodEnd='';
 function scope(){
   // All time ends at the last recorded day, not today: padding the story with
   // empty days after the work stopped read as a verdict rather than coverage.
@@ -44,25 +38,25 @@ function scope(){
   periodEnd=range==='all'?(lastRecorded||data.today):anchor;
   periodStart=range==='all'?(data.first?day(data.first):data.today):range==='week'?addDays(anchor,-6):anchor;
   const inside=e=>day(e.at)>=periodStart&&day(e.at)<=periodEnd;
-  scopedEvents=data.events.filter(inside);scopedActions=data.actions.filter(inside);scopedCommits=data.commits.filter(inside);
+  scopedEvents=data.events.filter(inside);scopedActions=data.actions.filter(inside);
 }
 function buildBuckets(){
   scope();
   // One entry per main session; its helpers ride inside it.
   const ids=[...new Set([...scopedEvents,...scopedActions].map(e=>e.session))];
-  const byId=Object.fromEntries(data.sessions.map(s=>[s.id,s]));
+  const byId=sessionById=Object.fromEntries(data.sessions.map(s=>[s.id,s]));
   const roots=ids.filter(id=>!byId[id]?.helper||!ids.includes(byId[id].parent));
   buckets=roots.map(id=>{
     const session=byId[id],helpers=ids.filter(h=>byId[h]?.parent===id).map(h=>byId[h]);
     const members=new Set([id,...helpers.map(h=>h.id)]);
     const events=scopedEvents.filter(e=>members.has(e.session)),actions=scopedActions.filter(a=>members.has(a.session));
     const times=[...events,...actions].map(e=>e.at).sort();
-    return {key:id,title:sessionTitle(session),start:times[0],end:times.at(-1),events,actions,commits:[],sessions:[session,...helpers],helpers};
+    return {key:id,title:sessionTitle(session),start:times[0],end:times.at(-1),events,actions,sessions:[session,...helpers],helpers};
   }).filter(b=>b.events.length||b.actions.length).sort((a,b)=>a.start.localeCompare(b.start));
 }
 function renderSources(main,helperCount){
   const list=$('bySource');list.replaceChildren();const tokens=bySource(scopedEvents);
-  SOURCES.forEach(([name,cls])=>{const n=main.filter(s=>s.provider===name).length,li=node('li',n?'':'none');
+  SOURCES.forEach(([name])=>{const n=main.filter(s=>s.provider===name).length,li=node('li',n?'':'none');
     li.append(mark(name),node('span','source-name',name),node('span','source-count',plural(n,'session')));
     const t=node('strong','',tokens[name]?fmt(tokens[name]):'—');if(tokens[name])t.title=exact(tokens[name])+' new tokens';li.append(t);list.append(li);});
   if(helperCount)list.append(node('li','source-helpers',`+ ${plural(helperCount,'helper session')}, counted in the session that launched them`));
@@ -84,8 +78,8 @@ function renderShares(){
     const squares=node('div','share-squares');squares.setAttribute('aria-hidden','true');
     const lit=Math.max(1,Math.round(share/100*32));
     for(let k=0;k<32;k++)squares.append(node('b',k<lit?'':'dim'));
-    const text=node('div');text.append(node('span','',p.name),node('strong','',fmt(p.tokens)),node('span','lavender',share.toFixed(share<10?1:0)+'% of new tokens'));
-    text.querySelector('strong').title=exact(p.tokens)+' tokens';
+    const text=node('div'),amount=node('strong','',fmt(p.tokens));amount.title=exact(p.tokens)+' tokens';
+    text.append(node('span','',p.name),amount,node('span','lavender',share.toFixed(share<10?1:0)+'% of new tokens'));
     row.append(squares,text);
     if(!p.other){row.type='button';row.setAttribute('aria-label',`Open ${p.name}`);row.onclick=()=>selectProject(p.id);}
     host.append(row);
@@ -103,12 +97,10 @@ function selectProject(id){if(!id||id===project||loading)return;project=id;selec
 function periodLabel(){return periodStart===periodEnd?date(periodEnd,true):date(periodStart)+' – '+date(periodEnd,true);}
 function render(){
   buildBuckets();$('dashboard').hidden=false;$('projectCoverage').hidden=false;
-  const sessions=new Set([...scopedEvents,...scopedActions].map(e=>e.session));
-  const byId=sessionById=Object.fromEntries(data.sessions.map(s=>[s.id,s])),active=[...sessions].map(id=>byId[id]).filter(Boolean);
-  const main=active.filter(s=>!s.helper),helperCount=active.length-main.length,providers={};main.forEach(s=>providers[s.provider]=(providers[s.provider]||0)+1);
+  const records=[...scopedEvents,...scopedActions],active=[...new Set(records.map(e=>e.session))].map(id=>sessionById[id]).filter(Boolean);
+  const main=active.filter(s=>!s.helper),helperCount=active.length-main.length;
   setNumber('total',work(scopedEvents));setNumber('cachedTotal',cached(scopedEvents));$('projectName').textContent=data.project;renderShares();
-  renderSources(main,helperCount);$('sessionCount').textContent=main.length;$('sessionUnit').textContent=main.length===1?'session':'sessions';$('chapterCount').textContent=new Set([...scopedEvents,...scopedActions].map(e=>day(e.at))).size;
-  $('chapterUnit').textContent='active days';
+  renderSources(main,helperCount);$('sessionCount').textContent=main.length;$('sessionUnit').textContent=main.length===1?'session':'sessions';$('chapterCount').textContent=new Set(records.map(e=>day(e.at))).size;
   $('historyStart').textContent=data.first?date(day(data.first),true):'No receipts';
   $('summaryDates').textContent=periodLabel();$('dates').textContent=periodStart===periodEnd?date(periodEnd):date(periodStart)+' – '+date(periodEnd);
   $('previous').disabled=range==='all'||!data.first||periodStart<=day(data.first);
@@ -123,25 +115,37 @@ function render(){
 let calendarDay=null;
 function renderTimeline(){
  const host=$('chapters');host.replaceChildren();
- $('chapterExplanation').textContent='New tokens · Darker days used more';
- const records=[...scopedEvents,...scopedActions],days=[...new Set(records.map(e=>day(e.at)))].sort();
+ const days=[...new Set([...scopedEvents,...scopedActions].map(e=>day(e.at)))].sort();
  if(!days.length){host.append(node('li','empty-state','No recorded activity in this period.'));calendarDay=null;renderDay();return;}
- if(!days.includes(calendarDay))calendarDay=days.reduce((best,d)=>work(scopedEvents.filter(e=>day(e.at)===d))>work(scopedEvents.filter(e=>day(e.at)===best))?d:best,days.at(-1));
- const totals=Object.fromEntries(days.map(d=>[d,work(scopedEvents.filter(e=>day(e.at)===d))]));
- const peak=Math.max(1,...Object.values(totals));
- const months=[...new Set(days.map(d=>d.slice(0,7)))].reverse();
- months.forEach(month=>{
-  const section=node('li','cal-month');section.append(node('h3','',new Date(month+'-01T12:00:00Z').toLocaleDateString('en-GB',{month:'long',year:'numeric',timeZone:'UTC'})));
+ // Each day's receipts once, for its total, its shading and its source split.
+ const byDay={};scopedEvents.forEach(e=>(byDay[day(e.at)]??=[]).push(e));
+ const totals=Object.fromEntries(days.map(d=>[d,work(byDay[d]||[])]));
+ const busiest=(list,start=list[0])=>list.reduce((best,d)=>totals[d]>totals[best]?d:best,start);
+ if(!days.includes(calendarDay))calendarDay=busiest(days,days.at(-1));
+ // One month at a time. The pager steps between months with recorded
+ // activity, and a new month opens on its busiest day.
+ const months=[...new Set(days.map(d=>d.slice(0,7)))];
+ const month=calendarDay.slice(0,7),at=months.indexOf(month);
+ const peak=Math.max(1,...days.filter(d=>d.startsWith(month)).map(d=>totals[d]));
+ const turn=step=>{const next=months[at+step];if(!next)return;calendarDay=busiest(days.filter(d=>d.startsWith(next)));selected=null;renderTimeline();};
+ {
+  const section=node('li','cal-month'),head=node('div','cal-head');
+  const back=node('button','cal-page','‹'),ahead=node('button','cal-page','›');
+  back.setAttribute('aria-label','Previous month with activity');ahead.setAttribute('aria-label','Next month with activity');
+  back.disabled=at<=0;ahead.disabled=at>=months.length-1;back.onclick=()=>turn(-1);ahead.onclick=()=>turn(1);
+  head.append(node('h3','',new Date(month+'-01T12:00:00Z').toLocaleDateString('en-GB',{month:'long',year:'numeric',timeZone:'UTC'})));
+  if(months.length>1){const pager=node('div','cal-pager');pager.append(back,node('span','cal-page-count',`${at+1} of ${months.length}`),ahead);head.append(pager);}
+  section.append(head);
   const grid=node('div','cal-grid');['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d=>grid.append(node('span','cal-weekday',d)));
   const start=new Date(month+'-01T12:00:00Z'),offset=(start.getUTCDay()+6)%7,last=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+1,0)).getUTCDate();
   for(let i=0;i<offset;i++)grid.append(node('span'));
   for(let i=1;i<=last;i++){
    const key=month+'-'+String(i).padStart(2,'0'),active=days.includes(key),cell=node('button','cal-cell',String(i));cell.disabled=!active;cell.dataset.day=key;cell.setAttribute('aria-pressed',String(key===calendarDay));
-   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(scopedEvents.filter(e=>day(e.at)===key)),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});const marks=node('span','cal-marks');SOURCES.forEach(([name])=>{if(split[name])marks.append(mark(name,'mark tiny'));});cell.append(marks,node('strong','cal-tokens',fmt(totals[key])),bar,node('small','cal-sample','allowance not recorded'));cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\nNo account allowance reading was recorded for this day.';cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
+   if(active){cell.style.background=`rgb(190 153 91 / ${.07+.25*totals[key]/peak})`;const split=bySource(byDay[key]||[]),bar=node('span','cal-sources');bar.setAttribute('aria-hidden','true');SOURCES.forEach(([name,cls])=>{if(split[name]){const seg=node('i','src-'+cls);seg.style.flex=String(split[name]);bar.append(seg);}});const marks=node('span','cal-marks');SOURCES.forEach(([name])=>{if(split[name])marks.append(mark(name,'mark tiny'));});cell.append(marks,node('strong','cal-tokens',fmt(totals[key])),bar,node('small','cal-sample','allowance not recorded'));cell.title=`${date(key)} · ${exact(totals[key])} new tokens\n`+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n}: ${exact(split[n])}`).join('\n')+'\nNo account allowance reading was recorded for this day.';cell.setAttribute('aria-label',`${date(key)}, ${fmt(totals[key])} new tokens: `+SOURCES.filter(([n])=>split[n]).map(([n])=>`${n} ${fmt(split[n])}`).join(', '));}
    cell.onclick=()=>{calendarDay=key;selected=null;renderTimeline();};grid.append(cell);
   }
   section.append(grid);host.append(section);
- });
+ }
  renderDay();
 }
 function calendarBuckets(d){return buckets.map(b=>onDay(b,d)).filter(b=>b.events.length||b.actions.length).sort((a,b)=>b.work-a.work);}
@@ -199,24 +203,23 @@ function summaryFor(b){
   // A factual description of what the activity log recorded. The dashboard
   // does not summarize your sessions and makes no claim about outcomes.
   const highlights=counts(b.actions).filter(([label])=>label!=='Helper launches').slice(0,4).map(([label,n])=>({title:`${exact(n)} ${NOUNS[label]||label.toLowerCase()}`,body:`The activity log records ${exact(n)} ${NOUNS[label]||label.toLowerCase()} on this day. Their results stay in the original session.`}));
-  const helpers=(b.helpers||b.sessions.filter(s=>s?.helper)).length;
+  const helpers=b.helpers.length;
   if(helpers)highlights.splice(Math.min(3,highlights.length),0,{title:plural(helpers,'helper session'),body:'Helper sessions were spawned by the main session; their tokens are included here.'});
   if(!highlights.length&&b.events.length)highlights.push({title:'AI activity was recorded',body:'Usage records are available, but the log does not describe what was produced.'});
-  if(!highlights.length)highlights.push({title:'No activity summary available',body:b.commits.length?'Saved project changes are available in the source notes. There are no matching session receipts for this day.':'No session receipts were found in this period.'});
-  return {highlights:highlights.slice(0,3),extra:[],evidence:[]};
+  if(!highlights.length)highlights.push({title:'No activity summary available',body:'No session receipts were found in this period.'});
+  return {highlights:highlights.slice(0,3)};
 }
 function dialog(title,eyebrow){$('dialogTitle').textContent=title;$('dialogEyebrow').textContent=eyebrow;$('dialogContent').replaceChildren();$('dialogContent').className='';if(!$('details').open)$('details').showModal();return $('dialogContent');}
 function paragraph(parent,text,cls){parent.append(node('p',cls,text));}
 function table(parent,headers,rows){const t=node('table'),head=node('thead'),hr=node('tr'),body=node('tbody');headers.forEach(s=>hr.append(node('th','',s)));head.append(hr);rows.forEach(row=>{const r=node('tr');row.forEach(s=>r.append(node('td','',s)));body.append(r);});t.append(head,body);parent.append(t);}
 function disclosure(parent,label,id){const d=node('details','summary-disclosure');if(id)d.id=id;d.append(node('summary','',label));const body=node('div','disclosure-body');d.append(body);parent.append(d);return {details:d,body};}
 function ledger(parent,rows){const dl=node('dl','plain-ledger');rows.forEach(([name,value])=>{const row=node('div');row.append(node('dt','',name),node('dd','',value));dl.append(row);});parent.append(dl);}
-function openActivity(b,section){
-  if(!b)return;
-  const summary=b.summary,content=dialog('What the records show','WHAT WE CAN SEE');
+function openActivity(b){
+  const content=dialog('What the records show','WHAT WE CAN SEE');
   content.classList.add('plain-summary');
   const meta=node('div','summary-meta');meta.append(node('span','',date(day(b.start),true)),node('span','',plural(b.sessions.length,'recorded session')),node('span','summary-provenance','Activity only'));content.append(meta);
   const list=node('ul','outcome-list');
-  summary.highlights.forEach(item=>{const li=node('li');li.append(icon('chapters'));const text=node('div');text.append(node('strong','',item.title),node('p','',item.body));li.append(text);list.append(li);});content.append(list);
+  b.summary.highlights.forEach(item=>{const li=node('li');li.append(icon('chapters'));const text=node('div');text.append(node('strong','',item.title),node('p','',item.body));li.append(text);list.append(li);});content.append(list);
   paragraph(content,'This is a factual view of the activity log. It is not a summary of what the sessions produced.','summary-caveat');
   const values=[0,1,2].map(j=>sum(b.events.map(e=>e.tokens[j])));
   const usage=disclosure(content,'Explain the AI usage','summaryUsage');
@@ -229,12 +232,9 @@ function openActivity(b,section){
   paragraph(exactDetails.body,plural(b.events.length,'recorded response receipt')+'. A token is a small piece of content processed by the model.');
   const evidence=disclosure(content,'What supports this summary?','summaryEvidence');
   paragraph(evidence.body,'The highlights above count recorded tool requests. They do not establish that a feature was finished or that checks passed, and no session content is read or summarized to produce them.');
-  if(b.commits.length){evidence.body.append(node('h3','','Saved project changes in this period'));const ul=node('ul');b.commits.forEach(c=>ul.append(node('li','',`${date(day(c.at))} · ${c.title}`)));evidence.body.append(ul);paragraph(evidence.body,'These changes provide context for the time period. Token usage is not assigned to a particular change.');}
   const sessions=disclosure(content,plural(b.sessions.length,'session')+' on this day','dialogSessions');
   b.sessions.forEach(s=>{const row=node('div','session-note');row.append(node('strong','',(s.helper?`${s.provider} helper · `:`${s.provider} · `)+sessionTitle(s)),node('span','',s.started?date(day(s.started))+' · '+s.started.slice(11,16):'Start not recorded'));const technical=disclosure(row,'Session details');ledger(technical.body,[['Session',s.id],['Model',s.model||'Not recorded'],['Tokens in this selection',exact(total(b.events.filter(e=>e.session===s.id)))]]);sessions.body.append(row);});
   const log=disclosure(sessions.body,'Recorded tool requests');if(b.actions.length)ledger(log.body,counts(b.actions).map(([l,c])=>[l,exact(c)]));else paragraph(log.body,'No tool requests were recorded in this selection.');
-  if(section==='commits'){evidence.details.open=true;evidence.details.scrollIntoView({block:'start'});}
-  if(section==='sessions'){sessions.details.open=true;sessions.details.scrollIntoView({block:'start'});}
 }
 function coverage(){
   const c=dialog('What this preview can see','LOCAL RECORDING COVERAGE');
@@ -270,7 +270,7 @@ document.querySelectorAll('[data-info]').forEach(b=>b.onclick=tokenInfo);
 $('closeDialog').onclick=()=>$('details').close();$('details').onclick=e=>{if(e.target===$('details')){const r=$('details').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('details').close();}};
 $('refresh').onclick=()=>refresh(true);
 $('project').onchange=e=>selectProject(e.target.value);
-const planActive=()=>{const panel=document.getElementById('planUsage');return !!panel&&!panel.hidden;};
+const planActive=()=>{const panel=$('planUsage');return !!panel&&!panel.hidden;};
 const poll=()=>{if(!document.hidden&&!planActive())refresh();};
 document.addEventListener('visibilitychange',poll);
 setInterval(poll,30000);
