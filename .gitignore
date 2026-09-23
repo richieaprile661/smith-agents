@@ -54,3 +54,8 @@ auth.json
 /*.png
 /*.jpg
 /*.jpeg
+
+# Agent handoffs, checkpoints, and design prompts are working notes, not docs.
+/docs/*handoff*.md
+/docs/*checkpoint*.md
+/docs/design/
