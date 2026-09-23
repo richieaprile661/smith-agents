@@ -471,7 +471,7 @@ class AccountReadings(unittest.TestCase):
         readings = self.widget([self.reading([self.metric()], credits={
             'text': '$12.40 left', 'on_credits': True, 'raw': {'token': 'secret'}})])
         self.assertEqual(readings.snapshot()['providers'][0]['credits'],
-                         {'text': '$12.40 left', 'on_credits': True})
+                         {'text': '$12.40 left', 'on_credits': True, 'reset': None})
         self.assertIsNone(self.widget([self.reading([self.metric()], credits={})])
                           .snapshot()['providers'][0]['credits'])
 

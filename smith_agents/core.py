@@ -2394,7 +2394,7 @@ def render_header_signal(pen, metrics, provider, stale=False, usage_data=None):
         header(pen, usage_data, stale)
         return
     credits = usage_data if provider == 'codex' and isinstance(usage_data, dict) \
-        and usage_data.get('provider') == 'codex' else None
+        and usage_data.get('provider') == 'codex' and usage_data.get('text') else None
     for index, (label, metric) in enumerate(zip(('5h', 'week'), header_usage_metrics(metrics, provider))):
         center = px(116+42*index)
         font = FONT('bold', 9)
@@ -2507,6 +2507,11 @@ def usage_height(metrics, stats=None):
             + USAGE_GAP + px(6) + px(17) + px(11))
 
 
+def codex_usage_reset_text(reset, wide=True):
+    from .codex_usage import reset_text
+    return reset_text(reset, wide)
+
+
 def render_usage(pen, metrics, spend, stats, y):
     """Session / Week / Opus: a 9px key, a 4px track, the percentage in mono
     and its reset. Fill and figure recolour at the handoff's thresholds."""
@@ -2571,10 +2576,23 @@ def render_usage(pen, metrics, spend, stats, y):
     pen.line([(PAD_X, row_y), (CONSOLE_W - PAD_X, row_y)], fill=_ink(8))
     cost_font = MONO("bold", 13)
     note_font = FONT("book", 10)
-    codex_credits = spend if spend and spend.get("provider") == "codex" else None
-    cost = (spend["text"] + " credits") if codex_credits else spend["text"] if spend else "—"
-    pen.text((PAD_X, row_y + px(6)), cost, font=cost_font, fill=_tok("fg"))
+    codex = spend if spend and spend.get("provider") == "codex" else None
+    reset = codex_usage_reset_text(codex.get("reset"), wide=False) if codex else None
+    if codex:
+        cost = (spend["text"] + " credits") if spend.get("text") else reset or "—"
+    else:
+        cost = spend["text"] if spend else "—"
+    pen.text((PAD_X, row_y + px(6)), cost, font=cost_font,
+             fill=provider_accent("codex") if codex and not spend.get("text") and reset else _tok("fg"))
     note = []
+    if reset:
+        # The count leads when there is no balance; its date joins the note.
+        expires = codex["reset"].get("expires_at")
+        if spend.get("text"):
+            note.append(reset)
+        elif expires:
+            when = datetime.fromtimestamp(expires)
+            note.append("until %d %s" % (when.day, when.strftime("%b")))
     tokens = stats.get("tokens")
     note.append("%s tokens" % (format_tokens(tokens) if tokens is not None else "—"))
     if stats.get("provider") == "codex":

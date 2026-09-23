@@ -118,13 +118,19 @@ class Readings:
 
     @staticmethod
     def credits(value):
-        """Only the two facts the page prints; nothing else from the payload."""
+        """Only the facts the page prints: a balance, whether it is in use, and a
+        free reset Codex has granted. Nothing else from the payload."""
         if not isinstance(value, dict):
             return None
-        text = value.get('text')
-        if not isinstance(text, str) or not text:
+        text = value.get('text') if isinstance(value.get('text'), str) and value.get('text') else None
+        reset = value.get('reset') if isinstance(value.get('reset'), dict) else None
+        count = reset.get('count') if reset else None
+        reset = ({'count': count, 'expires_at': reset.get('expires_at')
+                  if isinstance(reset.get('expires_at'), (int, float)) else None}
+                 if isinstance(count, int) and count > 0 else None)
+        if text is None and reset is None:
             return None
-        return {'text': text, 'on_credits': bool(value.get('on_credits'))}
+        return {'text': text, 'on_credits': bool(value.get('on_credits')), 'reset': reset}
 
     @staticmethod
     def balance(value):

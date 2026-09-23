@@ -45,7 +45,8 @@
     else{observation.append(make('strong','',percent(limit.baseline_used)+' → '+percent(limit.used)+' used'),make('p','',limit.change+' percentage points used over '+Math.max(1,Math.round(limit.elapsed_seconds/60))+' min of observed readings.'));}
     row.append(observation);card.append(row);
    }
-   if(provider.credits)card.append(make('p','plan-credit',(provider.credits.on_credits?'Running on credits · ':'Credit balance · ')+provider.credits.text));
+   if(provider.credits?.text)card.append(make('p','plan-credit',(provider.credits.on_credits?'Running on credits · ':'Credit balance · ')+provider.credits.text));
+   const reset=provider.credits?.reset;if(reset){const until=reset.expires_at?' · use by '+new Date(reset.expires_at*1000).toLocaleDateString(undefined,{day:'numeric',month:'short'}):'';card.append(make('p','plan-credit',`${reset.count} free reset${reset.count===1?'':'s'} available${until} · use it from Codex when you hit a limit`));}
    if(provider.observed_at)card.append(make('p','plan-updated','Account reading: '+new Date(provider.observed_at*1000).toLocaleTimeString()));
    grid.append(card);
   }

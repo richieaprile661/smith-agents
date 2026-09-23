@@ -203,6 +203,40 @@ def build_metrics(payload):
     return metrics
 
 
+def build_reset(payload):
+    """A free rate-limit reset Codex has granted, when one is available.
+
+    Codex lists them beside the limits: how many are available and when each
+    expires. Only the count and the earliest expiry are kept."""
+    grants = payload.get("rateLimitResetCredits")
+    if not isinstance(grants, dict):
+        return None
+    now = time.time()
+    usable = []
+    for grant in grants.get("credits") or ():
+        if not isinstance(grant, dict) or grant.get("status") != "available":
+            continue
+        expires = grant.get("expiresAt")
+        expires = float(expires) if isinstance(expires, (int, float)) and not isinstance(expires, bool) else None
+        if expires is None or expires > now:
+            usable.append(expires)
+    if not usable:
+        return None
+    dated = [e for e in usable if e is not None]
+    return {"count": len(usable), "expires_at": min(dated) if dated else None}
+
+
+def reset_text(reset, wide=True):
+    """'1 free reset · until 22 Oct' - the date only where there is room."""
+    if not reset:
+        return None
+    text = "%d free reset%s" % (reset["count"], "" if reset["count"] == 1 else "s")
+    if wide and reset.get("expires_at"):
+        when = datetime.fromtimestamp(reset["expires_at"])
+        text += " · until %d %s" % (when.day, when.strftime("%b"))
+    return text
+
+
 def build_credits(payload):
     """Purchased credits on the account, and whether it is running on them.
 
@@ -214,19 +248,23 @@ def build_credits(payload):
         buckets = payload.get("rateLimitsByLimitId")
         bucket = buckets.get("codex") if isinstance(buckets, dict) else None
     credits = bucket.get("credits") if isinstance(bucket, dict) else None
+    reset = build_reset(payload)
     if not isinstance(credits, dict) or not credits.get("hasCredits"):
-        return None
+        # No balance to show, but a free reset still belongs beside the limits.
+        return ({"provider": "codex", "text": None, "balance": None, "unlimited": False,
+                 "on_credits": False, "reset": reset} if reset else None)
     unlimited = bool(credits.get("unlimited"))
     try:
         balance = float(credits.get("balance")) if credits.get("balance") is not None else None
     except (TypeError, ValueError):
         balance = None
     if not unlimited and (balance is None or not math.isfinite(balance)):
-        return None
+        return ({"provider": "codex", "text": None, "balance": None, "unlimited": False,
+                 "on_credits": False, "reset": reset} if reset else None)
     on_credits = (payload.get("ordinaryUsageAllowed") is False
                   or bucket.get("rateLimitReachedType") == "rate_limit_reached")
     return {"provider": "codex", "text": "Unlimited" if unlimited else format(round(balance), ","),
-            "balance": balance, "unlimited": unlimited, "on_credits": on_credits}
+            "balance": balance, "unlimited": unlimited, "on_credits": on_credits, "reset": reset}
 
 
 def build_stats(payload, days=14, today=None):

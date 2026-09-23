@@ -70,8 +70,14 @@ def _credits(provider, usage_data, horizontal=False):
     says it is in use. The wide strip spells it out."""
     if provider != 'codex' or not isinstance(usage_data, dict) or usage_data.get('provider') != 'codex':
         return None
+    from .codex_usage import reset_text
+    reset = reset_text(usage_data.get('reset'), wide=horizontal)
+    if not usage_data.get('text'):
+        return reset                 # a free reset, with no balance beside it
     line = usage_data['text'] + ' credits'
-    return line + (' · in use' if horizontal and usage_data.get('on_credits') else '')
+    if horizontal and usage_data.get('on_credits'):
+        line += ' · in use'
+    return line + (' · ' + reset if horizontal and reset else '')
 
 
 def _usage_height(horizontal, notice, credits=None):
@@ -123,7 +129,8 @@ def _usage_drawer(metrics, front, mode, provider, notice, width=RAIL_W, horizont
     if credits:
         credits = c.elide(credits, font, width-c.px(8))
         pen.text(((width-c.text_w(credits, font))//2, footer), credits, font=font,
-                 fill=c.provider_accent(provider) if usage_data.get('on_credits') else c._ink(78))
+                 fill=c.provider_accent(provider) if usage_data.get('on_credits')
+                 or not usage_data.get('text') else c._ink(78))
         footer -= c.px(14)
     if notice:
         text = 'Not connected yet' if provider == 'hermes' else 'Last reading' if metric else 'Try again later'
