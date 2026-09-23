@@ -81,7 +81,9 @@ def header(pen, data, stale=False):
 
 
 def panel_height(data):
-    return c.px(306 + (ACCOUNT_H if balance(data) else 0))
+    # With a Nous balance the account is the whole tab; the saved-session
+    # pages remain only as the view without one.
+    return c.px(ACCOUNT_H + 30) if balance(data) else c.px(306)
 
 
 def _account_block(pen, data, y, line):
@@ -127,8 +129,9 @@ def panel(pen, data, y, stats_only=False):
 
     if not stats_only and balance(data):
         _account_block(pen, data, y, line)
-        y += c.px(ACCOUNT_H)
-        c.rule(pen, y, c._ink(13))
+        c.rule(pen, y+c.px(ACCOUNT_H), c._ink(13))
+        line('Balance from Nous · costs in dashboard', ACCOUNT_H+9, faint=True)
+        return boxes
 
     def pager(label, offset, count, index, kind, limited=False):
         suffix = '+' if limited else ''
@@ -187,7 +190,7 @@ def drawer(pen, data, width, horizontal, notice):
             pen.text((c.px(8), c.px(y)), label, font=font, fill=c._ink(62))
             text = c.elide(text, font, width-c.px(46))
             pen.text((width-c.px(8)-c.text_w(text, font), c.px(y)), text, font=font, fill=c._ink(100))
-        label = 'View sessions ›'
+        label = 'Details ›'
         font = c.FONT('book', 9)
         pen.text(((width-c.text_w(label, font))//2, c.px(125)), label, font=font, fill=c._ink(100))
     else:

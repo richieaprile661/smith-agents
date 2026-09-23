@@ -140,9 +140,16 @@ class WidgetDrawing(unittest.TestCase):
         labels = [r[0] for r in hermes_usage_ui.square_readings(self.data(False))]
         self.assertEqual(labels, ['Tokens', 'Est. cost'])
 
-    def test_the_panel_grows_for_the_account_block_and_every_view_renders(self):
+    def test_the_account_replaces_the_session_pages_and_every_view_renders(self):
+        from PIL import Image, ImageDraw
         data, plain = self.data(), self.data(False)
-        self.assertGreater(core.usage_height([], data), core.usage_height([], plain))
+        self.assertLess(core.usage_height([], data), core.usage_height([], plain))
+        pen = ImageDraw.Draw(Image.new('RGBA', (core.CONSOLE_W, core.px(700))))
+        # With a balance there is no saved-session pager; without one it stays.
+        self.assertEqual(hermes_usage_ui.panel(pen, dict(data, sessions=data['sessions'] * 2), 0), [])
+        two = dict(plain, sessions=plain['sessions'] * 2)      # the pager needs two to page
+        kinds = {box[0] for box in hermes_usage_ui.panel(pen, two, 0)}
+        self.assertIn('hermes-session', kinds)
         now = time.time()
         for item in (data, plain):
             with self.subTest(account=bool(item.get('account'))):
