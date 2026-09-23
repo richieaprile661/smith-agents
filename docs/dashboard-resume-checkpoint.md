@@ -6,7 +6,7 @@ Saved 21 September 2026 at the user's request: “tomorrow save it.” Stop impl
 
 **The implementation exists in a separate worktree. It is NOT absent or lost.**
 
-Worktree: `.claude/worktrees/dashboard-integration` (relative to the repository root)
+Worktree: `.claude/worktrees/dashboard-integration` (relative to the repository root). Removed on 23 September 2026 after the work was merged and pushed.
 
 Branch: `worktree-dashboard-integration`, based on `83d29e5`. Git marks this worktree locked; preserve it. Changes are uncommitted. The main checkout has only the handoff documentation edits, not the dashboard implementation. Do not assess progress using only the main checkout.
 
