@@ -255,24 +255,48 @@ def compose_hero(parts):
 
 
 def compose_social(parts):
-    """The 1280x640 card GitHub shows when the repository link is shared."""
-    from PIL import Image, ImageDraw
-    console = load(parts, "hero")
-    canvas = Image.new("RGBA", (1280, 640), PAPER)
+    """The 1280x640 card GitHub shows when the repository link is shared:
+    the promise on the left, the dashboard and the right-edge strip beside it."""
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+    path = parts / "dashboard.png"
+    if not path.exists():
+        return None
+    width, height = 1280, 640
+    canvas = Image.new("RGBA", (width, height), PAPER)
     pen = ImageDraw.Draw(canvas)
     wordmark = load(parts, WORDMARK)
-    canvas.alpha_composite(wordmark.resize((wordmark.width * 3 // 4, wordmark.height * 3 // 4)),
-                           (64, 64))
-    pen.text((60, 210), "Your agents.", font=font(76, True), fill=INK)
-    pen.text((60, 300), "In view.", font=font(76, True), fill=INK)
-    pen.text((64, 420), "Claude Code, Codex and Hermes sessions", font=font(26), fill=MUTED)
-    pen.text((64, 458), "on a small desktop widget.", font=font(26), fill=MUTED)
-    pen.text((64, 548), "WINDOWS  +  MACOS", font=font(21, True), fill=INK)
-    # The widget's top half, its header and first session, at card scale.
-    scale = 0.74
-    crop = console.crop((0, 0, console.width, min(console.height, int(760 / scale))))
-    crop = crop.resize((int(crop.width * scale), int(crop.height * scale)), Image.LANCZOS)
-    canvas.alpha_composite(crop, (1280 - crop.width - 24, 48))
+    wordmark = wordmark.crop(wordmark.getbbox())
+    wordmark = wordmark.resize((250, round(wordmark.height * 250 / wordmark.width)), Image.LANCZOS)
+    canvas.alpha_composite(wordmark, (60, 76))
+    pen.text((56, 176), "Your agents.", font=font(60, True), fill=INK)
+    pen.text((56, 248), "In view.", font=font(60, True), fill=INK)
+    for i, line in enumerate(("Sessions tucked at the edge.", "Usage in one dashboard.")):
+        pen.text((60, 358 + i * 38), line, font=font(25), fill=MUTED)
+    pen.text((60, 530), "CLAUDE CODE + CODEX + HERMES", font=font(19, True), fill="#3ddc6a")
+    pen.text((60, 560), "WINDOWS & MACOS", font=font(19, True), fill=MUTED)
+
+    def drop_shadow(box, radius, blur, alpha):
+        shade = Image.new("RGBA", canvas.size)
+        ImageDraw.Draw(shade).rounded_rectangle(box, radius, fill=(0, 0, 0, alpha))
+        canvas.alpha_composite(shade.filter(ImageFilter.GaussianBlur(blur)))
+
+    # The dashboard's top: header, totals, and the build-history calendar.
+    shot = Image.open(path).convert("RGBA")
+    shot = shot.crop((0, 0, shot.width, shot.width * 1500 // 2880))
+    shot = shot.resize((720, round(shot.height * 720 / shot.width)), Image.LANCZOS)
+    corners = Image.new("L", shot.size)
+    ImageDraw.Draw(corners).rounded_rectangle((0, 0, shot.width - 1, shot.height - 1), 14, fill=255)
+    shot.putalpha(ImageChops.multiply(shot.getchannel("A"), corners))
+    x, y = 450, (height - shot.height) // 2 + 10
+    drop_shadow((x, y + 8, x + shot.width, y + shot.height + 8), 14, 24, 170)
+    canvas.alpha_composite(shot, (x, y))
+    # The strip tucked to the right edge, overlapping the dashboard as on a desktop.
+    strip = load(parts, "right-claude")
+    strip = strip.crop(strip.getchannel("A").point(lambda v: 255 if v > 200 else 0).getbbox())
+    strip = strip.resize((round(strip.width * 560 / strip.height), 560), Image.LANCZOS)
+    x, y = width - strip.width - 44, 40
+    drop_shadow((x - 6, y + 6, x + strip.width, y + strip.height + 6), 8, 20, 220)
+    canvas.alpha_composite(strip, (x, y))
     return canvas
 
 
@@ -511,8 +535,9 @@ def main():
             dashboard = compose_dashboard(parts)
             if dashboard is not None:
                 images["github-matrix-dashboard%s.png" % suffix] = dashboard
-            if scheme == "light":
-                images["github-social-preview.png"] = compose_social(parts)
+            social = compose_social(parts) if scheme == "dark" else None
+            if social is not None:
+                images["github-social-preview.png"] = social
             for name, image in images.items():
                 image.convert("RGB").save(out / name, optimize=True)
                 print("%s  %dx%d" % (out / name, *image.size))
