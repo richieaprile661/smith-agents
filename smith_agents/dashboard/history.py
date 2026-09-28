@@ -6,6 +6,7 @@ Prefer per-response receipts, never add them to cumulative counters. The fallbac
 uses counter differences and marks its first observation as undated coverage.
 """
 from collections import Counter
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
@@ -38,7 +39,7 @@ def project_id(path):
 
     The browser never receives or sends a filesystem path, so a crafted request
     cannot point the reader at a directory the local history never mentioned."""
-    return hashlib.sha256(os.fspath(path).encode('utf-8', 'surrogateescape')).hexdigest()[:16]
+    return hashlib.sha256(os.fspath(Path(path)).encode('utf-8', 'surrogateescape')).hexdigest()[:16]
 
 
 def workspace(value):
@@ -208,7 +209,7 @@ def _hermes_rows(query, args=(), database=None):
     if not path.is_file():
         return []
     try:
-        with sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=.5) as db:
+        with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=.5)) as db:
             db.execute('PRAGMA query_only=ON')
             return db.execute(query, args).fetchall()
     except sqlite3.Error:
@@ -307,7 +308,7 @@ def codex_threads(home, query, args=()):
     """Rows from the newest readable Codex thread index, or none at all."""
     for database in sorted(home.glob('state_*.sqlite'), reverse=True):
         try:
-            with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=.5) as db:
+            with closing(sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=.5)) as db:
                 return list(db.execute(query, args))
         except sqlite3.Error:
             continue

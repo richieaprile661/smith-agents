@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -119,7 +120,7 @@ class TodayCost(unittest.TestCase):
     def test_a_session_across_midnight_counts_its_share_of_today(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'state.db'
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db, db:
                 db.execute('CREATE TABLE sessions (id TEXT, started_at REAL, estimated_cost_usd REAL)')
                 db.execute('CREATE TABLE messages (session_id TEXT, role TEXT, timestamp REAL)')
                 midnight = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))

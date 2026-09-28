@@ -1,5 +1,6 @@
 """The packaged dashboard: its reader, its local server, and the widget's
 shortcut to it. Every record here is synthetic; nothing reads real history."""
+from contextlib import closing
 import io
 import json
 import os
@@ -841,7 +842,7 @@ class HermesHistory(unittest.TestCase):
     def database(self, folder):
         import sqlite3
         path = Path(folder) / 'state.db'
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             db.execute('CREATE TABLE sessions (id TEXT, parent_session_id TEXT, started_at REAL, '
                        'ended_at REAL, model TEXT, title TEXT, cwd TEXT, input_tokens INTEGER, '
                        'output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER)')
@@ -878,7 +879,7 @@ class HermesHistory(unittest.TestCase):
         import sqlite3
         with tempfile.TemporaryDirectory() as folder:
             root = self.database(folder)
-            with sqlite3.connect(Path(root) / 'state.db') as db:
+            with closing(sqlite3.connect(Path(root) / 'state.db')) as db, db:
                 db.execute('ALTER TABLE sessions ADD COLUMN estimated_cost_usd REAL')
                 db.execute("UPDATE sessions SET estimated_cost_usd = 3.0 WHERE id = 'main'")
                 db.execute('CREATE TABLE session_model_usage (session_id TEXT, model TEXT, task TEXT, '

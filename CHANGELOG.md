@@ -3,6 +3,16 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.6 — 28 September 2026
+
+### Fixed
+- The dashboard closes the Hermes and Codex history databases after reading
+  them, instead of holding them open until Python cleans up.
+- Windows: a workspace keeps one dashboard id whether its path was recorded
+  with forward or back slashes.
+- The footer's "Open dashboard" and settings targets no longer share a pixel
+  at the edge where they meet, so a click there opens only one of them.
+
 ## 1.1.5 — 23 September 2026
 
 ### Fixed

@@ -3193,8 +3193,10 @@ def render_action_row(pen, y, project=None):
     pen.text((text_x, top + (button - ascent(label_font)) // 2), label,
              font=label_font, fill=_ink(78))
     pad = px(4)
+    # Clicks hit both edges of a box, so the two must not share a column.
     return [("dashboard", PAD_X - pad, top - pad,
-             text_x + text_w(label, label_font) + pad, top + button + pad, None),
+             min(text_x + text_w(label, label_font) + pad, gear_x - pad - 1),
+             top + button + pad, None),
             ("settings", gear_x - pad, top - pad,
              gear_x + button + pad, top + button + pad, None)]
 
