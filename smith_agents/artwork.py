@@ -301,6 +301,18 @@ def app_icon(portraits=True):
     return tile
 
 
+# Every size Windows asks an .ico for, from the taskbar to the Start menu.
+WINDOWS_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
+
+
+def windows_icon(portraits=True):
+    """The Mac app icon's tile without Apple's grid margin: Windows draws app
+    icons edge to edge, where the margin would only shrink the face.
+    tools/build_windows_icon.py writes it to assets/smith-agents.ico."""
+    tile = app_icon(portraits)
+    return tile.crop(tile.getchannel("A").getbbox())
+
+
 def tray_icon(size, ink="white", path=None):
     alpha = _tray_alpha(path)
     padding = max(1, round(size / 22))

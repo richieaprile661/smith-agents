@@ -1530,7 +1530,8 @@ def render_error(message, amber=False):
 # --------------------------------------------------------------------------
 STRIP_DIR = os.path.join(SCRIPT_DIR, "assets", "strips")
 # The app's own mark: the figure as a transparent silhouette, and the .ico
-# that carries it at every size Windows asks for.
+# Windows shows for the app - the Mac app's tile, written by
+# tools/build_windows_icon.py at every size Windows asks for.
 MARK_PATH = os.path.join(SCRIPT_DIR, "assets", "figure_mark.png")
 ICON_PATH = os.path.join(SCRIPT_DIR, "assets", "smith-agents.ico")
 

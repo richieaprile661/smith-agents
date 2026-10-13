@@ -10,8 +10,8 @@
     $smithInstallDir = $env:SMITH_AGENTS_INSTALL_DIR
     if (-not $smithInstallDir) { $smithInstallDir = Join-Path $env:LOCALAPPDATA "Smith Agents" }
     # Install the published release, not master: the wheel is pinned by version and checksum.
-    $smithVersion = "1.1.6"
-    $smithSha256 = "04cde66f7bb5329455d70c6a7eed1828d12edd44b1a9767eff73536cb983f057"
+    $smithVersion = "1.1.7"
+    $smithSha256 = "aa48883a96a4cd22afbb371ed62cc4da557ce29fb69c07b7fb044d08ee3b4618"
     $smithWheel = "smith_agents-$smithVersion-py3-none-any.whl"
     New-Item -ItemType Directory -Path $smithInstallDir -Force | Out-Null
     $smithPackage = $env:SMITH_AGENTS_PACKAGE
@@ -65,6 +65,9 @@
             $smithLink.Save()
         }
     }
+    # The icon's path stays the same across versions, so Explorer would keep
+    # showing the cached old one; ask it to reread icons.
+    try { & (Join-Path $env:SystemRoot "System32\ie4uinit.exe") -show } catch { }
     Write-Host "Smith Agents installed. You can open it from the Start Menu."
     if ($env:SMITH_AGENTS_NO_LAUNCH -ne "1") { Start-Process -FilePath $smithLauncher }
 }

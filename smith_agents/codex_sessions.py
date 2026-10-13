@@ -12,6 +12,7 @@ import os
 import re
 from pathlib import Path
 import sqlite3
+import sys
 import time
 
 from .activity import Activity, output, apply_activity, merge_activity
@@ -226,6 +227,17 @@ class Transcript:
                 self.activity.finish(key, item.get("aggregatedOutput"), at, item.get("exitCode") not in (None, 0))
 
 
+def open_files(process):
+    """The files a psutil process has open.
+
+    Never psutil's own open_files() on Windows: it kills threads it gave up
+    waiting for, which froze and crashed the widget (see win32_files)."""
+    if sys.platform == "win32":
+        from .win32_files import open_files as windows_open_files
+        return windows_open_files(process.pid)
+    return [item.path for item in process.open_files()]
+
+
 def processes():
     """Return only verified native Codex executables, with their open files."""
     import psutil
@@ -237,9 +249,9 @@ def processes():
             if Path(process.exe()).name.lower() not in ("codex", "codex.exe"):
                 continue
             try:
-                files = [item.path for item in process.open_files()]
+                files = open_files(process)
                 files_known = True
-            except psutil.Error:
+            except (psutil.Error, OSError):
                 files = []  # Hooks can still identify this process on Windows.
                 files_known = False
             result.append({"pid": process.pid, "created": process.create_time(),

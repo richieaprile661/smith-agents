@@ -3,6 +3,19 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.7 — 13 October 2026
+
+### Fixed
+- Windows: the widget no longer freezes (a black box around the side strip,
+  nothing updating) or crashes after running for a while with Codex open.
+  It found Codex's sessions through psutil's `open_files()`, which on
+  Windows kills the threads it gives up waiting for; Codex's idle pipe to
+  VS Code made it do so on nearly every scan. Codex's open files are now
+  read without starting or killing any thread.
+- Windows: the app icon in the Start menu and on login and desktop shortcuts
+  is Smith's face on a dark tile, as on macOS, instead of the old white
+  figure. The installer refreshes Windows' icon cache so it shows at once.
+
 ## 1.1.6 — 28 September 2026
 
 ### Fixed

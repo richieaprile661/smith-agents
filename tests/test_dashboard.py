@@ -940,6 +940,19 @@ class BrandMark(unittest.TestCase):
             self.assertEqual(icon.getpixel((150, 512))[:3], (0x16, 0x1a, 0x1e))
         self.assertNotEqual(artwork.app_icon(True).tobytes(), artwork.app_icon(False).tobytes())
 
+    def test_the_windows_icon_is_the_same_tile_at_every_size(self):
+        from PIL import Image, ImageChops, ImageStat
+        from smith_agents import artwork
+        with Image.open(core.ICON_PATH) as ico:
+            self.assertEqual(sorted(ico.info['sizes']), [(s, s) for s in artwork.WINDOWS_ICON_SIZES])
+            ico.size = (256, 256)
+            shipped = ico.convert('RGBA')
+        drawn = artwork.windows_icon().resize((256, 256), Image.Resampling.LANCZOS)
+        self.assertEqual(shipped.getpixel((0, 0))[3], 0)                 # rounded corner
+        self.assertEqual(shipped.getpixel((12, 128))[:3], (0x16, 0x1a, 0x1e))
+        # Rebuild with tools/build_windows_icon.py when the artwork changes.
+        self.assertLess(max(ImageStat.Stat(ImageChops.difference(shipped, drawn)).mean), 3)
+
 
 if __name__ == '__main__':
     unittest.main()
