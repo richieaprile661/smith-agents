@@ -13,8 +13,8 @@ fi
 
 smith_install_dir=${SMITH_AGENTS_INSTALL_DIR:-"$HOME/Library/Application Support/Smith Agents"}
 # Install the published release, not master: the wheel is pinned by version and checksum.
-smith_version=1.1.9
-smith_sha256=06bc2c4ba9d53249f027f408b0fd9578efa358cd4cc818b567b4a87760f72e32
+smith_version=1.1.10
+smith_sha256=3f1a4f4b89bdba2437005239275f69d679c5af5d2e3f4b8f6eceab6b44471d3e
 smith_wheel=smith_agents-$smith_version-py3-none-any.whl
 mkdir -p "$smith_install_dir"
 if [ -n "${SMITH_AGENTS_PACKAGE:-}" ]; then

@@ -3,6 +3,34 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.10 — 26 November 2026
+
+### Added
+- A Claude session's row shows its step list: cells for the steps done, in
+  hand, and waiting, with the count and the step in hand (`3/5 · Fix tax
+  rounding`), and the whole list when the row is open. It is read from the
+  session's own transcript, from the Claude desktop app's task list or Claude
+  Code's `TodoWrite`.
+- A working Claude session shows how long its turn has run (`Turn 02:14`),
+  and a finished one how long its last turn took.
+- An "Open sessions" panel under the rows lists the sessions left open in the
+  Claude desktop app: how many are working, used today, and unused for one to
+  three days, and each one unused for three days or more with a link that
+  opens it. It reads only each session's title, folder, last use, and archived
+  flag from the records the app keeps on this computer, and changes nothing;
+  closing a session stays in the app.
+
+### Changed
+- Sessions of the same project sit together in the list, in the place of the
+  project's oldest session, instead of being spread through it by start time.
+  A session in a worktree counts as its project.
+
+### Fixed
+- A Claude helper that has finished no longer stays in the list as "Activity
+  unknown" until its session closes. Helpers now end by handing their result
+  back, not with the reply the widget waited for. A session with such a
+  helper can be ended again.
+
 ## 1.1.9 — 26 November 2026
 
 ### Fixed
