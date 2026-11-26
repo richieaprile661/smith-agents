@@ -394,6 +394,13 @@ def _open_session_link(url):
     return True
 
 
+def open_session_link(agent):
+    """Show a desktop app session by its link alone: one that is open in the
+    app but not running has no process, and so no window, to find."""
+    url = desktop_app_url(agent)[0]
+    return bool(url) and _open_session_link(url)
+
+
 def raise_agent_window(agent):
     """Bring only the identified host window to the front. A desktop app keeps
     every session in one window, so its own link then shows the session."""

@@ -276,6 +276,11 @@ For the Codex setups that have been tested, see
   doesn't save credentials in its settings, logs, or caches.
 - **No model calls to read usage.** Checking your limits doesn't start a
   conversation or run an agent task.
+- **Open sessions, by name only.** To list the sessions left open in the Claude
+  desktop app, Smith Agents reads the records the app keeps on this computer:
+  each session's title, folder, last use, and whether it is archived. It reads
+  nothing of the conversation and changes nothing; closing a session stays in
+  the app.
 - **A local dashboard.** The dashboard is served only to this computer, on a
   loopback address with a new key each time it starts. It reads your local
   session history and doesn't upload it.

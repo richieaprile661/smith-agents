@@ -157,6 +157,16 @@ def _open_session_url(url, activates, failure):
         Foundation.NSURL.URLWithString_(url), configuration, completed)
 
 
+def open_session_link(agent):
+    """Show a desktop app session by its link alone: one that is open in the
+    app but not running has no process, and so no window, to find."""
+    url, app_name = desktop_app_url(agent)
+    if not url:
+        return False
+    _open_session_url(url, True, 'Could not open this session. Open it in the ' + app_name + ' app.')
+    return True
+
+
 def vscode_window_id(ancestors, logs_root=None):
     """Match the live extension-host PID and start time to VS Code's window log."""
     from datetime import datetime

@@ -204,6 +204,10 @@ class JsonlReader:
         self.offset = 0
         self.identity = None
 
+    def wanted(self, raw):
+        """Whether a line is worth parsing; a reader of few records says no to most."""
+        return True
+
     def read(self, path):
         stat = path.stat()
         identity = (stat.st_dev, stat.st_ino)
@@ -228,11 +232,15 @@ class JsonlReader:
                         break
                 else:
                     try:
-                        self.record(json.loads(raw))
+                        if self.wanted(raw):
+                            self.record(json.loads(raw))
                     except (ValueError, TypeError, AttributeError, KeyError):
                         pass
                 self.offset = stream.tell()
         return self.offset >= stat.st_size, stat.st_mtime
+
+
+HANDBACK_TOOL = "SubagentHandback"     # How a Claude helper ends: no end_turn follows it.
 
 
 class ClaudeTranscript(JsonlReader):
@@ -255,12 +263,21 @@ class ClaudeTranscript(JsonlReader):
         if not isinstance(blocks, list):
             return
         texts = []
+        handed_back = False
         for block in blocks:
             if not isinstance(block, dict):
                 continue
             kind = block.get("type")
             if kind == "text":
                 texts.append(plain(block.get("text")))
+            elif role == "assistant" and kind == "tool_use" and block.get("name") == HANDBACK_TOOL:
+                # A helper's last act: its report to the session that started
+                # it. It is the end of the work, not a tool that is running.
+                handed_back = True
+                report = block.get("input")
+                report = plain(report.get("message")) if isinstance(report, dict) else ""
+                if report:
+                    self.message = report
             elif role == "assistant" and kind == "tool_use":
                 self.activity.start(block.get("id"), block.get("name"), block.get("input"), at)
             elif role == "user" and kind == "tool_result":
@@ -274,7 +291,7 @@ class ClaudeTranscript(JsonlReader):
             self.model = msg.get("model") or self.model
             if text:
                 self.message = text
-            if msg.get("stop_reason") == "end_turn":
+            if msg.get("stop_reason") == "end_turn" or handed_back:
                 self.activity.transition("completed", at)
 
 

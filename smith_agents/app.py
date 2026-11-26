@@ -112,6 +112,9 @@ class SmithAgentsWidget:
         self.agents = []
         self.agent_rows = []            # (kind, box, agent) in window coords
         self.agent_open = None          # the one row whose drawer is open
+        self.idle = None                # sessions left open in the Claude app, counted
+        self.idle_open = False
+        self._pending_idle = None
         self._agent_scroll = 0
         self._agent_scroll_max = 0
         self._confirm_kill = None
@@ -542,7 +545,8 @@ class SmithAgentsWidget:
                                  "cached": "No reading yet"}.get(
                                      kind, "Usage offline"))
             max_height = self._screen_bounds()[3] - px(28) - 2 * SHADOW_PAD
-            self._agent_scroll_max = max(0, BAR_H + TAB_H + core.agents_height(self.agents, self.agent_open) - max_height)
+            self._agent_scroll_max = max(0, BAR_H + TAB_H + core.agents_height(
+                self.agents, self.agent_open, self.idle, self.idle_open) - max_height)
             self._agent_scroll = min(self._agent_scroll, self._agent_scroll_max)
             image, boxes = render_console(
                 metrics, spend, stats, self.agents, now,
@@ -552,7 +556,8 @@ class SmithAgentsWidget:
                 figure_elapsed=figure_elapsed, header_frame=header_frame,
                 provider=self.config.get("usage_provider", "claude"), data_notice=self._data_notice(),
                 reading_view=self.config.get("reading_view", "used"),
-                dashboard_project=self._dashboard_label())
+                dashboard_project=self._dashboard_label(),
+                idle=self.idle, idle_open=self.idle_open)
             self._bar_size = image.size
             x, y = self._slide_position(image.size)
             # boxes are shell-relative; the shadow pad offsets them in the image
@@ -1050,8 +1055,16 @@ class SmithAgentsWidget:
             with pool:
                 found = decorate_agents(list_agents())
                 self._sync_agent_windows(found)
+            try:
+                from . import app_sessions
+                idle = app_sessions.read(found, time.time())
+            except Exception:
+                # The app's records are not ours; a surprise in them costs the panel, not the rows.
+                log_line('open session scan failed\n' + traceback.format_exc().rstrip())
+                idle = None
             with self.lock:
                 self._pending_agents = found
+                self._pending_idle = idle
         except Exception:
             log_line('agent scan failed\n' + traceback.format_exc().rstrip())
         finally:
@@ -1072,8 +1085,10 @@ class SmithAgentsWidget:
         with self.lock:
             found = self._pending_agents
             self._pending_agents = None
+            idle = getattr(self, '_pending_idle', None)
         if found is not None:
             self._apply_agent_scan(found)
+            self.idle = idle
         if self.stopping.is_set() or now - self._agents_scan <= 1.0:
             return
         with self.lock:
@@ -1314,6 +1329,12 @@ class SmithAgentsWidget:
                                if a.get("state") == "closed" and not a.get("sub")])
             elif kind == "open":
                 self._raise_agent_window(agent)
+            elif kind == "idle":
+                self.idle_open = not self.idle_open
+            elif kind == "idle-open":
+                # A session with no process has no window to find: its link is the way in.
+                if not platform.open_session_link(agent):
+                    platform.show_error("Could not open this session. Open it in the Claude app.")
             elif kind == "hide":
                 from .session_windows import window_agent
                 target = window_agent(agent, getattr(self, 'agents', ()))

@@ -255,6 +255,31 @@ class ClaudeActivityTests(unittest.TestCase):
         capture_status(payload, self.root, 320)
         self.assertEqual(read(self.root, {"id": "parent"}, 321)["child"]["ended_at"], 320)
 
+    def test_a_helper_that_hands_back_its_result_is_finished(self):
+        # Claude's helpers end with a hand-back call and never an end_turn reply.
+        # Read as still running, they sat in the list as "Activity unknown" for
+        # good, with no way to clear them, and kept their session from being ended.
+        reader = ClaudeTranscript()
+        reader.record(claude("user", "Review the cleanup", 100))
+        reader.record(claude("assistant", [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}],
+                             101, stop_reason="tool_use"))
+        reader.record(claude("user", [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}], 102))
+        self.assertEqual(reader.activity.data["status"], "running")
+        reader.record(claude("assistant", [{"type": "tool_use", "id": "t2", "name": "SubagentHandback",
+                                           "input": {"message": "Three  findings."}}], 110, stop_reason="tool_use"))
+        reader.record(claude("user", [{"type": "tool_result", "tool_use_id": "t2", "content": "received"}], 111))
+        data = reader.activity.snapshot()
+        data.update(latest_message=reader.message)
+        self.assertEqual((data["status"], data["ended_at"], data["tool_count"], data["last_tool"]),
+                         ("completed", 110, 1, "Bash ls"))
+        self.assertEqual(current_tools(data), [])
+        self.assertEqual(reader.message, "Three findings.")
+        parent = dict(id="parent", provider="claude", started_at=50, state="working")
+        row = apply_activity(dict(id="agent-x", sub=True, parent="parent", state="working"), data, 115)
+        self.assertEqual((row["state"], row["status_detail"]), ("done", None))
+        self.assertEqual([r["id"] for r in visible_helpers([parent, row], 115)], ["parent", "agent-x"])
+        self.assertEqual([r["id"] for r in visible_helpers([parent, row], 400)], ["parent"])
+
     def test_transcript_partial_line_results_and_reset(self):
         path = self.root/"agent-one.jsonl"
         lines = [claude("user", "Test the changes", 10),

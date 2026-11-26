@@ -1289,6 +1289,60 @@ def agent_activity_stamp(agent):
     return "Last activity just now" if agent.get("idle", 0) < 5 else "Last activity " + elapsed + " ago"
 
 
+STEP_ROWS = 12      # Steps listed in an open row; a longer list shows the part in hand.
+STEP_CELLS = 14     # Past this many steps the cells become one bar.
+
+
+def turn_clock(seconds):
+    """A stopwatch reading: 02:14, and 1:02:14 past the hour."""
+    seconds = max(0, int(seconds))
+    if seconds < 3600:
+        return "%02d:%02d" % (seconds // 60, seconds % 60)
+    return "%d:%02d:%02d" % (seconds // 3600, seconds % 3600 // 60, seconds % 60)
+
+
+def agent_turn_seconds(agent, now):
+    """How long the running turn has run, or how long the last one took.
+
+    A working session whose transcript still ends on a finished turn has a new
+    prompt that is not written yet: no clock is better than the old turn's."""
+    started, ended = agent.get("turn_started"), agent.get("turn_ended")
+    if not started:
+        return None
+    over = bool(ended and ended >= started)
+    if agent.get("state") == "working":
+        return None if over else max(0, now - started)
+    return ended - started if over else None
+
+
+def agent_steps(agent):
+    """The session's own step list. A helper has none: its work is one step of its parent's."""
+    return [] if agent.get("sub") else agent.get("steps") or []
+
+
+def step_window(steps):
+    """(the steps an open row lists, how many it leaves out), kept around the step in hand."""
+    if len(steps) <= STEP_ROWS:
+        return steps, 0
+    current = next((at for at, step in enumerate(steps) if step["status"] != "completed"), len(steps) - 1)
+    start = max(0, min(current - 2, len(steps) - STEP_ROWS))
+    return steps[start:start + STEP_ROWS], len(steps) - STEP_ROWS
+
+
+def agent_steps_line(agent, now):
+    """A closed row's one line: 3/5 and the step in hand."""
+    steps = agent_steps(agent)
+    head = "%d/%d" % (sum(step["status"] == "completed" for step in steps), len(steps))
+    current = (next((step for step in steps if step["status"] == "in_progress"), None)
+               or next((step for step in steps if step["status"] == "pending"), None))
+    if current:
+        return head + " · " + current["content"]
+    seconds = agent_turn_seconds(agent, now)
+    if seconds is not None and agent.get("state") != "working":
+        return head + " · last turn " + turn_clock(seconds)
+    return head + " · all done"
+
+
 def agent_activity(agent):
     permissions = agent.get("permissions") or []
     if permissions:
@@ -1988,6 +2042,9 @@ def decorate_agents(agents):
         agent["permissions"] = pending_permissions(os.path.join(CLAUDE_DIR, "widget-context"), agent)
         if agent["permissions"]:
             agent["state"] = "needs"
+        if path and not agent.get("sub"):
+            from . import progress
+            agent.update(progress.read(path) or {})
         if agent.get("activity"):
             from .activity import apply_activity
             agent["model"] = agent.get("model") or agent["activity"].get("model")
@@ -2005,18 +2062,23 @@ def created_at(agent):
 
 
 def sort_agents(agents):
-    """Oldest first, by when the session was created. A row holds the slot it
-    was created in for its whole life: a card that jumps out from under the
-    pointer because a state changed or a transcript was touched is worse than
-    a card in an unhelpful place. New sessions land at the bottom. Subagents
-    stay attached to the session that spawned them rather than being sorted
-    into a group of their own - they are work inside it, not a peer."""
-    tops, subs = [], {}
+    """Oldest first, by when the session was created, with the sessions of one
+    project kept together in the slot of its oldest. A row holds its place for
+    its whole life: a card that jumps out from under the pointer because a
+    state changed or a transcript was touched is worse than a card in an
+    unhelpful place. A new session lands at the end of its project, or at the
+    bottom when it is the project's first. Subagents stay attached to the
+    session that spawned them rather than being sorted into a group of their
+    own - they are work inside it, not a peer."""
+    projects, subs = {}, {}
     for agent in sorted(agents, key=created_at):
         if agent.get("sub"):
             subs.setdefault(agent.get("parent"), []).append(agent)
         else:
-            tops.append(agent)
+            # A worktree is its project. A session with no folder is its own.
+            folder = project_root(agent.get("cwd") or "").rstrip("\\/").lower()
+            projects.setdefault(folder or ("", len(projects)), []).append(agent)
+    tops = [agent for group in projects.values() for agent in group]
     out = []
     seen = set()
     def append(agent):
@@ -2801,6 +2863,14 @@ def quiet_card_layout(agent, open_=False):
     track_y = context_y + panel_line_height(small) + px(4)
     state_y = track_y + px(12)
     preview_y = state_y + panel_line_height(small) + px(7)
+    steps, steps_y, step_rows, steps_hidden = agent_steps(agent), None, [], 0
+    if steps:
+        # One line under the state; an open row lists the steps beneath it.
+        steps_y = preview_y
+        preview_y += panel_line_height(small) + px(7)
+        if open_:
+            step_rows, steps_hidden = step_window(steps)
+            preview_y += (len(step_rows) + bool(steps_hidden)) * (panel_line_height(small) + px(2)) + px(4)
     data = agent.get("activity") or {}
     permissions = agent.get("permissions") or []
     message = data.get("result") or agent.get("latest_message")
@@ -2828,7 +2898,8 @@ def quiet_card_layout(agent, open_=False):
                 model_y=model_y, stamp_y=state_y, state_y=state_y, preview_y=preview_y,
                 heading=heading, value=value, lines=shown, more=more, message_y=message_y,
                 reply_y=reply_y, action_y=action_y, context_y=context_y,
-                track_y=track_y, height=height)
+                track_y=track_y, height=height, steps_y=steps_y, step_rows=step_rows,
+                steps_hidden=steps_hidden)
 
 
 def agent_row_height(agent, open_=False):
@@ -2977,6 +3048,54 @@ def render_compact_helper(pen, agent, y, open_):
     return [("row", left, y+px(5), right, y+height-px(4), agent)]
 
 
+def _step_cell(pen, x, y, size, status):
+    box = (x, y, x + size - 1, y + size - 1)
+    if status == "completed":
+        pen.rectangle(box, fill=state_colour("done"))
+    elif status == "in_progress":
+        pen.rectangle(box, fill=state_colour("working"))
+    else:
+        pen.rectangle(box, fill=_ink(13), outline=_ink(30))
+
+
+def render_steps(pen, agent, y, layout, open_):
+    """Cells for the steps, then the count and the step in hand; an open row
+    lists them. Done, in hand and waiting differ in shade as well as colour."""
+    steps = agent_steps(agent)
+    small, right = FONT("book", 11), CONSOLE_W - PAD_X
+    line, cell, gap = panel_line_height(small), px(7), px(2)
+    done = sum(step["status"] == "completed" for step in steps)
+    top = y + layout['steps_y']
+    cell_y = top + (line - cell) // 2 + px(1)
+    x = PAD_X
+    if len(steps) <= STEP_CELLS:
+        for step in steps:
+            _step_cell(pen, x, cell_y, cell, step["status"])
+            x += cell + gap
+    else:
+        width = px(72)
+        pen.rectangle((x, cell_y, x + width, cell_y + cell - 1), fill=_ink(13), outline=_ink(30))
+        if done:
+            pen.rectangle((x, cell_y, x + max(1, round(width * done / len(steps))), cell_y + cell - 1),
+                          fill=state_colour("done"))
+        x += width + gap
+    x += px(6)
+    if not open_:
+        pen.text((x, top), elide(agent_steps_line(agent, time.time()), small, right - x), font=small, fill=_ink(78))
+        return
+    pen.text((x, top), "%d of %d" % (done, len(steps)), font=small, fill=_ink(88))
+    text_x = PAD_X + cell + px(7)
+    top += line + px(5)
+    for step in layout['step_rows']:
+        _step_cell(pen, PAD_X, top + (line - cell) // 2 + px(1), cell, step["status"])
+        tone = (_ink(62) if step["status"] == "completed" else
+                state_colour("working") if step["status"] == "in_progress" else _ink(88))
+        pen.text((text_x, top), elide(step["content"], small, right - text_x), font=small, fill=tone)
+        top += line + px(2)
+    if layout['steps_hidden']:
+        pen.text((text_x, top), "%d more" % layout['steps_hidden'], font=small, fill=_ink(62))
+
+
 def render_row(pen, chip, agent, y, now, open_, confirm, figure_elapsed=None, draw_figure=True):
     """Compact, foldable agent panel with status below its context meter."""
     if compact_helper(agent):
@@ -3022,12 +3141,17 @@ def render_row(pen, chip, agent, y, now, open_, confirm, figure_elapsed=None, dr
         pen.rectangle((PAD_X, track_y, PAD_X+max(1, round((right-PAD_X)*min(pct,100)/100)), track_y+px(3)), fill=tone)
     sy = y+layout['state_y']
     stamp_font = FONT("book", 10)
-    stamp = elide(agent_activity_stamp(agent), stamp_font, (right-PAD_X)*.55)
+    # A running turn shows its stopwatch; anything else, when it was last active.
+    turn = agent_turn_seconds(agent, time.time()) if agent.get("state") == "working" and not agent.get("sub") else None
+    stamp = elide("Turn " + turn_clock(turn) if turn is not None else agent_activity_stamp(agent),
+                  stamp_font, (right-PAD_X)*.55)
     stamp_x = right-text_w(stamp, stamp_font)
     status = elide(agent_status(agent), small, stamp_x-PAD_X-px(18))
     pen.polygon([(PAD_X, sy+px(7)), (PAD_X+px(3), sy+px(4)), (PAD_X+px(6), sy+px(7)), (PAD_X+px(3), sy+px(10))], fill=colour)
     pen.text((PAD_X+px(10), sy), status, font=small, fill=colour)
     pen.text((stamp_x, sy+ascent(small)-ascent(stamp_font)), stamp, font=stamp_font, fill=_ink(62))
+    if layout['steps_y'] is not None:
+        render_steps(pen, agent, y, layout, open_)
     actionable = (agent.get("permissions") or [{}])[0].get("actionable")
     kind, label = ("permission", "Review request…") if actionable else ("open", "Go to parent session" if agent.get("sub") else "Go to session")
     if agent.get("state") == "closed" and not agent.get("sub"):
@@ -3242,11 +3366,86 @@ def render_action_row(pen, y, project=None):
              gear_x + button + pad, top + button + pad, None)]
 
 
-def agents_height(agents, open_id):
-    if not agents:
-        return ROW_H + FOOT_H
-    return sum(agent_row_height(a, a.get("id") == open_id) + (agent_drawer_height(a) if a.get("id") == open_id else 0)
-               for a in agents) + FOOT_H
+IDLE_HEAD_H = px(34)
+
+
+class _NoPen:
+    """Measures a panel by drawing it nowhere."""
+    def text(self, *args, **kwargs): pass
+    def line(self, *args, **kwargs): pass
+    def rectangle(self, *args, **kwargs): pass
+
+
+def _idle_panel(pen, idle, y, open_):
+    """Sessions left open in the Claude app: one line shut; opened, the counts
+    by age and the ones unused longest. Returns (click boxes, bottom edge)."""
+    from .app_sessions import STALE_DAYS
+    right = CONSOLE_W - PAD_X
+    small, head = FONT("book", 11), FONT("semi", 12)
+    line = panel_line_height(small)
+    count = idle["stale_count"]
+    warn = state_colour("needs")
+    rule(pen, y, _ink(13))
+    note = "%d to close" % count if count else "none to close"
+    note_x = right - px(16) - text_w(note, small)
+    top = y + (IDLE_HEAD_H - panel_line_height(head)) // 2
+    pen.text((PAD_X, top), elide("Open sessions · %d" % idle["total"], head, note_x - PAD_X - px(8)),
+             font=head, fill=_tok("fg"))
+    pen.text((note_x, top + ascent(head) - ascent(small)), note, font=small, fill=warn if count else _ink(62))
+    _chevron(pen, right - px(5), y + IDLE_HEAD_H // 2 - px(2), _ink(78), open_)
+    boxes = [("idle", PAD_X, y + px(2), right, y + IDLE_HEAD_H - px(2), None)]
+    top = y + IDLE_HEAD_H
+    if not open_:
+        return boxes, top
+    for label, value, tone in (
+            ("Working now", idle["working"], state_colour("working") if idle["working"] else _ink(78)),
+            ("Used today", idle["today"], _ink(78)),
+            ("Not used for 1 to %d days" % STALE_DAYS, idle["recent"], _ink(78)),
+            ("Not used for %d days or more" % STALE_DAYS, count, warn if count else _ink(78))):
+        value = str(value)
+        pen.text((PAD_X, top), label, font=small, fill=tone)
+        pen.text((right - text_w(value, small), top), value, font=small, fill=tone)
+        top += line + px(3)
+    top += px(8)
+    if not count:
+        pen.text((PAD_X, top), "Nothing to close", font=small, fill=_ink(62))
+        return boxes, top + line + px(12)
+    heading = FONT("bold", 10)
+    pen.text((PAD_X, top), caps("To close · oldest first"), font=heading, fill=_ink(62))
+    top += panel_line_height(heading) + px(8)
+    link_font = FONT("semi", 11)
+    link_x = right - text_w("Open", link_font)
+    for row in idle["stale"]:
+        days = "%d day%s" % (row["days"], "" if row["days"] == 1 else "s")
+        days_x = right - text_w(days, small)
+        pen.text((PAD_X, top), elide(row["title"], small, days_x - PAD_X - px(10)), font=small, fill=_ink(88))
+        pen.text((days_x, top), days, font=small, fill=warn)
+        top += line + px(4)
+        where = (row["project"] or "No folder") + (" · own work folder" if row["worktree"] else "")
+        pen.text((PAD_X, top), elide(where, small, link_x - PAD_X - px(12)), font=small, fill=_ink(62))
+        boxes.append(("idle-open",) + _link(pen, link_x, top, "Open", link_font, _tok("fg"), True) + (row,))
+        top += line + px(10)
+    hidden = count - len(idle["stale"])
+    if hidden > 0:
+        pen.text((PAD_X, top), "%d more" % hidden, font=small, fill=_ink(62))
+        top += line + px(6)
+    # The widget cannot archive a session; only the app that owns it can.
+    pen.text((PAD_X, top), "Close a session in the Claude app.", font=small, fill=_ink(62))
+    return boxes, top + line + px(12)
+
+
+def idle_panel_height(idle, open_):
+    return _idle_panel(_NoPen(), idle, 0, open_)[1] if idle else 0
+
+
+def render_idle_panel(pen, idle, y, open_):
+    return _idle_panel(pen, idle, y, open_)[0]
+
+
+def agents_height(agents, open_id, idle=None, idle_open=False):
+    rows = (sum(agent_row_height(a, a.get("id") == open_id) + (agent_drawer_height(a) if a.get("id") == open_id else 0)
+                for a in agents) if agents else ROW_H)
+    return rows + idle_panel_height(idle, idle_open) + FOOT_H
 
 
 def account_summary(metrics, provider=None, notice=None, data_notice=None, usage_data=None):
@@ -3274,7 +3473,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
                    open_id=None, confirm_id=None, expanded=True,
                    bar_mode="worst", notice=None, max_height=None, scroll=0,
                    figure_elapsed=None, header_frame=None, provider=None, data_notice=None,
-                   reading_view="used", dashboard_project=None):
+                   reading_view="used", dashboard_project=None, idle=None, idle_open=False):
     """The whole shell: the bar, and when it is open the tabs and one pane."""
     front = metrics[0] if metrics else None
     rows = sort_agents(agents)
@@ -3291,7 +3490,7 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
         elif tab == "stats":
             height += stats_height() + ACTION_H
         else:
-            height += agents_height(rows, open_id)
+            height += agents_height(rows, open_id, idle, idle_open)
         if data_notice and tab in ("usage", "stats"):
             height += px(26)
 
@@ -3344,6 +3543,11 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
                 if y < visible_bottom and y + drawer_height > visible_top:
                     boxes += render_drawer(pen, agent, y, now)
                 y += drawer_height
+        if idle:
+            panel_height = idle_panel_height(idle, idle_open)
+            if y < visible_bottom and y + panel_height > visible_top:
+                boxes += render_idle_panel(pen, idle, y, idle_open)
+            y += panel_height
         rule(pen, y, _ink(13))
         band(pen, y + px(1), y + FOOT_H - px(2), _ink(5),
              corners=(False, False, True, True))
