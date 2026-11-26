@@ -3,6 +3,15 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.9 — 26 November 2026
+
+### Fixed
+- Windows: "Open session" on a Claude desktop, ChatGPT desktop, or DeepSeek
+  Harness row no longer answers "Could not identify this session's window".
+  The app's window is brought forward, and a Claude or ChatGPT session is
+  then opened by the app's own link, as on macOS. In 1.1.8 these rows could
+  not be opened on Windows at all, whatever its notes said.
+
 ## 1.1.8 — 26 November 2026
 
 ### Added
