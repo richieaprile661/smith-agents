@@ -3,6 +3,33 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.8 — 26 November 2026
+
+### Added
+- DeepSeek Harness, as a fourth provider. Its open sessions appear as rows
+  with their state, model, and context use; a session counts as open only
+  while the running app holds its lock. The Usage tab shows token totals from
+  the logs the app saved on this computer, with today's share, and DeepSeek
+  has its own lamp in the tucked bar. Reading the logs needs Python 3.14.
+- The DeepSeek account balance, in the header, the Usage tab, the tucked
+  drawer, and the tray. The API key the app keeps is read only to ask
+  DeepSeek's balance endpoint; it is never stored, logged, or sent anywhere
+  else, and redirects are refused.
+- Sessions in the Claude desktop app's Code tab and in the ChatGPT desktop
+  app are marked "Desktop", and Claude's are named by their session title.
+  On macOS, "Open session" opens that session in its app. On Windows it
+  brings the app's window forward.
+
+### Fixed
+- Claude sessions in a folder whose path has an underscore, a dot, or a space
+  no longer stay on "working" after they finish: their transcript was looked
+  for under the wrong name.
+- A Claude session's state follows what Claude itself reports (idle, busy,
+  waiting) where it reports it, instead of being worked out from the
+  transcript.
+- A session in a Claude worktree is named after its project, not the
+  worktree's folder.
+
 ## 1.1.7 — 13 October 2026
 
 ### Fixed
