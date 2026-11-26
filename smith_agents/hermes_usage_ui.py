@@ -1,5 +1,6 @@
 """Compact saved-session readings, sharing the widget's type and colours."""
 from . import core as c, hermes_usage as usage, hermes_account as account
+from .deepseek_account import money
 
 # The account block above the saved sessions, when the Nous balance is known.
 ACCOUNT_H = 128
@@ -13,7 +14,7 @@ def provider(data):
 
 
 def name(data):
-    return c.provider_name({'provider': provider(data)})
+    return c.PROVIDER_NAMES[provider(data)]
 
 
 def tokens(value):
@@ -31,27 +32,35 @@ def brief(value):
     return str(value)
 
 
-def balance(data):
-    """The Nous reading, or None before the first one."""
-    if provider(data) != 'hermes':
+def _reading(data, owner):
+    """One provider's account reading, or None before the first one."""
+    if provider(data) != owner:
         return None
     return ((data or {}).get('account') or {}).get('reading')
+
+
+def balance(data):
+    """The Nous reading: plan, what is left, and spend."""
+    return _reading(data, 'hermes')
 
 
 def wallet(data):
-    """The DeepSeek balance reading, or None before the first one."""
-    if provider(data) != 'deepseek':
-        return None
-    return ((data or {}).get('account') or {}).get('reading')
+    """The DeepSeek reading: a balance in its own currency."""
+    return _reading(data, 'deepseek')
+
+
+def wallet_left(data):
+    """'Balance $1.72', or 'Last balance' when the newest read failed."""
+    reading, state = wallet(data), (data or {}).get('account') or {}
+    return ('Last balance ' if state.get('error') else 'Balance ') + money(
+        reading.get('left'), reading.get('currency'))
 
 
 def wallet_lines(data):
     """What is left in the DeepSeek account, and what went while the widget ran."""
-    from .deepseek_account import money
     reading, state = wallet(data), (data or {}).get('account') or {}
-    currency, left = reading.get('currency'), reading.get('left')
-    text = ('Last balance ' if state.get('error') else 'Balance ') + money(left, currency)
-    if not reading.get('available') and not left > 0:
+    currency, text = reading.get('currency'), wallet_left(data)
+    if not reading.get('available') and not reading.get('left') > 0:
         text += '  ·  top up to continue'
     elif reading.get('granted_left'):
         text += '  ·  %s granted' % money(reading['granted_left'], currency)
@@ -108,7 +117,7 @@ def _pace(data):
     return '$%.2f/h' % spend['pace'] + (' · %s left' % left if left else '')
 
 
-def _square(pen, reading, value, center, top, label_y, value_y, scale_y, owner='hermes'):
+def _square(pen, reading, value, center, top, label_y, value_y, scale_y, owner):
     label, metric, scale = reading
     font = c.FONT('bold', 9)
     pen.text((center-c.text_w(label, font)//2, label_y), label, font=font, fill=c._ink(100))
@@ -129,8 +138,7 @@ def header(pen, data, stale=False):
     text = 'Last reading' if stale or (balance(data) and not fresh) else \
         'Nous · today est.' if fresh else 'Session · auto scale'
     if wallet(data) and not stale:
-        from .deepseek_account import money
-        text = 'Balance ' + money(wallet(data).get('left'), wallet(data).get('currency'))
+        text = wallet_left(data)
     font = c.FONT('book', 6)
     pen.text((c.px(137)-c.text_w(text, font)//2, c.px(79)), text, font=font, fill=c._ink(55))
 
@@ -286,7 +294,7 @@ def drawer(pen, data, width, horizontal, notice):
         if not horizontal:
             font = c.FONT('book', 8)
             for label, y in [('Saved session', 102),
-                             (wallet_lines(data)[0].partition('  ·  ')[0] if wallet(data) else 'Auto scale', 113)]:
+                             (wallet_left(data) if wallet(data) else 'Auto scale', 113)]:
                 pen.text(((width-c.text_w(label, font))//2, c.px(y)), label, font=font, fill=c._ink(62))
             label = 'View sessions ›'
             font = c.FONT('book', 9)

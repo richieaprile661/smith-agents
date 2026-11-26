@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from PIL import ImageDraw
 
-from smith_agents import deepseek_sessions as sessions, deepseek_usage as usage, tucked
+from smith_agents import deepseek_sessions as sessions, deepseek_usage as usage, hermes_usage, tucked
 from smith_agents.app import SmithAgentsWidget
 from test_core import core
 from test_desktop_apps import T0, SESSION, asked, event, header, said
@@ -91,7 +91,7 @@ class SavedUsageTests(unittest.TestCase):
         result = self.fetch(today_start=T0 + 86400)
         self.assertEqual([s["id"] for s in result["sessions"]], [OTHER, SESSION])
         self.assertEqual((result["today_tokens"], result["limited"]), (1770, False))
-        chosen = usage.select(result, SESSION)
+        chosen = hermes_usage.select(result, SESSION, provider="deepseek")
         self.assertEqual((chosen["provider"], chosen["tokens"], chosen["session"]["title"]),
                          ("deepseek", 1770, "Checkout total"))
 
@@ -99,11 +99,28 @@ class SavedUsageTests(unittest.TestCase):
         self.save(log(), SESSION)
         reader = usage.Reader()
         self.assertEqual(reader.fetch(self.root, today_start=T0)["sessions"][0]["tokens"], 1770)
-        with patch.object(usage, "totals_and_replies", wraps=usage.totals_and_replies) as parse:
+        with patch.object(usage, "tally", wraps=usage.tally) as parse:
             reader.fetch(self.root, today_start=T0)
             parse.assert_not_called()
         self.save(log() + [said(9, "Three", inputTokens=30, totalTokens=30)], SESSION)
         self.assertEqual(reader.fetch(self.root, today_start=T0)["sessions"][0]["tokens"], 1800)
+
+    def test_appended_replies_are_added_without_recounting_the_log(self):
+        from compression import zstd
+        folder = self.root / "sessions" / "--projects-shop--" / SESSION
+        folder.mkdir(parents=True)
+        path = folder / "session.v4.jsonl.zstd"
+        path.write_bytes(b"".join(zstd.compress(line + b"\n") for line in log()))
+        reader = usage.Reader()
+        self.assertEqual(reader.fetch(self.root, today_start=T0)["sessions"][0]["tokens"], 1770)
+        with path.open("ab") as stream:
+            stream.write(zstd.compress(said(9, "Three", inputTokens=30, totalTokens=30) + b"\n"))
+        with patch.object(usage, "tally", wraps=usage.tally) as parse:
+            result = reader.fetch(self.root, today_start=T0 + 8)
+            parse.assert_not_called()
+        session = result["sessions"][0]
+        self.assertEqual((session["tokens"], session["api_call_count"], session["today_tokens"],
+                          [m["tokens"] for m in session["models"]]), (1800, 3, 30, [220, 1580]))
 
     def test_damaged_log_is_left_out_without_hiding_the_others(self):
         self.save(log(), SESSION)

@@ -68,10 +68,7 @@ def _amount(value):
         return None
     if isinstance(value, str) and not re.fullmatch(r"\s*-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*", value):
         return None
-    try:
-        number = float(value)
-    except ValueError:
-        return None
+    number = float(value)   # A string has already matched the numeric grammar.
     return number if math.isfinite(number) else None
 
 

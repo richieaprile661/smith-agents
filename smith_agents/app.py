@@ -369,68 +369,52 @@ class SmithAgentsWidget:
             self.codex_wake.wait(max(60, self.config["interval"]))
             self.codex_wake.clear()
 
-    def _hermes_poll_loop(self):
+    def _saved_usage_loop(self, owner, source, label):
+        """Read one provider's saved totals every half minute. A failed read
+        keeps the last totals and says so."""
+        wake = getattr(self, owner + '_wake')
         while not self.stopping.is_set():
             try:
-                result = hermes_usage.fetch()
+                result = source.fetch()
                 with self.lock:
-                    self.hermes_data = result
+                    setattr(self, owner + '_data', result)
             except Exception as exc:
-                message = str(exc) if isinstance(exc, hermes_usage.Unavailable) else 'Hermes usage unavailable'
+                message = str(exc) if isinstance(exc, source.Unavailable) else label + ' usage unavailable'
                 with self.lock:
-                    self.hermes_data['error'] = message
-            self.hermes_wake.wait(30)
-            self.hermes_wake.clear()
+                    getattr(self, owner + '_data')['error'] = message
+            wake.wait(30)
+            wake.clear()
+
+    def _balance_loop(self, owner, source, ready, label):
+        """Read one provider's balance every two minutes while it is set up
+        here, measuring real spend from how far the balance drops."""
+        if ready() is None:
+            return
+        while not self.stopping.is_set():
+            try:
+                reading = source.read()
+                spend = getattr(self, owner + '_spend').add(reading['left'])
+                with self.lock:
+                    setattr(self, owner + '_account', {'reading': reading, 'spend': spend,
+                                                       'updated': time.time(), 'error': None})
+            except Exception as exc:
+                message = str(exc) if isinstance(exc, source.Unavailable) else label + ' unavailable'
+                with self.lock:
+                    setattr(self, owner + '_account', dict(getattr(self, owner + '_account'), error=message))
+            if self.stopping.wait(120):
+                break
+
+    def _hermes_poll_loop(self):
+        self._saved_usage_loop('hermes', hermes_usage, 'Hermes')
 
     def _hermes_account_loop(self):
-        """Read the Nous balance every two minutes while Hermes is installed."""
-        if hermes_account.install() is None:
-            return
-        while not self.stopping.is_set():
-            try:
-                reading = hermes_account.read()
-                spend = self.hermes_spend.add(reading['left'])
-                with self.lock:
-                    self.hermes_account = {'reading': reading, 'spend': spend,
-                                           'updated': time.time(), 'error': None}
-            except Exception as exc:
-                message = str(exc) if isinstance(exc, hermes_account.Unavailable) else 'Nous balance unavailable'
-                with self.lock:
-                    self.hermes_account = dict(self.hermes_account, error=message)
-            if self.stopping.wait(120):
-                break
+        self._balance_loop('hermes', hermes_account, hermes_account.install, 'Nous balance')
 
     def _deepseek_poll_loop(self):
-        """Saved totals come from local logs; unchanged logs are not read again."""
-        while not self.stopping.is_set():
-            try:
-                result = deepseek_usage.fetch()
-                with self.lock:
-                    self.deepseek_data = result
-            except Exception as exc:
-                message = str(exc) if isinstance(exc, deepseek_usage.Unavailable) else 'DeepSeek usage unavailable'
-                with self.lock:
-                    self.deepseek_data['error'] = message
-            self.deepseek_wake.wait(30)
-            self.deepseek_wake.clear()
+        self._saved_usage_loop('deepseek', deepseek_usage, 'DeepSeek')
 
     def _deepseek_account_loop(self):
-        """Read the DeepSeek balance every two minutes while its app is signed in here."""
-        if deepseek_account.api_key() is None:
-            return
-        while not self.stopping.is_set():
-            try:
-                reading = deepseek_account.read()
-                spend = self.deepseek_spend.add(reading['left'])
-                with self.lock:
-                    self.deepseek_account = {'reading': reading, 'spend': spend,
-                                             'updated': time.time(), 'error': None}
-            except Exception as exc:
-                message = str(exc) if isinstance(exc, deepseek_account.Unavailable) else 'DeepSeek balance unavailable'
-                with self.lock:
-                    self.deepseek_account = dict(self.deepseek_account, error=message)
-            if self.stopping.wait(120):
-                break
+        self._balance_loop('deepseek', deepseek_account, deepseek_account.api_key, 'DeepSeek balance')
 
     def _navigate_hermes(self, kind, direction):
         """Page the saved sessions of whichever saved-usage provider is selected."""
@@ -473,12 +457,11 @@ class SmithAgentsWidget:
         with self.lock:
             owner = self.config.get("usage_provider")
             if owner in core.SAVED_USAGE_PROVIDERS:
-                source = hermes_usage if owner == 'hermes' else deepseek_usage
-                data = source.select(getattr(self, owner + '_data', {}),
+                data = hermes_usage.select(getattr(self, owner + '_data', {}),
                     getattr(self, owner + '_session_id', None),
                     [a.get('session_id') for a in getattr(self, 'agents', [])
                      if a.get('provider') == owner and a.get('state') != 'closed'],
-                    getattr(self, owner + '_model_index', 0))
+                    getattr(self, owner + '_model_index', 0), provider=owner)
                 data['account'] = dict(getattr(self, owner + '_account', {}))
                 error, stamp = data.get('error'), data.get('updated')
                 return ([], data, None, [], (owner, error) if error else None,
@@ -553,8 +536,8 @@ class SmithAgentsWidget:
                 kind = error[0] if error else ""
                 notice = (kind, {"auth": "Sign in to Claude",
                                  "codex": error[1] if error else "Codex usage unavailable",
-                                 "hermes": "Hermes usage unavailable",
-                                 "deepseek": "DeepSeek usage unavailable",
+                                 **{name: core.PROVIDER_NAMES[name] + " usage unavailable"
+                                    for name in core.SAVED_USAGE_PROVIDERS},
                                  "ratelimit": "Rate limited, retrying",
                                  "cached": "No reading yet"}.get(
                                      kind, "Usage offline"))

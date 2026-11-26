@@ -22,6 +22,7 @@ from .branding import APP_NAME, config_override
 from .runtime import backend
 from .context_bridge import read_capacity
 from .permissions import pending_permissions
+from .session_windows import HOSTED_PROVIDERS
 
 platform = backend()
 _DPI, SCALE = platform.display_scale()
@@ -645,14 +646,15 @@ def pretty_project(name):
     return name.strip("-") or name
 
 
-# Providers whose sessions live inside a host this widget does not own: their
-# own app ends them, and their readings come from their own parser.
-HOSTED_PROVIDERS = ("codex", "hermes", "deepseek")
 # Entrypoints of desktop apps that keep every session in one window and can
 # open one by link.
 LINKED_DESKTOP_APPS = ("claude-desktop", "codex-desktop")
-# Every provider with a lamp in the header, in lamp order.
-USAGE_PROVIDERS = ("claude", "codex", "hermes", "deepseek")
+# Every provider, by the name it is shown under; each has a lamp in the header,
+# in this order.
+PROVIDER_NAMES = {"claude": "Claude", "codex": "Codex", "hermes": "Hermes", "deepseek": "DeepSeek"}
+USAGE_PROVIDERS = tuple(PROVIDER_NAMES)
+# Logos drawn from their transparent mask alone: (share of the cell, tint on dark themes).
+MASKED_LOGOS = {"hermes": (.78, "dce7ff"), "deepseek": (.94, "ffffff")}
 # Providers whose usage is saved session totals rather than an account's limits.
 SAVED_USAGE_PROVIDERS = ("hermes", "deepseek")
 
@@ -1250,8 +1252,8 @@ def agent_model_source(agent, include_provider=True):
         "hermes-tui": "Terminal", "hermes-desktop": "Desktop",
         "deepseek-desktop": "Desktop"}.get(
             agent.get("entrypoint"), "Hermes" if agent.get("provider") == "hermes" else "Claude Code")
-    provider = {"codex": "Codex · ", "claude": "Claude · ", "hermes": "Hermes · ",
-                "deepseek": "DeepSeek · "}.get(agent.get("provider"), "")
+    provider = PROVIDER_NAMES.get(agent.get("provider"))
+    provider = provider + " · " if provider else ""
     return (provider if include_provider else "") + model + " · " + source
 
 
@@ -2834,31 +2836,30 @@ def agent_row_height(agent, open_=False):
 
 
 def provider_name(agent):
-    return {"codex": "Codex", "hermes": "Hermes", "deepseek": "DeepSeek"}.get(
-        agent.get("provider"), "Claude")
+    return PROVIDER_NAMES.get(agent.get("provider"), "Claude")
 
 
 @lru_cache(maxsize=24)
 def _provider_logo(provider, size):
-    if provider not in ("claude", "codex", "hermes", "deepseek"):
+    if provider not in USAGE_PROVIDERS:
         return None
     try:
         with Image.open(os.path.join(SCRIPT_DIR, "assets", "providers", provider + ".png")) as source:
-            if provider in ('hermes', 'deepseek'):
+            if provider in MASKED_LOGOS:
                 # The supplied portrait is black ink, and the whale is one flat
                 # colour. Use the transparent mask in a light tint - the whale
                 # in white - so it remains readable on the dark widget.
+                share, tint = MASKED_LOGOS[provider]
                 alpha = source.convert('RGBA').getchannel('A')
                 bounds = alpha.point(lambda a: 255 if a >= 128 else 0).getbbox()
                 if not bounds:
                     return None
                 alpha = alpha.crop(bounds)
-                mark_size = round(size * (.78 if provider == 'hermes' else .94))
+                mark_size = round(size * share)
                 scale = mark_size / max(alpha.size)
                 dimensions = (max(1, round(alpha.width * scale)), max(1, round(alpha.height * scale)))
                 alpha = alpha.resize(dimensions, Image.Resampling.LANCZOS)
-                mark = Image.new('RGBA', alpha.size, _tok('fg') if INVERT else
-                                 _rgb('dce7ff' if provider == 'hermes' else 'ffffff'))
+                mark = Image.new('RGBA', alpha.size, _tok('fg') if INVERT else _rgb(tint))
                 mark.putalpha(alpha)
                 logo = Image.new('RGBA', (size, size))
                 logo.alpha_composite(mark, ((size-mark.width)//2, (size-mark.height)//2))
@@ -3257,7 +3258,7 @@ def account_summary(metrics, provider=None, notice=None, data_notice=None, usage
         # DeepSeek's logs carry no price, so its line has no estimate to show.
         estimate = ' · %s est.' % cost(session.get('estimated_cost_usd')) if provider == 'hermes' else ''
         return ('Last reading · ' if data_notice and session else '') + '%s tokens%s · %s' % (
-            tokens(session.get('tokens')), estimate, provider_name({'provider': provider}))
+            tokens(session.get('tokens')), estimate, PROVIDER_NAMES[provider])
     weekly = next((m for m in metrics if m.get("key") == "weekly" or
                    (str(m.get("key", "")).startswith("codex:codex:") and m.get("label") == "1w")), None)
     metric = weekly or (metrics[0] if metrics else None)

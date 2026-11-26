@@ -187,7 +187,7 @@ def _name_lines(agent, width=None):
 
 def _lamp_fit(count, span, gap):
     """The largest marks, at the widest spacing up to `gap`, that fit `count`
-    lamps into `span` points. Three fit at full size on every edge."""
+    lamps into `span` points."""
     for spacing in range(gap, -1, -2):
         for mark in (18, 16, 14, 12):
             if count * mark + (count - 1) * spacing <= span:

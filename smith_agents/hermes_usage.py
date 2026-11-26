@@ -69,12 +69,17 @@ def fetch(root=None):
         raise Unavailable('Hermes database unavailable · retrying') from exc
 
 
+def today_start():
+    """Local midnight, as epoch seconds."""
+    return time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+
+
 def _today_cost(db, columns):
     """Today's estimated cost. A session that ran across midnight counts
     here in proportion to its replies written today."""
     if 'estimated_cost_usd' not in columns:
         return None
-    start = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+    start = today_start()
     try:
         rows = _today_rows(db, start)
     except sqlite3.Error:
@@ -93,7 +98,7 @@ def _today_rows(db, start):
                       "GROUP BY s.id HAVING MAX(m.timestamp) >= ?", (start, start)).fetchall()
 
 
-def select(data, identity=None, live_ids=(), model_index=0):
+def select(data, identity=None, live_ids=(), model_index=0, provider='hermes'):
     sessions = data.get('sessions', [])
     selected = next((s for s in sessions if s['id'] == identity), None)
     if selected is None:
@@ -101,7 +106,7 @@ def select(data, identity=None, live_ids=(), model_index=0):
     selected = selected or {}
     models = selected.get('models', [])
     index = max(0, min(model_index, len(models)-1))
-    return dict(data, provider='hermes', session=selected, tokens=selected.get('tokens'),
+    return dict(data, provider=provider, session=selected, tokens=selected.get('tokens'),
                 session_index=sessions.index(selected) if selected else 0,
                 model_index=index, model=models[index] if models else {})
 

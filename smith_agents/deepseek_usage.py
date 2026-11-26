@@ -7,7 +7,9 @@ from pathlib import Path
 import time
 
 from . import hermes_usage
-from .deepseek_sessions import MAX_LOG, _TYPE, _count, _decompress, _record, _text, can_read_logs, home
+from .codex_sessions import count as _count
+from .deepseek_sessions import Log, can_read_logs, event, header, home, reply
+from .hermes_sessions import _text
 
 SESSION_LIMIT = 100
 MODEL_LIMIT = 100
@@ -26,27 +28,21 @@ def _blank(**identity):
                 tool_call_count=0, message_count=0, estimated_cost_usd=None)
 
 
-def totals_and_replies(lines):
-    """One log's totals and each reply's (time, tokens), or None without a header."""
-    lines = list(lines)
-    head = _record(lines[0]) if lines else None
-    if not head or head.get("type") != "session":
-        return None
-    identity = head.get("id")
-    if not isinstance(identity, str) or not identity.strip():
-        return None
-    session = _blank(id=identity, title="", model="",
-                     cwd=_text(head.get("cwd"), 250), started_at=(_count(head.get("createdAt")) or 0) / 1000.0)
-    models, replies = {}, []
-    for line in lines[1:]:
-        kind = _TYPE.search(line[:96])
-        if not kind or kind[1] not in _COUNTED:
-            continue
-        record = _record(line)
-        data = record.get("data") if record else None
-        if not isinstance(data, dict):
-            continue
-        kind = record.get("type")
+class Tally:
+    """One log's running totals, added to as its records arrive."""
+
+    def __init__(self, head):
+        self.session = _blank(id=head["id"], title="", model="", cwd=_text(head.get("cwd"), 250),
+                              started_at=(_count(head.get("createdAt")) or 0) / 1000.0)
+        self.models = {}
+        self.replies = []       # (time, tokens), to say how much of it was today
+
+    def add(self, line):
+        found = event(line, _COUNTED)
+        if not found:
+            return
+        kind, record, data = found
+        session = self.session
         if kind == "session/title":
             session["title"] = _text(data.get("title"), 250) or session["title"]
         elif kind == "user/message":
@@ -54,15 +50,13 @@ def totals_and_replies(lines):
         elif kind == "tool/call":
             session["tool_call_count"] += 1
         elif kind == "assistant/message":
-            message = data.get("message") if isinstance(data.get("message"), dict) else {}
-            source = message.get("source") if isinstance(message.get("source"), dict) else {}
-            usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+            _, source, usage = reply(data)
             name = _text(source.get("model"), 250) or "Unknown model"
             parts = {ours: _count(usage.get(theirs)) or 0 for theirs, ours in _PARTS}
             # Cache reads and writes are tokens of their own here, not a share of input.
             total = _count(usage.get("totalTokens"))
             total = sum(parts.values()) if total is None else total
-            model = models.setdefault(name, _blank(
+            model = self.models.setdefault(name, _blank(
                 model=name, billing_provider=_text(source.get("provider"), 250), task=""))
             for target in (session, model):
                 for key, value in parts.items():
@@ -71,49 +65,50 @@ def totals_and_replies(lines):
                 target["api_call_count"] += 1
                 target["message_count"] += 1
             session["model"] = name
-            replies.append(((_count(record.get("time")) or 0) / 1000.0, total))
-    session["models"] = [models[name] for name in sorted(models)][:MODEL_LIMIT]
-    session["models_limited"] = len(models) > MODEL_LIMIT
-    return session, replies
+            self.replies.append(((_count(record.get("time")) or 0) / 1000.0, total))
+
+    def totals(self, since):
+        names = sorted(self.models)
+        return dict(self.session, models=[self.models[name] for name in names[:MODEL_LIMIT]],
+                    models_limited=len(names) > MODEL_LIMIT,
+                    today_tokens=sum(tokens for at, tokens in self.replies if at >= since))
 
 
-def _with_today(parsed, today_start):
-    session, replies = parsed
-    return dict(session, today_tokens=sum(tokens for at, tokens in replies if at >= today_start))
+def tally(lines):
+    """A whole log's tally, or None without a session header."""
+    head = header(lines)
+    if not head:
+        return None
+    result = Tally(head)
+    for index in range(1, len(lines)):
+        result.add(lines[index])
+    return result
 
 
 def totals(lines, today_start):
-    parsed = totals_and_replies(lines)
-    return _with_today(parsed, today_start) if parsed else None
+    counted = tally(list(lines))
+    return counted.totals(today_start) if counted else None
 
 
 class Reader:
-    """Reads each saved log once, and again only after it changes."""
+    """Counts each saved log once, then only the records it gains."""
 
     def __init__(self):
-        self.logs = {}
+        self.logs = {}      # log path -> [Log, Tally or None]
 
-    def _parsed(self, log):
-        try:
-            status = log.stat()
-        except OSError:
-            return None
-        stamp = (status.st_size, status.st_mtime_ns)
-        known = self.logs.get(log)
-        if known and known[0] == stamp:
-            return known[1]
-        parsed = None
-        if status.st_size <= MAX_LOG:
-            try:
-                data = _decompress(log.read_bytes())
-            except OSError:
-                data = None
-            if data is None:
-                # Caught mid-write: keep the last good totals and try again next time.
-                return known[1] if known else None
-            parsed = totals_and_replies(data.splitlines())
-        self.logs[log] = (stamp, parsed)
-        return parsed
+    def _tally(self, path):
+        known = self.logs.get(path)
+        if known is None:
+            known = self.logs[path] = [Log(path), None]
+        read = known[0].read()
+        if read is not None:    # Unreadable for now keeps the last good tally.
+            lines, restarted = read
+            if restarted:
+                known[1] = tally(lines)
+            elif known[1]:
+                for line in lines:
+                    known[1].add(line)
+        return known[1]
 
     def fetch(self, root=None, today_start=None):
         base = (Path(root) if root is not None else home()) / "sessions"
@@ -121,16 +116,14 @@ class Reader:
             raise Unavailable("No saved DeepSeek sessions")
         if not can_read_logs():
             raise Unavailable("DeepSeek usage needs Python 3.14")
-        if today_start is None:
-            today_start = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+        since = hermes_usage.today_start() if today_start is None else today_start
         try:
             logs = set(base.glob("*/*/session.v*.jsonl.zstd"))
         except OSError as exc:
             raise Unavailable("DeepSeek logs unavailable · retrying") from exc
-        sessions = [_with_today(parsed, today_start)
-                    for parsed in (self._parsed(log) for log in logs) if parsed]
-        for log in [log for log in self.logs if log not in logs]:
-            del self.logs[log]
+        sessions = [counted.totals(since) for counted in map(self._tally, logs) if counted]
+        for path in [path for path in self.logs if path not in logs]:
+            del self.logs[path]
         if not sessions:
             raise Unavailable("No saved DeepSeek sessions")
         sessions.sort(key=lambda session: (session["started_at"], session["id"]), reverse=True)
@@ -144,11 +137,6 @@ _reader = Reader()
 
 def fetch(root=None, today_start=None):
     return _reader.fetch(root, today_start)
-
-
-def select(data, identity=None, live_ids=(), model_index=0):
-    """The same paging as the other saved-usage provider, marked as DeepSeek."""
-    return dict(hermes_usage.select(data, identity, live_ids, model_index), provider="deepseek")
 
 
 def demo_data():

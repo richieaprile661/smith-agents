@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 from types import SimpleNamespace
-from .session_windows import WindowTargets, title_matches_project
+from .session_windows import HOSTED_PROVIDERS, WindowTargets, title_matches_project
 from . import macos_windows
 from .branding import APP_NAME, config_override
 
@@ -255,14 +255,14 @@ def _match_agent_window(agent, host):
 
 
 def raise_agent_window(agent):
-    """Reveal one conversation/window. Only a Claude desktop session activates
-    its application, which keeps every session in a single window."""
+    """Reveal one conversation/window. Only a desktop app that keeps every
+    session in a single window is activated as a whole, by its own link."""
     import psutil
     if not pid_alive(agent.get("pid"), agent.get("started_at")):
         return False
     try:
         process = psutil.Process(agent["pid"])
-        if agent.get("provider") in ("codex", "hermes", "deepseek") and process.create_time() != agent.get("process_created"):
+        if agent.get("provider") in HOSTED_PROVIDERS and process.create_time() != agent.get("process_created"):
             return False
         ancestors = process.parents()
         host = _agent_host_application(process)
@@ -336,7 +336,7 @@ def agent_window_state(agent):
     if target is None:
         try:
             process = psutil.Process(agent['pid'])
-            if agent.get('provider') in ('codex', 'hermes', 'deepseek') and process.create_time() != agent.get('process_created'):
+            if agent.get('provider') in HOSTED_PROVIDERS and process.create_time() != agent.get('process_created'):
                 return 'unknown'
             host = _agent_host_application(process)
             window = _match_agent_window(agent, host)

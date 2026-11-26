@@ -4,6 +4,12 @@ import re
 import threading
 
 
+# Providers whose sessions live inside a host this widget does not own: their
+# own app ends them, their readings come from their own parser, and a row is
+# trusted only while its process is the one that was scanned.
+HOSTED_PROVIDERS = ("codex", "hermes", "deepseek")
+
+
 def window_agent(agent, agents):
     """A spawned subagent uses its ancestor's window, not a separate chat."""
     seen = set()

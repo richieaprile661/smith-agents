@@ -51,6 +51,25 @@ def _content(value):
     return _text(value)
 
 
+def project_name(cwd):
+    """The folder a session works in, or '' when that is the home directory:
+    a chat launched from there has no project identity to show."""
+    path = cwd.replace("\\", "/").rstrip("/")
+    is_home = os.path.normcase(os.path.normpath(os.path.expanduser(cwd))) == os.path.normcase(str(Path.home()))
+    return path.rsplit("/", 1)[-1] if path and not is_home else ""
+
+
+def keep_closed(previous, rows, now):
+    """Leave a just-ended session's row in place, closed, for two minutes."""
+    for key, old in previous.items():
+        if key not in rows:
+            closed_at = old.get("closed_at", now)
+            if now - closed_at < 120:
+                rows[key] = dict(old, state="closed", active=False, closed_at=closed_at,
+                                 status_detail=None, permissions=[])
+    return rows
+
+
 def _hermes_command(executable, argv):
     """Match launch positions, never a mention of Hermes in a prompt argument."""
     name = Path(executable).name.lower()
@@ -131,10 +150,7 @@ def _row(entry, process, saved, messages, now):
     cwd = saved_cwd if isinstance(saved_cwd, str) and saved_cwd.strip() else process.get("cwd", "")
     title = _text(saved.get("title"), 160)
     # Match the other providers: project identity first, chat title secondary.
-    # A chat launched from the home directory has no project identity to show.
-    path = cwd.replace("\\", "/").rstrip("/")
-    is_home = os.path.normcase(os.path.normpath(os.path.expanduser(cwd))) == os.path.normcase(str(Path.home()))
-    project = path.rsplit("/", 1)[-1] if path and not is_home else ""
+    project = project_name(cwd)
     since = _number(saved.get("started_at")) or _number(entry.get("started_at")) or process["created"]
     row = dict(provider="hermes", id="hermes:" + session, session_id=session,
                pid=process["pid"], process_created=process["created"],
@@ -212,13 +228,7 @@ class Scanner:
             saved, messages = details.get(entry["session_id"], ({}, []))
             row = _row(entry, process, saved, messages, now)
             rows[row["id"]] = row
-        for key, old in self.previous.items():
-            if key not in rows:
-                closed_at = old.get("closed_at", now)
-                if now - closed_at < 120:
-                    rows[key] = dict(old, state="closed", active=False, closed_at=closed_at,
-                                     status_detail=None, permissions=[])
-        self.previous = rows
+        self.previous = keep_closed(self.previous, rows, now)
         return list(rows.values())
 
 

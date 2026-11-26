@@ -122,6 +122,13 @@ class DeepSeekLogTests(unittest.TestCase):
         self.assertIsNone(deepseek.summarize(lines[1:], T0 + 60))
         self.assertIsNone(deepseek.summarize([], T0 + 60))
 
+    def test_no_process_sweep_where_deepseek_was_never_used(self):
+        with tempfile.TemporaryDirectory() as empty, \
+             patch.object(deepseek, "home", return_value=Path(empty)), \
+             patch("psutil.process_iter") as sweep:
+            self.assertEqual(deepseek.processes(), [])
+            sweep.assert_not_called()
+
     def test_helper_session_is_refused(self):
         lines = [header(session="9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d", parentSession=SESSION,
                         delegationDepth=1)] + finished_turn()[1:]
@@ -142,6 +149,52 @@ class DeepSeekScannerTests(unittest.TestCase):
         (folder / "session.v4.jsonl.zstd").write_bytes(zstd.compress(b"\n".join(lines) + b"\n"))
         (folder / "session.lock").write_bytes(b"")
         return str(folder / "session.lock")
+
+    def frames(self, lines):
+        """The app's own layout: every record is a zstd frame of its own."""
+        from compression import zstd
+        return b"".join(zstd.compress(line + b"\n") for line in lines)
+
+    def following(self):
+        held = self.session(SESSION, finished_turn())
+        log = Path(held).with_name("session.v4.jsonl.zstd")
+        log.write_bytes(self.frames(finished_turn()))
+        scanner = deepseek.Scanner(lambda: [{"pid": 10, "created": 5.0, "files": [held]}])
+        return scanner, log
+
+    def test_log_written_one_frame_per_record_reads_the_same(self):
+        scanner, _ = self.following()
+        row = scanner.scan(T0 + 60)[0]
+        self.assertEqual((row["state"], row["session_name"], row["context_tokens"], row["idle"]),
+                         ("done", "Checkout total", 6750, 53))
+
+    def test_appended_records_are_folded_in_without_rereading_the_log(self):
+        scanner, log = self.following()
+        scanner.scan(T0 + 60)
+        with log.open("ab") as stream:
+            stream.write(self.frames([asked(70, "And the tax"), event("turn/start", 71, turn=2),
+                                      said(72, "Working on it", inputTokens=9000)]))
+        with patch.object(deepseek, "parse", wraps=deepseek.parse) as parse:
+            row = scanner.scan(T0 + 73)[0]
+            parse.assert_not_called()
+        self.assertEqual((row["state"], row["last_request"], row["latest_message"],
+                          row["context_tokens"], row["idle"], row["session_name"]),
+                         ("working", "And the tax", "Working on it", 9000, 1, "Checkout total"))
+
+    def test_record_still_being_written_waits_for_the_next_scan(self):
+        scanner, log = self.following()
+        scanner.scan(T0 + 60)
+        whole = self.frames([asked(70, "And the tax"), event("turn/start", 71, turn=2)])
+        partial = self.frames([said(72, "Working on it", inputTokens=9000)])
+        with log.open("ab") as stream:
+            stream.write(whole + partial[:-5])
+        with patch.object(deepseek, "parse", wraps=deepseek.parse) as parse:
+            row = scanner.scan(T0 + 73)[0]
+            self.assertEqual((row["state"], row["latest_message"]), ("working", "The total is fixed."))
+            with log.open("ab") as stream:
+                stream.write(partial[-5:])
+            self.assertEqual(scanner.scan(T0 + 74)[0]["latest_message"], "Working on it")
+            parse.assert_not_called()
 
     def test_only_a_session_whose_lock_the_app_holds_is_live(self):
         held = self.session(SESSION, finished_turn())
