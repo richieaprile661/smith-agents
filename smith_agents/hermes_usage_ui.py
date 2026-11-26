@@ -3,15 +3,60 @@ from . import core as c, hermes_usage as usage, hermes_account as account
 
 # The account block above the saved sessions, when the Nous balance is known.
 ACCOUNT_H = 128
+# The two DeepSeek balance lines under its saved sessions.
+WALLET_H = 40
+
+
+def provider(data):
+    """Which saved-usage provider this reading belongs to."""
+    return (data or {}).get('provider') or 'hermes'
+
+
+def name(data):
+    return c.provider_name({'provider': provider(data)})
 
 
 def tokens(value):
     return c.compact_tokens(value) if value is not None else '—'
 
 
+def brief(value):
+    """Three significant digits: a nine-digit total still fits a header field."""
+    if value is None:
+        return '—'
+    for unit, suffix in ((1e9, 'B'), (1e6, 'M'), (1e3, 'k')):
+        if value >= unit:
+            scaled = value / unit
+            return ('%.0f' if scaled >= 100 else '%.1f' if scaled >= 10 else '%.2f') % scaled + suffix
+    return str(value)
+
+
 def balance(data):
     """The Nous reading, or None before the first one."""
+    if provider(data) != 'hermes':
+        return None
     return ((data or {}).get('account') or {}).get('reading')
+
+
+def wallet(data):
+    """The DeepSeek balance reading, or None before the first one."""
+    if provider(data) != 'deepseek':
+        return None
+    return ((data or {}).get('account') or {}).get('reading')
+
+
+def wallet_lines(data):
+    """What is left in the DeepSeek account, and what went while the widget ran."""
+    from .deepseek_account import money
+    reading, state = wallet(data), (data or {}).get('account') or {}
+    currency, left = reading.get('currency'), reading.get('left')
+    text = ('Last balance ' if state.get('error') else 'Balance ') + money(left, currency)
+    if not reading.get('available') and not left > 0:
+        text += '  ·  top up to continue'
+    elif reading.get('granted_left'):
+        text += '  ·  %s granted' % money(reading['granted_left'], currency)
+    spent = (state.get('spend') or {}).get('spent')
+    return text, 'Spent while open ' + money(spent, currency)
 
 
 def square_readings(data):
@@ -24,7 +69,11 @@ def square_readings(data):
     """
     session = (data or {}).get('session', {})
     reading = balance(data)
-    if reading:
+    if provider(data) == 'deepseek':
+        # No price is recorded, so the second field is today's tokens instead.
+        values = {'tokens': session.get('tokens'), 'today_tokens': (data or {}).get('today_tokens')}
+        fields = [('Tokens', 'tokens', 1000), ('Today', 'today_tokens', 1000)]
+    elif reading:
         values = {'left': reading.get('left'), 'today': (data or {}).get('today_cost')}
         fields = [('Left', 'left', .01), ('Today', 'today', .01)]
     else:
@@ -36,7 +85,7 @@ def square_readings(data):
         while value is not None and value > unit * 100:
             unit *= 10
         metric = {'pct': min(100, int(value / unit + 1e-9))} if value is not None else None
-        scale = tokens(unit) if key == 'tokens' else ('$%g' % unit if unit >= 1 else '%g¢' % (unit * 100))
+        scale = tokens(unit) if key in ('tokens', 'today_tokens') else ('$%g' % unit if unit >= 1 else '%g¢' % (unit * 100))
         readings.append((label, metric, scale + '/□' if value is not None else '—'))
     return readings
 
@@ -46,6 +95,8 @@ def _amounts(data):
     if reading:
         return account.money(reading.get('left')), account.money((data or {}).get('today_cost'))
     session = (data or {}).get('session', {})
+    if provider(data) == 'deepseek':
+        return brief(session.get('tokens')), brief((data or {}).get('today_tokens'))
     return tokens(session.get('tokens')), usage.cost(session.get('estimated_cost_usd'))
 
 
@@ -57,11 +108,11 @@ def _pace(data):
     return '$%.2f/h' % spend['pace'] + (' · %s left' % left if left else '')
 
 
-def _square(pen, reading, value, center, top, label_y, value_y, scale_y):
+def _square(pen, reading, value, center, top, label_y, value_y, scale_y, owner='hermes'):
     label, metric, scale = reading
     font = c.FONT('bold', 9)
     pen.text((center-c.text_w(label, font)//2, label_y), label, font=font, fill=c._ink(100))
-    c.draw_signal_field(pen, metric, 'hermes', center-c.px(29)//2, top)
+    c.draw_signal_field(pen, metric, owner, center-c.px(29)//2, top)
     ink = c._tok('fg') if c.THEME_NAME == 'eink' else (255, 255, 255, 255)
     font = c.MONO('bold', 10)
     value = c.elide(value, font, c.px(39))
@@ -72,10 +123,14 @@ def _square(pen, reading, value, center, top, label_y, value_y, scale_y):
 
 def header(pen, data, stale=False):
     for index, (reading, value) in enumerate(zip(square_readings(data), _amounts(data))):
-        _square(pen, reading, value, c.px(116+42*index), c.px(24), c.px(8), c.px(56), c.px(68))
+        _square(pen, reading, value, c.px(116+42*index), c.px(24), c.px(8), c.px(56), c.px(68),
+                provider(data))
     fresh = balance(data) and not ((data or {}).get('account') or {}).get('error')
     text = 'Last reading' if stale or (balance(data) and not fresh) else \
         'Nous · today est.' if fresh else 'Session · auto scale'
+    if wallet(data) and not stale:
+        from .deepseek_account import money
+        text = 'Balance ' + money(wallet(data).get('left'), wallet(data).get('currency'))
     font = c.FONT('book', 6)
     pen.text((c.px(137)-c.text_w(text, font)//2, c.px(79)), text, font=font, fill=c._ink(55))
 
@@ -83,6 +138,8 @@ def header(pen, data, stale=False):
 def panel_height(data):
     # With a Nous balance the account is the whole tab; the saved-session
     # pages remain only as the view without one.
+    if wallet(data):
+        return c.px(306 + WALLET_H)     # the saved sessions, then the balance beneath
     return c.px(ACCOUNT_H + 30) if balance(data) else c.px(306)
 
 
@@ -142,23 +199,34 @@ def panel(pen, data, y, stats_only=False):
                 pen.text((x+c.px(8), y+c.px(offset-2)), text, font=c.FONT('bold', 14), fill=c._ink(100))
                 boxes.append((kind, x, y+c.px(offset-4), x+c.px(24), y+c.px(offset+16), direction))
 
+    priced = provider(data) == 'hermes'
+
+    def amount(row):
+        """Tokens, with the cost estimate only where the provider records one."""
+        return tokens(row.get('tokens')) + ' tokens' + (
+            '  ·  %s est.' % usage.cost(row.get('estimated_cost_usd')) if priced else '')
+
     if not session:
-        line('No saved Hermes sessions', 14)
-        line('Usage appears after Hermes saves it.', 34, faint=True)
+        line('No saved %s sessions' % name(data), 14)
+        line('Usage appears after %s saves it.' % name(data), 34, faint=True)
         return boxes
     pager('Saved session', 10, len(data['sessions']), data['session_index'], 'hermes-session', data.get('limited'))
     line(usage.session_name(session), 34, bold=True)
-    line(session.get('title') or session.get('model') or 'Hermes', 52, faint=True)
+    line(session.get('title') or session.get('model') or name(data), 52, faint=True)
     if stats_only:
         for offset, key, label in [(78, 'api_call_count', 'API calls'), (99, 'tool_call_count', 'Tool calls'),
                                     (120, 'message_count', 'Messages')]:
             value = session.get(key)
             line(label+'   '+('{:,}'.format(value) if value is not None else '—'), offset)
         return boxes
-    line('%s tokens  ·  %s est.' % (tokens(session.get('tokens')), usage.cost(session.get('estimated_cost_usd'))), 76, bold=True)
+    line(amount(session), 76, bold=True)
     line('In %s  ·  Out %s' % (tokens(session.get('input_tokens')), tokens(session.get('output_tokens'))), 96)
     line('Cache read %s  ·  Write %s' % (tokens(session.get('cache_read_tokens')), tokens(session.get('cache_write_tokens'))), 114, faint=True)
-    line('Reasoning %s' % tokens(session.get('reasoning_tokens')), 132, faint=True)
+    if priced:
+        line('Reasoning %s' % tokens(session.get('reasoning_tokens')), 132, faint=True)
+    else:
+        line('Today %s  ·  All sessions today %s' % (
+            tokens(session.get('today_tokens')), tokens(data.get('today_tokens'))), 132, faint=True)
     c.rule(pen, y+c.px(155), c._ink(13))
     models = session.get('models', [])
     if models:
@@ -166,11 +234,17 @@ def panel(pen, data, y, stats_only=False):
         model = data['model']
         line(model.get('model') or 'Unknown model', 189, bold=True)
         line(' · '.join(v for v in (model.get('billing_provider'), model.get('task')) if v) or 'Provider not recorded', 207, faint=True)
-        line('%s tokens  ·  %s est.' % (tokens(model.get('tokens')), usage.cost(model.get('estimated_cost_usd'))), 231)
+        line(amount(model), 231)
         line('In %s  ·  Out %s' % (tokens(model.get('input_tokens')), tokens(model.get('output_tokens'))), 251, faint=True)
     else:
         line('Model breakdown not recorded', 175, faint=True)
-    line('Saved totals · cost estimate, not a bill', 280, faint=True)
+    line('Saved totals · cost estimate, not a bill' if priced else
+         'Saved totals from session logs', 280, faint=True)
+    if wallet(data):
+        c.rule(pen, y+c.px(301), c._ink(13))
+        left, spent = wallet_lines(data)
+        line(left, 308, bold=True)
+        line(spent, 326, faint=True)
     return boxes
 
 
@@ -182,7 +256,7 @@ def drawer(pen, data, width, horizontal, notice):
         # One field on the narrow rail: what is left. Today and the pace
         # take their own lines beneath, so no label shares a row.
         (reading, value), (_, today) = readings
-        _square(pen, reading, value, width//2, c.px(44), c.px(29), c.px(76), c.px(89))
+        _square(pen, reading, value, width//2, c.px(44), c.px(29), c.px(76), c.px(89), provider(data))
         font = c.FONT('book', 8)
         # '~' marks the estimate where the rail has no room for the word.
         rate = pace.partition(' · ')[0] if pace else '—'
@@ -199,7 +273,7 @@ def drawer(pen, data, width, horizontal, notice):
             center = round(width*spots[index]) if horizontal else c.px(24+40*index)
             _square(pen, reading, value, center, c.px(14 if horizontal else 44),
                     c.px(3 if horizontal else 29), c.px(44 if horizontal else 76),
-                    c.px(56 if horizontal else 89))
+                    c.px(56 if horizontal else 89), provider(data))
         if horizontal and pace:
             center, font = round(width*.84), c.FONT('bold', 9)
             pen.text((center-c.text_w('Pace', font)//2, c.px(3)), 'Pace', font=font, fill=c._ink(100))
@@ -211,7 +285,8 @@ def drawer(pen, data, width, horizontal, notice):
                 pen.text((center-c.text_w(left, font)//2, c.px(44)), left, font=font, fill=c._ink(62))
         if not horizontal:
             font = c.FONT('book', 8)
-            for label, y in [('Saved session', 102), ('Auto scale', 113)]:
+            for label, y in [('Saved session', 102),
+                             (wallet_lines(data)[0].partition('  ·  ')[0] if wallet(data) else 'Auto scale', 113)]:
                 pen.text(((width-c.text_w(label, font))//2, c.px(y)), label, font=font, fill=c._ink(62))
             label = 'View sessions ›'
             font = c.FONT('book', 9)

@@ -204,6 +204,7 @@ class HermesTests(unittest.TestCase):
         row, = self.scanner.scan(200)
         with patch.object(core, "_list_claude_agents", return_value=[]), \
              patch("smith_agents.codex_sessions.list_agents", return_value=[]), \
+             patch("smith_agents.deepseek_sessions.list_agents", return_value=[]), \
              patch.object(hermes, "list_agents", return_value=[row]), \
              patch.object(core.platform, "process_started", return_value=100):
             rows = core.decorate_agents(core.list_agents())
@@ -212,6 +213,7 @@ class HermesTests(unittest.TestCase):
         self.assertFalse(core.terminate_agent(row))
         with patch.object(core, "_list_claude_agents", return_value=[dict(row, id="claude")]), \
              patch("smith_agents.codex_sessions.list_agents", side_effect=RuntimeError), \
+             patch("smith_agents.deepseek_sessions.list_agents", side_effect=RuntimeError), \
              patch.object(hermes, "list_agents", side_effect=RuntimeError), patch.object(core, "log_line"):
             self.assertEqual(len(core.list_agents()), 1)
 
@@ -242,12 +244,13 @@ class HermesTests(unittest.TestCase):
         self.assertIsNone(stats['tokens'])
         self.assertEqual(stats['session'], {})
 
-    def test_three_edge_logos_have_separate_click_targets(self):
+    def test_edge_logos_have_separate_click_targets(self):
         row, = self.scanner.scan(200)
         for side in tucked.EDGES:
             _, boxes, _ = tucked.render([row], [], None, 200, side=side, provider='hermes')
             lamps = [box for box in boxes if box[0].startswith('provider:')]
-            self.assertEqual([b[0] for b in lamps], ['provider:claude', 'provider:codex', 'provider:hermes'])
+            self.assertEqual([b[0] for b in lamps], ['provider:claude', 'provider:codex', 'provider:hermes',
+                                                     'provider:deepseek'])
             for index, box in enumerate(lamps):
                 _, x0, y0, x1, y1, _ = box
                 self.assertLess(x0, x1)

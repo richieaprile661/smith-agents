@@ -622,9 +622,10 @@ def format_tokens(count):
 
 
 def _encode_path(path):
-    """Claude Code names a project dir after its path with every separator and
-    the drive colon turned into a dash: C:\\Users\\me -> C--Users-me."""
-    return path.replace(":", "-").replace("\\", "-").replace("/", "-")
+    """Claude Code names a project dir after its path with everything but
+    letters, digits, and dashes turned into a dash: C:\\Users\\me -> C--Users-me,
+    /Users/me/my_work/.claude -> -Users-me-my-work--claude."""
+    return re.sub(r"[^A-Za-z0-9-]", "-", path)
 
 
 _ENCODED_HOME = _encode_path(HOME)
@@ -644,26 +645,47 @@ def pretty_project(name):
     return name.strip("-") or name
 
 
+# Providers whose sessions live inside a host this widget does not own: their
+# own app ends them, and their readings come from their own parser.
+HOSTED_PROVIDERS = ("codex", "hermes", "deepseek")
+# Entrypoints of desktop apps that keep every session in one window and can
+# open one by link.
+LINKED_DESKTOP_APPS = ("claude-desktop", "codex-desktop")
+# Every provider with a lamp in the header, in lamp order.
+USAGE_PROVIDERS = ("claude", "codex", "hermes", "deepseek")
+# Providers whose usage is saved session totals rather than an account's limits.
+SAVED_USAGE_PROVIDERS = ("hermes", "deepseek")
+
+
+def project_root(cwd):
+    """A Claude worktree belongs to the project that holds it: the session in
+    shop/.claude/worktrees/fix-1b2c is working on shop."""
+    return re.sub(r"[\\/]\.claude[\\/]worktrees[\\/][^\\/]+[\\/]*$", "", cwd or "")
+
+
 def project_title(cwd, fallback="Claude session"):
     """Display the actual folder name, without changing legitimate suffixes."""
-    path = (cwd or "").replace("\\", "/").rstrip("/")
+    path = project_root(cwd).replace("\\", "/").rstrip("/")
     return path.rsplit("/", 1)[-1] if path else (cwd or fallback)
 
 
 def label_shared_sessions(agents):
-    """Keep provider session names secondary, only for shared live projects."""
+    """Keep provider session names secondary, only for shared live projects.
+
+    Worktrees of one project share it. A Claude desktop session always shows
+    its name: the app lists sessions by title, not by folder."""
     groups = {}
     for agent in agents:
         agent.pop("session_label", None)
         if agent.get("sub") or agent.get("state") == "closed" or not agent.get("cwd"):
             continue
-        key = os.path.normcase(os.path.normpath(agent["cwd"]))
+        key = os.path.normcase(os.path.normpath(project_root(agent["cwd"])))
         groups.setdefault(key, []).append(agent)
     for group in groups.values():
-        if len(group) > 1:
-            for agent in group:
-                if agent.get("session_name"):
-                    agent["session_label"] = agent["session_name"]
+        for agent in group:
+            if agent.get("session_name") and (
+                    len(group) > 1 or agent.get("entrypoint") == "claude-desktop"):
+                agent["session_label"] = agent["session_name"]
     return agents
 
 
@@ -922,11 +944,15 @@ def _list_claude_agents(idle_after=AGENT_IDLE_S):
         except OSError:
             idle = None
 
+        # Newer Claude Code records the session's own status. It is exact where
+        # the transcript is a guess: an interrupted turn never writes end_turn,
+        # and a new turn has no reply yet to replace the last one's end_turn.
+        status = data.get("status")
         if not _pid_alive(pid, started):
             state = "closed"
-        elif reason == "end_turn":
+        elif status == "idle" or (reason == "end_turn" and status != "busy"):
             state = "done"
-        elif idle is not None and idle > idle_after:
+        elif status == "waiting" or (idle is not None and idle > idle_after):
             state = "needs"
         else:
             state = "working"
@@ -940,6 +966,8 @@ def _list_claude_agents(idle_after=AGENT_IDLE_S):
             "session_name": data.get("name"),
             "cwd": cwd,
             "entrypoint": data.get("entrypoint"),
+            # The Claude desktop app's own id for the session, for Go to session.
+            "host_session": data.get("hostSessionId"),
             "state": state,
             "since": (data.get("startedAt") or 0) / 1000.0,
             "idle": idle,
@@ -994,12 +1022,13 @@ def list_agents(idle_after=AGENT_IDLE_S):
 
 
 def _list_agents(idle_after=AGENT_IDLE_S):
-    from . import codex_sessions, hermes_sessions
+    from . import codex_sessions, deepseek_sessions, hermes_sessions
     from .activity import visible_helpers
     agents = _list_claude_agents(idle_after)
     for agent in agents:
         agent["provider"] = "claude"
-    for name, scanner in (("Codex", codex_sessions), ("Hermes", hermes_sessions)):
+    for name, scanner in (("Codex", codex_sessions), ("Hermes", hermes_sessions),
+                          ("DeepSeek", deepseek_sessions)):
         try:
             found = scanner.list_agents()
             starts = {}
@@ -1215,11 +1244,14 @@ def agent_model_source(agent, include_provider=True):
     if match:
         model = match[1].title() + " " + match[2].replace("-", ".")
     source = "Subagent" if agent.get("sub") else {
-        "claude-vscode": "VS Code", "cli": "Terminal", "codex-cli": "Terminal",
-        "codex-vscode": "VS Code", "hermes-cli": "Terminal",
-        "hermes-tui": "Terminal", "hermes-desktop": "Desktop"}.get(
+        "claude-vscode": "VS Code", "claude-desktop": "Desktop",
+        "cli": "Terminal", "codex-cli": "Terminal",
+        "codex-vscode": "VS Code", "codex-desktop": "Desktop", "hermes-cli": "Terminal",
+        "hermes-tui": "Terminal", "hermes-desktop": "Desktop",
+        "deepseek-desktop": "Desktop"}.get(
             agent.get("entrypoint"), "Hermes" if agent.get("provider") == "hermes" else "Claude Code")
-    provider = {"codex": "Codex · ", "claude": "Claude · ", "hermes": "Hermes · "}.get(agent.get("provider"), "")
+    provider = {"codex": "Codex · ", "claude": "Claude · ", "hermes": "Hermes · ",
+                "deepseek": "DeepSeek · "}.get(agent.get("provider"), "")
     return (provider if include_provider else "") + model + " · " + source
 
 
@@ -1330,7 +1362,7 @@ def agent_tail(agent, limit=7, records=None):
 
 def terminate_agent(agent):
     """Resolve the selected session again before stopping its own process."""
-    if agent.get("can_terminate") is False or agent.get("provider") in ("codex", "hermes"):
+    if agent.get("can_terminate") is False or agent.get("provider") in HOSTED_PROVIDERS:
         return False
     if agent.get("sub") or not agent.get("id") or not agent.get("started_at"):
         return False
@@ -1937,7 +1969,7 @@ def decorate_agents(agents):
     row. Rows repaint eight times a second; tailing a 15MB transcript at that
     rate is what made the whole desktop crawl."""
     for agent in agents:
-        if agent.get("provider") in ("codex", "hermes"):
+        if agent.get("provider") in HOSTED_PROVIDERS:
             agent["branch"] = git_branch(agent.get("cwd", ""))
             continue  # These readings already came from their provider parser.
         path = agent.get("transcript") or _agent_transcript(agent.get("cwd", ""), agent.get("id", ""))
@@ -2366,7 +2398,7 @@ def smith_header_icon(width, height, ink):
 
 
 def provider_accent(provider):
-    return _rgb({'codex': '648cfb', 'hermes': '8d8fff'}.get(provider, 'dc6f4d'))
+    return _rgb({'codex': '648cfb', 'hermes': '8d8fff', 'deepseek': '4d6bfe'}.get(provider, 'dc6f4d'))
 
 
 def draw_signal_field(pen, metric, provider, left, top, cell=2, gap=1, columns=10):
@@ -2381,7 +2413,7 @@ def draw_signal_field(pen, metric, provider, left, top, cell=2, gap=1, columns=1
 
 
 def header_usage_metrics(metrics, provider):
-    if provider == 'hermes':
+    if provider in SAVED_USAGE_PROVIDERS:
         return [None, None]
     if provider == 'codex':
         account = [m for m in metrics if str(m.get('key', '')).startswith('codex:codex:')]
@@ -2390,7 +2422,7 @@ def header_usage_metrics(metrics, provider):
 
 
 def render_header_signal(pen, metrics, provider, stale=False, usage_data=None):
-    if provider == 'hermes':
+    if provider in SAVED_USAGE_PROVIDERS:
         from .hermes_usage_ui import header
         header(pen, usage_data, stale)
         return
@@ -2499,7 +2531,7 @@ USAGE_GAP = px(7)
 
 
 def usage_height(metrics, stats=None):
-    if (stats or {}).get('provider') == 'hermes':
+    if (stats or {}).get('provider') in SAVED_USAGE_PROVIDERS:
         from .hermes_usage_ui import panel_height
         return panel_height(stats)
     rows = max(1, len(metrics))
@@ -2516,7 +2548,7 @@ def codex_usage_reset_text(reset, wide=True):
 def render_usage(pen, metrics, spend, stats, y):
     """Session / Week / Opus: a 9px key, a 4px track, the percentage in mono
     and its reset. Fill and figure recolour at the handoff's thresholds."""
-    if stats.get('provider') == 'hermes':
+    if stats.get('provider') in SAVED_USAGE_PROVIDERS:
         from .hermes_usage_ui import panel
         return panel(pen, stats, y)
     rule(pen, y, _ink(13))
@@ -2623,7 +2655,7 @@ def render_stats(pen, stats, y):
     """A 3x2 grid of mono values over their keys, then a fortnight of turns as
     a sparkline with the peak bar in full ink."""
     rule(pen, y, _ink(13))
-    if stats.get('provider') == 'hermes':
+    if stats.get('provider') in SAVED_USAGE_PROVIDERS:
         from .hermes_usage_ui import panel
         return panel(pen, stats, y, stats_only=True)
     val_font = MONO("bold", 14)
@@ -2802,28 +2834,31 @@ def agent_row_height(agent, open_=False):
 
 
 def provider_name(agent):
-    return {"codex": "Codex", "hermes": "Hermes"}.get(agent.get("provider"), "Claude")
+    return {"codex": "Codex", "hermes": "Hermes", "deepseek": "DeepSeek"}.get(
+        agent.get("provider"), "Claude")
 
 
 @lru_cache(maxsize=24)
 def _provider_logo(provider, size):
-    if provider not in ("claude", "codex", "hermes"):
+    if provider not in ("claude", "codex", "hermes", "deepseek"):
         return None
     try:
         with Image.open(os.path.join(SCRIPT_DIR, "assets", "providers", provider + ".png")) as source:
-            if provider == 'hermes':
-                # The supplied portrait is black ink. Use its transparent mask
-                # in a light tint so it remains readable on the dark widget.
+            if provider in ('hermes', 'deepseek'):
+                # The supplied portrait is black ink, and the whale is one flat
+                # colour. Use the transparent mask in a light tint - the whale
+                # in white - so it remains readable on the dark widget.
                 alpha = source.convert('RGBA').getchannel('A')
                 bounds = alpha.point(lambda a: 255 if a >= 128 else 0).getbbox()
                 if not bounds:
                     return None
                 alpha = alpha.crop(bounds)
-                mark_size = round(size * .78)
+                mark_size = round(size * (.78 if provider == 'hermes' else .94))
                 scale = mark_size / max(alpha.size)
                 dimensions = (max(1, round(alpha.width * scale)), max(1, round(alpha.height * scale)))
                 alpha = alpha.resize(dimensions, Image.Resampling.LANCZOS)
-                mark = Image.new('RGBA', alpha.size, _tok('fg') if INVERT else _rgb('dce7ff'))
+                mark = Image.new('RGBA', alpha.size, _tok('fg') if INVERT else
+                                 _rgb('dce7ff' if provider == 'hermes' else 'ffffff'))
                 mark.putalpha(alpha)
                 logo = Image.new('RGBA', (size, size))
                 logo.alpha_composite(mark, ((size-mark.width)//2, (size-mark.height)//2))
@@ -2860,10 +2895,11 @@ def provider_lamp(provider, active, mark_size=18):
     if active:
         mask = Image.new("L", lamp.size)
         mask.paste(logo.getchannel("A"), (inset, inset))
-        colour = _rgb({"claude": "ef956c", "codex": "8094ff", "hermes": "8d8fff"}.get(provider, "8094ff"))
+        colour = _rgb({"claude": "ef956c", "codex": "8094ff", "hermes": "8d8fff",
+                       "deepseek": "4d6bfe"}.get(provider, "8094ff"))
         halo = Image.new("RGBA", lamp.size, colour)
         glow = mask.filter(ImageFilter.GaussianBlur(px(3)))
-        if provider in ("codex", "hermes"):
+        if provider in ("codex", "hermes", "deepseek"):
             # Keep the badge itself crisp; only the outer edge glows.
             silhouette = mask.point(lambda alpha: 255 if alpha > 16 else 0)
             ImageDraw.floodfill(silhouette, (0, 0), 128)
@@ -2883,7 +2919,7 @@ def provider_lamp(provider, active, mark_size=18):
 def render_provider_switch(chip, pen, provider):
     boxes = []
     top, size = px(3), px(34)
-    for index, name in enumerate(("claude", "codex", "hermes")):
+    for index, name in enumerate(USAGE_PROVIDERS):
         x = CONSOLE_W - px(94) + (index % 2) * px(36)
         y = top + (index // 2) * px(36)
         chip.alpha_composite(provider_lamp(name, name == provider), (x, y))
@@ -2893,8 +2929,11 @@ def render_provider_switch(chip, pen, provider):
 
 def agent_window_action(agent):
     kind = 'hide' if agent.get('_window_open') else 'open'
-    target = ('window' if agent.get('provider') in ('codex', 'hermes') else
-              'chat' if agent.get('entrypoint') == 'claude-vscode' else 'terminal')
+    entrypoint = agent.get('entrypoint')
+    target = (# Opening goes to one session; hiding minimizes the app's window.
+              ('window' if kind == 'hide' else 'session') if entrypoint in LINKED_DESKTOP_APPS else
+              'window' if agent.get('provider') in HOSTED_PROVIDERS else
+              'chat' if entrypoint == 'claude-vscode' else 'terminal')
     if agent.get('sub'):
         target = 'parent window'
     return kind, ('Hide ' if kind == 'hide' else 'Open ') + target
@@ -3110,7 +3149,7 @@ def render_drawer(pen, agent, y, now=None):
         # details. Shared-host providers still open their own session controls;
         # they must never expose process termination here.
         if not agent.get("sub") and agent.get("state") != "closed":
-            external = (agent.get("provider") in ("codex", "hermes")
+            external = (agent.get("provider") in HOSTED_PROVIDERS
                         or agent.get("can_terminate") is False)
             kind = "open" if external else "kill"
             text = "Manage in " + provider_name(agent) if external else "End session…"
@@ -3211,12 +3250,14 @@ def agents_height(agents, open_id):
 
 def account_summary(metrics, provider=None, notice=None, data_notice=None, usage_data=None):
     """Keep the account, window, and freshness explicit in the compact strip."""
-    if provider == 'hermes':
+    if provider in SAVED_USAGE_PROVIDERS:
         from .hermes_usage_ui import tokens
         from .hermes_usage import cost
         session = (usage_data or {}).get('session', {})
-        return ('Last reading · ' if data_notice and session else '') + '%s tokens · %s est. · Hermes' % (
-            tokens(session.get('tokens')), cost(session.get('estimated_cost_usd')))
+        # DeepSeek's logs carry no price, so its line has no estimate to show.
+        estimate = ' · %s est.' % cost(session.get('estimated_cost_usd')) if provider == 'hermes' else ''
+        return ('Last reading · ' if data_notice and session else '') + '%s tokens%s · %s' % (
+            tokens(session.get('tokens')), estimate, provider_name({'provider': provider}))
     weekly = next((m for m in metrics if m.get("key") == "weekly" or
                    (str(m.get("key", "")).startswith("codex:codex:") and m.get("label") == "1w")), None)
     metric = weekly or (metrics[0] if metrics else None)

@@ -16,6 +16,14 @@ scales these PNGs to a 16-logical-pixel corner badge, independently of figure si
   16px badge / 18px provider-lamp canvas used by the other logos. The top selector
   dims when inactive; session badges stay bright. Each mark is resized once to
   its display size; the corner badge does not rescale an already rendered lamp.
+- `deepseek.png`: the whale mark cut out of the DeepSeek Harness desktop app's own
+  icon (`DeepSeek Harness.app/Contents/Resources/icon.png`, version 0.2.2-rc.1) on
+  2026-11-26, without an image model. Ink coverage is each pixel's distance below
+  the white tile, limited to the tile's inner 76% so its edge and shadow drop out.
+  The mark is cropped to its ink and centred on a square transparent canvas with
+  about 4% padding. The app's file is unchanged. Runtime rendering uses only the
+  mark's transparent mask, in white on dark themes and dark ink on E-ink; the
+  selected lamp's halo and the usage fields carry DeepSeek blue `#4D6BFE`.
 
 Final prompt set:
 

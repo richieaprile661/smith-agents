@@ -12,6 +12,7 @@ import time
 import traceback
 from datetime import datetime
 from . import core, allowance_log, artwork, figure_actions, portraits, tucked, codex_usage, hermes_usage, hermes_account
+from . import deepseek_account, deepseek_usage
 from .runtime import backend
 from .permissions import answer_permission
 from .core import (
@@ -83,6 +84,13 @@ class SmithAgentsWidget:
         self.hermes_spend = hermes_account.Spend()
         self.hermes_session_id = None
         self.hermes_model_index = 0
+        self.deepseek_wake = threading.Event()
+        self.deepseek_data = {'sessions': [], 'error': 'Loading DeepSeek usage…'}
+        self.deepseek_session_id = None
+        self.deepseek_model_index = 0
+        # The DeepSeek balance, and real spend measured from it.
+        self.deepseek_account = {'reading': None, 'spend': None, 'updated': None, 'error': None}
+        self.deepseek_spend = hermes_account.Spend()
         self._drag = None
         self._tray_cache = None
         self._tick_job = None
@@ -157,6 +165,8 @@ class SmithAgentsWidget:
                     "currentStreakDays": 3, "longestStreakDays": 8}, "dailyUsageBuckets": []}),
                 "usage_error": None, "stats_error": None}
             self.hermes_data = hermes_usage.demo_data()
+            self.deepseek_data = deepseek_usage.demo_data()
+            self.deepseek_account = deepseek_account.demo_account()
             self.hermes_account = {'reading': {'left': 15.75, 'plan': 'Plus', 'plan_spent': 22.0,
                 'plan_total': 22.0, 'plan_left': 0.0, 'topup_left': 15.75, 'status': 'healthy',
                 'renews': 'Oct 17, 2026', 'renews_at': None},
@@ -169,6 +179,8 @@ class SmithAgentsWidget:
             threading.Thread(target=self._codex_poll_loop, daemon=True).start()
             threading.Thread(target=self._hermes_poll_loop, daemon=True).start()
             threading.Thread(target=self._hermes_account_loop, daemon=True).start()
+            threading.Thread(target=self._deepseek_poll_loop, daemon=True).start()
+            threading.Thread(target=self._deepseek_account_loop, daemon=True).start()
         platform.start_tray(self.tray)
         self.root.after(120, self._tick)
         if not demo and hasattr(platform, "offer_accessibility_setup"):
@@ -213,7 +225,7 @@ class SmithAgentsWidget:
             config["bar_mode"] = "worst"
         if config.get("reading_view") not in core.READING_VIEWS:
             config["reading_view"] = "used"
-        if config.get("usage_provider") not in ("claude", "codex", "hermes"):
+        if config.get("usage_provider") not in core.USAGE_PROVIDERS:
             config["usage_provider"] = "claude"
         config["zoom"] = ZOOM      # already clamped, and baked into the sizes
         config["theme"] = THEME_NAME    # already validated, baked into the tokens
@@ -323,6 +335,8 @@ class SmithAgentsWidget:
         self.codex_wake.set()
         if hasattr(self, "hermes_wake"):
             self.hermes_wake.set()
+        if hasattr(self, "deepseek_wake"):
+            self.deepseek_wake.set()
 
     def _codex_poll_loop(self):
         from .codex_hooks import atomic_json
@@ -386,29 +400,63 @@ class SmithAgentsWidget:
             if self.stopping.wait(120):
                 break
 
+    def _deepseek_poll_loop(self):
+        """Saved totals come from local logs; unchanged logs are not read again."""
+        while not self.stopping.is_set():
+            try:
+                result = deepseek_usage.fetch()
+                with self.lock:
+                    self.deepseek_data = result
+            except Exception as exc:
+                message = str(exc) if isinstance(exc, deepseek_usage.Unavailable) else 'DeepSeek usage unavailable'
+                with self.lock:
+                    self.deepseek_data['error'] = message
+            self.deepseek_wake.wait(30)
+            self.deepseek_wake.clear()
+
+    def _deepseek_account_loop(self):
+        """Read the DeepSeek balance every two minutes while its app is signed in here."""
+        if deepseek_account.api_key() is None:
+            return
+        while not self.stopping.is_set():
+            try:
+                reading = deepseek_account.read()
+                spend = self.deepseek_spend.add(reading['left'])
+                with self.lock:
+                    self.deepseek_account = {'reading': reading, 'spend': spend,
+                                             'updated': time.time(), 'error': None}
+            except Exception as exc:
+                message = str(exc) if isinstance(exc, deepseek_account.Unavailable) else 'DeepSeek balance unavailable'
+                with self.lock:
+                    self.deepseek_account = dict(self.deepseek_account, error=message)
+            if self.stopping.wait(120):
+                break
+
     def _navigate_hermes(self, kind, direction):
+        """Page the saved sessions of whichever saved-usage provider is selected."""
         data = self._snapshot()[6]
+        owner = data.get('provider') if data.get('provider') in core.SAVED_USAGE_PROVIDERS else 'hermes'
         sessions = data.get('sessions', [])
         if kind == 'hermes-session' and sessions:
             index = (data['session_index'] + direction) % len(sessions)
-            self.hermes_session_id = sessions[index]['id']
-            self.hermes_model_index = 0
+            setattr(self, owner + '_session_id', sessions[index]['id'])
+            setattr(self, owner + '_model_index', 0)
         elif kind == 'hermes-model':
             models = data.get('session', {}).get('models', [])
             if models:
-                self.hermes_model_index = (data['model_index'] + direction) % len(models)
+                setattr(self, owner + '_model_index', (data['model_index'] + direction) % len(models))
 
     def set_usage_provider(self, provider):
-        if provider not in ("claude", "codex", "hermes"):
+        if provider not in core.USAGE_PROVIDERS:
             return
         self.config["usage_provider"] = provider
         self.config["bar_mode"] = "worst"
         self._save_config()
 
     def _data_notice(self):
-        if self.config.get("usage_provider") == "hermes":
+        if self.config.get("usage_provider") in core.SAVED_USAGE_PROVIDERS:
             with self.lock:
-                data = getattr(self, 'hermes_data', {})
+                data = getattr(self, self.config["usage_provider"] + '_data', {})
                 error = data.get('error')
                 return ('Last reading · ' if data.get('updated') else '') + error if error else None
         if self.config.get("usage_provider") != "codex":
@@ -423,15 +471,17 @@ class SmithAgentsWidget:
     # -- rendering ---------------------------------------------------------
     def _snapshot(self):
         with self.lock:
-            if self.config.get("usage_provider") == "hermes":
-                data = hermes_usage.select(getattr(self, 'hermes_data', {}),
-                    getattr(self, 'hermes_session_id', None),
+            owner = self.config.get("usage_provider")
+            if owner in core.SAVED_USAGE_PROVIDERS:
+                source = hermes_usage if owner == 'hermes' else deepseek_usage
+                data = source.select(getattr(self, owner + '_data', {}),
+                    getattr(self, owner + '_session_id', None),
                     [a.get('session_id') for a in getattr(self, 'agents', [])
-                     if a.get('provider') == 'hermes' and a.get('state') != 'closed'],
-                    getattr(self, 'hermes_model_index', 0))
-                data['account'] = dict(getattr(self, 'hermes_account', {}))
+                     if a.get('provider') == owner and a.get('state') != 'closed'],
+                    getattr(self, owner + '_model_index', 0))
+                data['account'] = dict(getattr(self, owner + '_account', {}))
                 error, stamp = data.get('error'), data.get('updated')
-                return ([], data, None, [], ('hermes', error) if error else None,
+                return ([], data, None, [], (owner, error) if error else None,
                         datetime.fromtimestamp(stamp) if stamp else None, data)
             if self.config.get("usage_provider") == "codex":
                 data = self.codex_data
@@ -504,6 +554,7 @@ class SmithAgentsWidget:
                 notice = (kind, {"auth": "Sign in to Claude",
                                  "codex": error[1] if error else "Codex usage unavailable",
                                  "hermes": "Hermes usage unavailable",
+                                 "deepseek": "DeepSeek usage unavailable",
                                  "ratelimit": "Rate limited, retrying",
                                  "cached": "No reading yet"}.get(
                                      kind, "Usage offline"))
@@ -710,6 +761,12 @@ class SmithAgentsWidget:
             count = session.get('tokens')
             lines.append('Hermes tokens: ' + (core.compact_tokens(count) if count is not None else '—'))
             lines.append('Estimated cost: ' + hermes_usage.cost(session.get('estimated_cost_usd')))
+        elif spend and spend.get('provider') == 'deepseek':
+            count = spend.get('session', {}).get('tokens')
+            lines.append('DeepSeek tokens: ' + (core.compact_tokens(count) if count is not None else '—'))
+            left = (spend.get('account') or {}).get('reading')
+            if left:
+                lines.append('DeepSeek balance: ' + deepseek_account.money(left.get('left'), left.get('currency')))
         elif spend and spend.get('provider') == 'codex':
             lines.append("%-14s %s%s" % ("Credits", spend["text"], " · in use" if spend.get("on_credits") else ""))
         elif spend:
@@ -923,6 +980,8 @@ class SmithAgentsWidget:
         self.codex_wake.set()
         if hasattr(self, "hermes_wake"):
             self.hermes_wake.set()
+        if hasattr(self, "deepseek_wake"):
+            self.deepseek_wake.set()
         try:
             self.tray.stop()
         except Exception:
@@ -1115,7 +1174,7 @@ class SmithAgentsWidget:
                 self.set_tuck(False)
             elif kind == 'peek-expand':
                 self.set_tuck(False)
-            elif kind in ('provider:claude', 'provider:codex', 'provider:hermes'):
+            elif kind.startswith('provider:') and kind.partition(':')[2] in core.USAGE_PROVIDERS:
                 provider = kind.partition(':')[2]
                 self._peek_usage_open = not (getattr(self, '_peek_usage_open', False)
                                              and self.config['usage_provider'] == provider)

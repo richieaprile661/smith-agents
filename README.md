@@ -271,7 +271,9 @@ For the Codex setups that have been tested, see
   aren't uploaded anywhere.
 - **No copies of your credentials.** Claude's existing login is sent only to
   Anthropic's usage endpoint. Codex handles its own sign-in through its local App
-  Server. Smith Agents doesn't save credentials in its settings, logs, or caches.
+  Server. Where DeepSeek Harness is signed in, the API key it keeps is sent only to
+  DeepSeek's balance endpoint, and only the balance figures are kept. Smith Agents
+  doesn't save credentials in its settings, logs, or caches.
 - **No model calls to read usage.** Checking your limits doesn't start a
   conversation or run an agent task.
 - **A local dashboard.** The dashboard is served only to this computer, on a

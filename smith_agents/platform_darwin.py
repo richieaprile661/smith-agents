@@ -143,6 +143,54 @@ def vscode_session_url(agent, window_id=None):
     return "vscode://anthropic.claude-code/open?" + urlencode({"session": session, "windowId": window_id})
 
 
+def claude_desktop_session_url(agent):
+    """The Claude desktop app's own link to one of its local sessions."""
+    import re
+    session = agent.get("host_session")
+    if not isinstance(session, str) or not re.fullmatch(
+            r"local_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", session):
+        return None  # Never build a link from anything but a plain session id.
+    return "claude://claude.ai/epitaxy/" + session
+
+
+def codex_desktop_thread_url(agent):
+    """The ChatGPT app's own link to one of its Codex threads."""
+    from uuid import UUID
+    thread = agent.get("session_id")
+    try:
+        if not isinstance(thread, str) or str(UUID(thread)) != thread.lower():
+            return None
+    except ValueError:
+        return None
+    return "codex://threads/" + thread
+
+
+def desktop_app_url(agent):
+    """A link that shows this session in its own desktop app, where one exists."""
+    entrypoint = agent.get("entrypoint")
+    if entrypoint == "claude-desktop":
+        return claude_desktop_session_url(agent), 'Claude'
+    if entrypoint == "codex-desktop":
+        return codex_desktop_thread_url(agent), 'ChatGPT'
+    if agent.get("provider") == "deepseek":
+        # DeepSeek Harness has no link to one session; this shows its window.
+        return "dsh://open", 'DeepSeek'
+    return None, None
+
+
+def _open_session_url(url, activates, failure):
+    import AppKit
+    import Foundation
+    configuration = AppKit.NSWorkspaceOpenConfiguration.configuration()
+    configuration.setActivates_(activates)
+
+    def completed(application, error):
+        if error is not None:
+            show_error(failure)
+    AppKit.NSWorkspace.sharedWorkspace().openURL_configuration_completionHandler_(
+        Foundation.NSURL.URLWithString_(url), configuration, completed)
+
+
 def vscode_window_id(ancestors, logs_root=None):
     """Match the live extension-host PID and start time to VS Code's window log."""
     from datetime import datetime
@@ -207,15 +255,14 @@ def _match_agent_window(agent, host):
 
 
 def raise_agent_window(agent):
-    """Reveal one conversation/window; never activate the entire application."""
-    import AppKit
-    import Foundation
+    """Reveal one conversation/window. Only a Claude desktop session activates
+    its application, which keeps every session in a single window."""
     import psutil
     if not pid_alive(agent.get("pid"), agent.get("started_at")):
         return False
     try:
         process = psutil.Process(agent["pid"])
-        if agent.get("provider") in ("codex", "hermes") and process.create_time() != agent.get("process_created"):
+        if agent.get("provider") in ("codex", "hermes", "deepseek") and process.create_time() != agent.get("process_created"):
             return False
         ancestors = process.parents()
         host = _agent_host_application(process)
@@ -224,18 +271,21 @@ def raise_agent_window(agent):
             host = target[0]
         window = target[1] if target else _match_agent_window(agent, host)
         opened = False
-        if agent.get("entrypoint") == "claude-vscode":
+        desktop_url, app_name = desktop_app_url(agent)
+        if desktop_url:
+            # A desktop app keeps every session in one window, whose title never
+            # names one. Only the app's own link selects a session, and it has to
+            # bring the app forward to show it; that needs no Accessibility.
+            _open_session_url(desktop_url, True, 'Could not open this session. Open it in the '
+                              + app_name + ' app.')
+            opened = True
+        elif agent.get("entrypoint") == "claude-vscode":
             url = vscode_session_url(agent, vscode_window_id(ancestors))
             if url:
-                configuration = AppKit.NSWorkspaceOpenConfiguration.configuration()
-                configuration.setActivates_(False)
                 # Deliver the scoped link without Launch Services bringing
                 # every VS Code window forward as part of app activation.
-                def completed(application, error):
-                    if error is not None:
-                        show_error('Could not open this VS Code session. Open its window manually.')
-                AppKit.NSWorkspace.sharedWorkspace().openURL_configuration_completionHandler_(
-                    Foundation.NSURL.URLWithString_(url), configuration, completed)
+                _open_session_url(url, False,
+                                  'Could not open this VS Code session. Open its window manually.')
                 opened = True
                 if host is not None and window is None and not macos_windows.trusted():
                     macos_windows.request_access()
@@ -286,7 +336,7 @@ def agent_window_state(agent):
     if target is None:
         try:
             process = psutil.Process(agent['pid'])
-            if agent.get('provider') in ('codex', 'hermes') and process.create_time() != agent.get('process_created'):
+            if agent.get('provider') in ('codex', 'hermes', 'deepseek') and process.create_time() != agent.get('process_created'):
                 return 'unknown'
             host = _agent_host_application(process)
             window = _match_agent_window(agent, host)

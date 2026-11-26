@@ -105,7 +105,7 @@ def _usage_drawer(metrics, front, mode, provider, notice, width=RAIL_W, horizont
     for sign in (-1, 1):
         pen.line((x-c.px(3), y-sign*c.px(3), x+c.px(3), y+sign*c.px(3)),
                  fill=c._ink(62), width=max(1, c.px(1)))
-    if provider == 'hermes':
+    if provider in c.SAVED_USAGE_PROVIDERS:
         from .hermes_usage_ui import drawer
         controls = drawer(pen, usage_data, width, horizontal, notice)
         return card, [('peek-usage-close', width-c.px(24), 0, width, c.px(24)-1, None)] + controls
@@ -185,6 +185,16 @@ def _name_lines(agent, width=None):
     return lines
 
 
+def _lamp_fit(count, span, gap):
+    """The largest marks, at the widest spacing up to `gap`, that fit `count`
+    lamps into `span` points. Three fit at full size on every edge."""
+    for spacing in range(gap, -1, -2):
+        for mark in (18, 16, 14, 12):
+            if count * mark + (count - 1) * spacing <= span:
+                return mark, spacing
+    return 12, 0
+
+
 def _brand(chip, side, provider):
     """Only the Smith icon and bare provider lamps are shown while tucked."""
     horizontal = side in ('top', 'bottom')
@@ -193,26 +203,30 @@ def _brand(chip, side, provider):
     # Beside the lamps, Matrix's lettering must stay clear of them.
     icon = c.smith_header_icon(c.px(44) if c.PORTRAITS and top_edge else c.px(64),
                                c.px(32), c._tok('fg'))
+    names = c.USAGE_PROVIDERS
+    # Lamps run along the strip's short side; the top strip packs them edge to
+    # edge beside the lettering. A lamp's canvas carries 8pt of halo all round.
+    span = (chip.height if horizontal else RAIL_W) - c.px(4 if horizontal else 8)
+    mark, spacing = _lamp_fit(len(names), span / c.px(1), 0 if top_edge else 6)
+    step = c.px(mark + spacing)
+    block = c.px(len(names) * mark + (len(names) - 1) * spacing)
+    start = ((chip.height if horizontal else RAIL_W) - block)//2 - c.px(8)
     if horizontal:
         icon_x = 0 if top_edge else (TILE_W-icon.width)//2
         chip.alpha_composite(icon, (icon_x, (chip.height-icon.height)//2))
-        if top_edge:
-            lamp_y = (chip.height-c.px(70))//2
-            lamp_x = TOP_BRAND_W-c.px(42)
-            positions = tuple((lamp_x, lamp_y+c.px(18)*i) for i in range(3))
-        else:
-            dy = (chip.height-c.px(82))//2
-            positions = tuple((TILE_W, dy+c.px(24)*i) for i in range(3))
+        lamp_x = TOP_BRAND_W-c.px(42)+c.px(18-mark)//2 if top_edge else TILE_W+c.px(18-mark)//2
+        positions = tuple((lamp_x, start+step*i) for i in range(len(names)))
+        if not top_edge:
             boxes.append(('peek-expand', 0, 0, TILE_W, chip.height, None))
     else:
         chip.alpha_composite(icon, ((RAIL_W-icon.width)//2, c.px(28)))
-        lamp_x = (RAIL_W-c.px(82))//2
-        positions = tuple((lamp_x+c.px(24)*i, -LAMP_RISE) for i in range(3))
+        positions = tuple((start+step*i, -LAMP_RISE) for i in range(len(names)))
         boxes.append(('peek-expand', 0, c.px(28), RAIL_W, SIDE_HEAD_H, None))
-    for index, (name, (x, y)) in enumerate(zip(('claude', 'codex', 'hermes'), positions)):
-        lamp = c.provider_lamp(name, name == (provider or 'claude'))
+    for index, (name, (x, y)) in enumerate(zip(names, positions)):
+        lamp = c.provider_lamp(name, name == (provider or 'claude'), mark)
         chip.alpha_composite(lamp, (x, y))
-        x0, x1, y0, y1 = x, x+lamp.width, max(0, y), y+lamp.height
+        # A halo may run off the strip; its click target never does.
+        x0, x1, y0, y1 = max(0, x), min(x+lamp.width, chip.width), max(0, y), y+lamp.height
         if horizontal:
             # Glow canvases overlap; adjacent click targets never do.
             if index:

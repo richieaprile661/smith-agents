@@ -386,7 +386,9 @@ class Scanner:
             if child_event and child_event.get("parent") != parent:
                 child_event = None  # A path cannot override transcript identity.
             cwd = meta.get("cwd") if isinstance(meta.get("cwd"), str) else ""
-            entry = "codex-vscode" if source == "vscode" or meta.get("originator") == "codex_vscode" else "codex-cli"
+            # The ChatGPT app reports the extension's source; its originator tells them apart.
+            entry = ("codex-desktop" if meta.get("originator") == "Codex Desktop" else
+                     "codex-vscode" if source == "vscode" or meta.get("originator") == "codex_vscode" else "codex-cli")
             state = reader.state if caught_up else "needs"
             hook = hooks.get(path)
             if hook and hook.get("id") == session and hook.get("updated", 0) >= reader.state_at:
