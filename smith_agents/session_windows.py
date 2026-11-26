@@ -24,6 +24,43 @@ def window_agent(agent, agents):
     return agent
 
 
+def claude_desktop_session_url(agent):
+    """The Claude desktop app's own link to one of its local sessions."""
+    session = agent.get("host_session")
+    if not isinstance(session, str) or not re.fullmatch(
+            r"local_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", session):
+        return None  # Never build a link from anything but a plain session id.
+    return "claude://claude.ai/epitaxy/" + session
+
+
+def codex_desktop_thread_url(agent):
+    """The ChatGPT app's own link to one of its Codex threads."""
+    from uuid import UUID
+    thread = agent.get("session_id")
+    try:
+        if not isinstance(thread, str) or str(UUID(thread)) != thread.lower():
+            return None
+    except ValueError:
+        return None
+    return "codex://threads/" + thread
+
+
+def desktop_app_url(agent):
+    """(link, app name) for a session that lives in a desktop app's one window.
+
+    The window's title never names a session; only the app's own link shows
+    one. The name alone, with no link, still says whose window it is."""
+    entrypoint = agent.get("entrypoint")
+    if entrypoint == "claude-desktop":
+        return claude_desktop_session_url(agent), 'Claude'
+    if entrypoint == "codex-desktop":
+        return codex_desktop_thread_url(agent), 'ChatGPT'
+    if agent.get("provider") == "deepseek":
+        # DeepSeek Harness has no link to one session; this shows its window.
+        return "dsh://open", 'DeepSeek'
+    return None, None
+
+
 def title_matches_project(title, leaf):
     """Avoid matching project 'app' inside an unrelated project 'myapp'."""
     return bool(leaf and re.search(r'(?<![\w.-])' + re.escape(leaf) + r'(?![\w.-])',

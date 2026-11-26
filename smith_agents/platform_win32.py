@@ -8,7 +8,7 @@ import sys
 import sysconfig
 import time
 from PIL import Image, ImageChops
-from .session_windows import HOSTED_PROVIDERS, WindowTargets, title_matches_project
+from .session_windows import HOSTED_PROVIDERS, WindowTargets, desktop_app_url, title_matches_project
 from .branding import APP_NAME, COMMAND, LEGACY_COMMAND
 
 try:
@@ -269,50 +269,96 @@ def _window_owner(hwnd):
     return pid.value
 
 
-def _find_agent_window(agent):
-    """Resolve a host window without changing focus or visibility."""
+def _agent_pids(agent):
+    """The session's process and its ancestors, nearest first; None once the
+    process is gone or is no longer the one that was scanned."""
     if agent.get('sub') or agent.get('state') == 'closed' or not _pid_alive(agent.get('pid'), agent.get('started_at')):
         return None
-    user32 = ctypes.windll.user32
-    hwnd = _opened_agent_window(agent)
-    if hwnd is not None:
-        return hwnd
-    leaf = os.path.basename(agent.get("cwd", "").rstrip("\\/"))
-    if not leaf:
-        return None
-
-    user32 = ctypes.windll.user32
-    found = []
     import psutil
     try:
         process = psutil.Process(agent['pid'])
         if agent.get('provider') in HOSTED_PROVIDERS and process.create_time() != agent.get('process_created'):
             return None
-        allowed_owners = {p.pid for p in [process, *process.parents()]}
+        return [p.pid for p in [process, *process.parents()]]
     except psutil.Error:
         return None
 
+
+def _titled_windows(owners):
+    """Visible, titled top-level windows of these processes: [(hwnd, owner, title)]."""
+    user32 = ctypes.windll.user32
+    found = []
     proto = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
     def visit(hwnd, _param):
         if not user32.IsWindowVisible(hwnd):
             return True
-        if allowed_owners is not None and _window_owner(hwnd) not in allowed_owners:
+        owner = _window_owner(hwnd)
+        if owner not in owners:
             return True
         length = user32.GetWindowTextLengthW(hwnd)
         if not length:
             return True
         buf = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, buf, length + 1)
-        if title_matches_project(buf.value, leaf):
-            found.append(hwnd)
+        found.append((hwnd, owner, buf.value))
         return True
 
     user32.EnumWindows(proto(visit), None)
-    if len(found) != 1:
-        return None
+    return found
 
-    hwnd = found[0]
+
+def _app_window(pids):
+    """The only window of the desktop app a session runs in, or None.
+
+    The app is the nearest of the session's processes that has a window of its
+    own. The walk ends at the shell: the desktop and folder windows belong to
+    no session. Two windows are never guessed between."""
+    user32 = ctypes.windll.user32
+    user32.GetShellWindow.argtypes = []
+    user32.GetShellWindow.restype = wintypes.HWND
+    user32.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
+    user32.GetWindow.restype = wintypes.HWND
+    desktop = user32.GetShellWindow()
+    shell = _window_owner(desktop) if desktop else None
+    windows = {}
+    for hwnd, owner, _title in _titled_windows(set(pids)):
+        if not user32.GetWindow(ctypes.c_void_p(hwnd), 4):  # GW_OWNER: skip an app's dialogs.
+            windows.setdefault(owner, []).append(hwnd)
+    for pid in pids:
+        if pid == shell:
+            return None
+        if pid in windows:
+            return windows[pid][0] if len(windows[pid]) == 1 else None
+    return None
+
+
+def _find_agent_window(agent):
+    """Resolve a host window without changing focus or visibility."""
+    if agent.get('sub') or agent.get('state') == 'closed' or not _pid_alive(agent.get('pid'), agent.get('started_at')):
+        return None
+    hwnd = _opened_agent_window(agent)
+    if hwnd is not None:
+        return hwnd
+    in_desktop_app = desktop_app_url(agent)[1] is not None
+    leaf = os.path.basename(agent.get("cwd", "").rstrip("\\/"))
+    if not leaf and not in_desktop_app:
+        return None
+    pids = _agent_pids(agent)
+    if pids is None:
+        return None
+    if in_desktop_app:
+        # Its window's title never names a project, so there is nothing to match.
+        hwnd = _app_window(pids)
+        if hwnd is None:
+            return None
+    else:
+        found = [hwnd for hwnd, _owner, title in _titled_windows(set(pids))
+                 if title_matches_project(title, leaf)]
+        if len(found) != 1:
+            return None
+        hwnd = found[0]
+
     owner = _window_owner(hwnd)
     started = _proc_started(owner) if owner else None
     if started is not None:
@@ -323,16 +369,48 @@ def _find_agent_window(agent):
     return None
 
 
-def raise_agent_window(agent):
-    """Bring only the identified host window to the front."""
-    hwnd = _find_agent_window(agent)
-    if hwnd is None:
+def _link_handled(scheme):
+    """Whether an app has registered itself to open this kind of link.
+
+    Asked first because Windows answers an unclaimed link with its "choose an
+    app" window, which is no way to report a session that could not be opened."""
+    size = wintypes.DWORD(0)
+    try:
+        # ASSOCF_IS_PROTOCOL | ASSOCF_INIT_IGNOREUNKNOWN, ASSOCSTR_FRIENDLYAPPNAME.
+        # With no buffer the call only reports how long the app's name is.
+        result = ctypes.windll.shlwapi.AssocQueryStringW(0x1400, 4, scheme, None, None, ctypes.byref(size))
+    except (OSError, AttributeError, ctypes.ArgumentError):
         return False
-    user32 = ctypes.windll.user32
-    native = ctypes.c_void_p(hwnd)
-    if user32.IsIconic(native):
-        user32.ShowWindow(native, 9)
-    return bool(user32.SetForegroundWindow(native))
+    return result in (0, 1) and size.value > 0
+
+
+def _open_session_link(url):
+    if not _link_handled(url.split(':', 1)[0]):
+        return False
+    try:
+        os.startfile(url)
+    except OSError:
+        return False
+    return True
+
+
+def raise_agent_window(agent):
+    """Bring only the identified host window to the front. A desktop app keeps
+    every session in one window, so its own link then shows the session."""
+    hwnd = _find_agent_window(agent)
+    raised = False
+    if hwnd is not None:
+        user32 = ctypes.windll.user32
+        native = ctypes.c_void_p(hwnd)
+        if user32.IsIconic(native):
+            user32.ShowWindow(native, 9)
+        raised = bool(user32.SetForegroundWindow(native))
+    url = desktop_app_url(agent)[0]
+    if not url:
+        return raised
+    if hwnd is None and _agent_pids(agent) is None:
+        return False  # Not this session's process any more: open nothing for it.
+    return _open_session_link(url) or raised
 
 
 def _opened_agent_window(agent):

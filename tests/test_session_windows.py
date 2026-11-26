@@ -274,6 +274,121 @@ class SessionWindowTests(unittest.TestCase):
             user32.ShowWindow.assert_not_called()
             user32.SetForegroundWindow.assert_not_called()
 
+    def _desktop_windows(self, owners, shell=791):
+        user32 = Mock()
+        user32.IsWindowVisible.return_value = True
+        user32.GetWindowTextLengthW.return_value = 6
+        user32.GetWindowTextW.side_effect = lambda hwnd, buffer, length: setattr(buffer, 'value', 'Claude')
+        user32.GetWindow.return_value = 0
+        user32.GetShellWindow.return_value = shell
+        user32.EnumWindows.side_effect = lambda visit, param: [visit(hwnd, param) for hwnd in list(owners)]
+        return user32
+
+    def test_windows_desktop_session_uses_its_apps_only_window_whatever_the_title(self):
+        # A desktop app's window never names the project, so the title search
+        # cannot find it: the app is the nearest ancestor that has a window.
+        owners = {789: 456, 790: 999, 791: 1}
+        user32 = self._desktop_windows(owners)
+        process = Mock(pid=123)
+        process.parents.return_value = [Mock(pid=456), Mock(pid=1)]
+        row = {'id': 'one', 'pid': 123, 'started_at': 10, 'cwd': '/projects/widget',
+               'entrypoint': 'claude-desktop',
+               'host_session': 'local_0b1c2d3e-4f50-4a61-8b72-9c8d7e6f5a40'}
+        with patch.object(win, '_AGENT_WINDOWS', WindowTargets()) as targets, \
+             patch.object(win, '_pid_alive', return_value=True), \
+             patch.object(win, '_window_owner', side_effect=owners.get), \
+             patch.object(win, '_proc_started', return_value=20), \
+             patch('psutil.Process', return_value=process), \
+             patch.object(win.ctypes, 'WINFUNCTYPE', return_value=lambda callback: callback, create=True), \
+             patch.object(win.ctypes, 'windll', SimpleNamespace(user32=user32), create=True):
+            self.assertEqual(win._find_agent_window(row), 789)
+            self.assertEqual(targets.get(row), (789, 456, 20))
+            targets.discard(row)
+            owners[792] = 456       # Two windows: which one shows the session is unknown.
+            self.assertIsNone(win._find_agent_window(row))
+            del owners[792], owners[789]
+            # The walk ends at the shell, whose windows belong to no session.
+            self.assertIsNone(win._find_agent_window(row))
+            self.assertIsNone(targets.get(row))
+            user32.ShowWindow.assert_not_called()
+            user32.SetForegroundWindow.assert_not_called()
+
+    def test_windows_opens_a_desktop_session_by_its_apps_own_link(self):
+        link = 'claude://claude.ai/epitaxy/local_0b1c2d3e-4f50-4a61-8b72-9c8d7e6f5a40'
+        row = {'id': 'one', 'pid': 123, 'started_at': 10, 'cwd': '/projects/widget',
+               'entrypoint': 'claude-desktop', 'host_session': link.rsplit('/', 1)[1]}
+        user32 = Mock()
+        user32.IsIconic.return_value = False
+        user32.SetForegroundWindow.return_value = 1
+        with patch.object(win, '_find_agent_window', return_value=789) as find, \
+             patch.object(win, '_agent_pids', return_value=[123, 456]) as pids, \
+             patch.object(win, '_link_handled', return_value=True) as handled, \
+             patch.object(win.os, 'startfile', create=True) as start, \
+             patch.object(win.ctypes, 'windll', SimpleNamespace(user32=user32), create=True):
+            self.assertTrue(win.raise_agent_window(row))
+            self.assertEqual(user32.SetForegroundWindow.call_args.args[0].value, 789)
+            start.assert_called_once_with(link)
+            handled.assert_called_once_with('claude')
+
+            # Several app windows: none is raised, but the link still finds the session.
+            find.return_value = None
+            self.assertTrue(win.raise_agent_window(row))
+            self.assertEqual(start.call_count, 2)
+
+            # No app registered for the link: never hand it to Windows, which
+            # would ask what to open it with. Raising the window is what is left.
+            handled.return_value = False
+            self.assertFalse(win.raise_agent_window(row))
+            find.return_value = 789
+            self.assertTrue(win.raise_agent_window(row))
+            self.assertEqual(start.call_count, 2)
+
+            # A session whose process is gone, or is someone else's now, opens nothing.
+            handled.return_value, find.return_value, pids.return_value = True, None, None
+            self.assertFalse(win.raise_agent_window(row))
+            self.assertEqual(start.call_count, 2)
+
+            # A link Windows refuses is a failure, not a crash.
+            pids.return_value = [123]
+            start.side_effect = OSError('refused')
+            self.assertFalse(win.raise_agent_window(row))
+
+            # A terminal session has no link at all.
+            start.reset_mock(side_effect=True)
+            find.return_value = 789
+            self.assertTrue(win.raise_agent_window({'id': 'two', 'pid': 5, 'cwd': '/projects/widget'}))
+            start.assert_not_called()
+
+    def test_windows_asks_whether_an_app_handles_a_link_before_opening_it(self):
+        def query(flags, kind, scheme, extra, out, size):
+            self.assertEqual(scheme, 'claude')
+            self.assertTrue(flags & 0x1000)     # A protocol, not a file type.
+            self.assertTrue(flags & 0x400)      # Never the "open with" chooser.
+            size._obj.value = answer[1]
+            return answer[0]
+        shlwapi = Mock()
+        shlwapi.AssocQueryStringW.side_effect = query
+        with patch.object(win.ctypes, 'windll', SimpleNamespace(shlwapi=shlwapi), create=True):
+            for answer, expected in (((1, 12), True), ((0, 12), True),
+                                     ((-2147023741, 0), False), ((1, 0), False)):
+                self.assertEqual(win._link_handled('claude'), expected, answer)
+            shlwapi.AssocQueryStringW.side_effect = OSError('no such call')
+            self.assertFalse(win._link_handled('claude'))
+
+    def test_session_links_are_built_the_same_on_every_platform(self):
+        from smith_agents.session_windows import desktop_app_url
+        session = 'local_0b1c2d3e-4f50-4a61-8b72-9c8d7e6f5a40'
+        thread = '0b1c2d3e-4f50-4a61-8b72-9c8d7e6f5a40'
+        self.assertEqual(desktop_app_url({'entrypoint': 'claude-desktop', 'host_session': session}),
+                         ('claude://claude.ai/epitaxy/' + session, 'Claude'))
+        self.assertEqual(desktop_app_url({'entrypoint': 'codex-desktop', 'session_id': thread}),
+                         ('codex://threads/' + thread, 'ChatGPT'))
+        self.assertEqual(desktop_app_url({'provider': 'deepseek'}), ('dsh://open', 'DeepSeek'))
+        self.assertEqual(desktop_app_url({'entrypoint': 'claude-desktop', 'host_session': '../x'}),
+                         (None, 'Claude'))
+        self.assertEqual(desktop_app_url({'entrypoint': 'cli'}), (None, None))
+        self.assertIs(win.desktop_app_url, desktop_app_url)
+
     def test_project_title_matches_whole_name(self):
         from smith_agents.session_windows import title_matches_project
         self.assertTrue(title_matches_project('file.py — Widget — VS Code', 'widget'))

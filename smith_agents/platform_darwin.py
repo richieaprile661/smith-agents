@@ -15,7 +15,8 @@ import subprocess
 import sys
 import time
 from types import SimpleNamespace
-from .session_windows import HOSTED_PROVIDERS, WindowTargets, title_matches_project
+from .session_windows import (HOSTED_PROVIDERS, WindowTargets, claude_desktop_session_url,
+                              codex_desktop_thread_url, desktop_app_url, title_matches_project)
 from . import macos_windows
 from .branding import APP_NAME, config_override
 
@@ -141,41 +142,6 @@ def vscode_session_url(agent, window_id=None):
     if not isinstance(window_id, int) or isinstance(window_id, bool) or window_id <= 0:
         return None  # An unscoped link can open a copy in the wrong window.
     return "vscode://anthropic.claude-code/open?" + urlencode({"session": session, "windowId": window_id})
-
-
-def claude_desktop_session_url(agent):
-    """The Claude desktop app's own link to one of its local sessions."""
-    import re
-    session = agent.get("host_session")
-    if not isinstance(session, str) or not re.fullmatch(
-            r"local_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", session):
-        return None  # Never build a link from anything but a plain session id.
-    return "claude://claude.ai/epitaxy/" + session
-
-
-def codex_desktop_thread_url(agent):
-    """The ChatGPT app's own link to one of its Codex threads."""
-    from uuid import UUID
-    thread = agent.get("session_id")
-    try:
-        if not isinstance(thread, str) or str(UUID(thread)) != thread.lower():
-            return None
-    except ValueError:
-        return None
-    return "codex://threads/" + thread
-
-
-def desktop_app_url(agent):
-    """A link that shows this session in its own desktop app, where one exists."""
-    entrypoint = agent.get("entrypoint")
-    if entrypoint == "claude-desktop":
-        return claude_desktop_session_url(agent), 'Claude'
-    if entrypoint == "codex-desktop":
-        return codex_desktop_thread_url(agent), 'ChatGPT'
-    if agent.get("provider") == "deepseek":
-        # DeepSeek Harness has no link to one session; this shows its window.
-        return "dsh://open", 'DeepSeek'
-    return None, None
 
 
 def _open_session_url(url, activates, failure):
