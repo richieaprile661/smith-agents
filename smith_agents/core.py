@@ -1504,15 +1504,46 @@ def choose_front(metrics):
     return front, rest
 
 
-def _reset_parts(iso):
+def _reset_moment(iso):
+    """When a limit resets, or None where the reading does not say."""
     if not iso:
-        return None, None
+        return None
     try:
         moment = datetime.fromisoformat(iso.replace("Z", "+00:00"))
     except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def current_readings(metrics, read_at, now, fresh_for=0):
+    """The readings that still describe their window.
+
+    A limit that has reset since its reading was taken no longer has that
+    number: the window it measured is over, and what the new one holds is not
+    known. A reading younger than ``fresh_for`` stays, as the next poll is
+    about to replace it."""
+    if not read_at or now - read_at <= fresh_for:
+        return list(metrics)
+    kept = []
+    for metric in metrics:
+        moment = _reset_moment(metric.get("resets_at"))
+        if moment is None or not read_at < moment.timestamp() <= now:
+            kept.append(metric)
+    return kept
+
+
+def reading_stamp(when, now):
+    """When a reading was taken: a clock time today, with its date before."""
+    clock = when.strftime("%H:%M")
+    if when.date() == now.date():
+        return clock
+    return "%d %s %s" % (when.day, when.strftime("%b"), clock)
+
+
+def _reset_parts(iso):
+    moment = _reset_moment(iso)
+    if moment is None:
         return None, None
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
     delta = int((moment - datetime.now(timezone.utc)).total_seconds())
     # The API returns sub-minute offsets; round so 14:19:59 doesn't read as 14:19.
     local = (moment + timedelta(seconds=30)).astimezone().replace(second=0, microsecond=0)
@@ -2609,7 +2640,7 @@ def codex_usage_reset_text(reset, wide=True):
     return reset_text(reset, wide)
 
 
-def render_usage(pen, metrics, spend, stats, y):
+def render_usage(pen, metrics, spend, stats, y, empty=None):
     """Session / Week / Opus: a 9px key, a 4px track, the percentage in mono
     and its reset. Fill and figure recolour at the handoff's thresholds."""
     if stats.get('provider') in SAVED_USAGE_PROVIDERS:
@@ -2631,7 +2662,10 @@ def render_usage(pen, metrics, spend, stats, y):
     row_y = y + px(10)
     on_credits = bool(spend and spend.get("provider") == "codex" and spend.get("on_credits"))
     if not metrics:
-        pen.text((PAD_X, row_y + px(5)), "No usage reading available", font=FONT("book", 11), fill=_ink(62))
+        # Why there is none, where the widget knows: "Sign in to Claude".
+        pen.text((PAD_X, row_y + px(5)), elide(empty or "No usage reading available", FONT("book", 11),
+                                               CONSOLE_W - 2 * PAD_X),
+                 font=FONT("book", 11), fill=_ink(62))
         row_y += USAGE_ROW_H + USAGE_GAP
     for metric in metrics or []:
         pct = max(0.0, min(100.0, metric["pct"]))
@@ -3516,7 +3550,8 @@ def render_console(metrics, spend, stats, agents, now, tab="agents",
                  font=FONT("book", 10), fill=_ink(62))
         y += px(26)
     if tab == "usage":
-        boxes += render_usage(pen, metrics, spend, stats, y)
+        boxes += render_usage(pen, metrics, spend, stats, y,
+                              notice[1] if isinstance(notice, tuple) else notice)
         boxes += render_action_row(pen, height - ACTION_H, dashboard_project)
     elif tab == "stats":
         boxes += render_stats(pen, stats, y)

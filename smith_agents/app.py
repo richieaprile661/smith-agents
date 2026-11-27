@@ -147,7 +147,7 @@ class SmithAgentsWidget:
             # a reading from two minutes ago is still the current answer.
             if time.time() - fetched_at > self.config["interval"]:
                 self.error = ("cached", "cached reading from %s"
-                              % self.updated_at.strftime("%H:%M"))
+                              % core.reading_stamp(self.updated_at, datetime.now()))
 
         self.root, self.surface = platform.create_shell(self, core)
 
@@ -447,13 +447,25 @@ class SmithAgentsWidget:
                 error = data.get('error')
                 return ('Last reading · ' if data.get('updated') else '') + error if error else None
         if self.config.get("usage_provider") != "codex":
-            return "Cached reading · " + self.error[1] if self.error and self.metrics else None
+            read_at = self.updated_at
+            if not self.error or not self._current(self.metrics, read_at and read_at.timestamp()):
+                return None
+            # The day matters: a reading from last month has a clock time too.
+            notice = "Cached " + core.reading_stamp(read_at, datetime.now()) if read_at else "Cached reading"
+            return notice if self.error[0] == "cached" else notice + " · " + self.error[1]
         with self.lock:
             key = "stats" if self.config.get("console_tab") == "stats" else "metrics"
             error = self.codex_data.get("stats_error" if key == "stats" else "usage_error")
             if error and self.codex_data.get(key + "_updated"):
                 return "Last reading · " + error
             return error
+
+    def _current(self, metrics, read_at):
+        """Readings without those whose window has reset since they were taken.
+        A failed refresh leaves the last reading in place; this is what stops a
+        number from weeks ago being drawn as the number now."""
+        return core.current_readings(metrics, read_at, time.time(),
+                                     2 * (self.config.get("interval") or 300))
 
     # -- rendering ---------------------------------------------------------
     def _snapshot(self):
@@ -473,10 +485,11 @@ class SmithAgentsWidget:
                 data = self.codex_data
                 error = data.get("usage_error")
                 stamp = data.get("metrics_updated")
-                return (list(data["metrics"]), data.get("credits"), None, [],
+                return (self._current(data["metrics"], stamp), data.get("credits"), None, [],
                         ("codex", error) if error else None,
                         datetime.fromtimestamp(stamp) if stamp else None, dict(data["stats"]))
-            return (list(self.metrics), self.spend, self.plan, list(self.active),
+            read_at = self.updated_at.timestamp() if self.updated_at else None
+            return (self._current(self.metrics, read_at), self.spend, self.plan, list(self.active),
                     self.error, self.updated_at, dict(self.stats))
 
     def _paint_frame(self):
