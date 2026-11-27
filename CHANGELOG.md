@@ -3,6 +3,21 @@
 The one-line installer installs the latest GitHub release, pinned by version
 and checksum. Changes on `master` reach it only when a new version is released.
 
+## 1.1.11 — 27 November 2026
+
+### Fixed
+- A usage reading is no longer shown after the limit it measured has reset.
+  When a refresh fails, for example because Claude Code is signed out, the
+  widget keeps its last reading; it went on drawing that number for as long as
+  the refresh kept failing, so a reading from weeks ago looked like the number
+  now. A reading is dropped once its window has reset since it was taken, and
+  its place shows `—`. This applies to Claude and Codex readings. A reading
+  less than two refresh intervals old is always shown.
+- With no reading to show, the Usage tab says why (`Sign in to Claude`)
+  instead of only "No usage reading available".
+- The notice over a kept reading gives the day it was taken as well as the
+  time (`Cached 19 Oct 23:12`), so an old reading no longer reads as today's.
+
 ## 1.1.10 — 26 November 2026
 
 ### Added
